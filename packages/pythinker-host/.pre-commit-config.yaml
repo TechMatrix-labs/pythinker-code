@@ -1,0 +1,15 @@
+orphan: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: make-format-pythinker-host
+        name: make format-pythinker-host
+        entry: make -C ../.. format-pythinker-host
+        language: system
+        pass_filenames: false
+      - id: make-check-pythinker-host
+        name: make check-pythinker-host
+        entry: make -C ../.. check-pythinker-host
+        language: system
+        pass_filenames: false

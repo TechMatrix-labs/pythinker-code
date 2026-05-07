@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-05-05T00:00:00Z",
+      "ending_at": "2026-05-06T00:00:00Z",
+      "results": [
+        {
+          "model": "claude-opus-4-7",
+          "uncached_input_tokens": 4000,
+          "output_tokens": 300,
+          "cache_read_input_tokens": 200,
+          "cache_creation": {"ephemeral_5m_input_tokens": 50, "ephemeral_1h_input_tokens": 100}
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "uncached_input_tokens": 8000,
+          "output_tokens": 1200,
+          "cache_read_input_tokens": 0,
+          "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0}
+        }
+      ]
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}

@@ -1,0 +1,28 @@
+{
+  "object": "page",
+  "data": [
+    {
+      "object": "bucket",
+      "start_time": 1730419200,
+      "end_time": 1730505600,
+      "results": [
+        {
+          "object": "organization.usage.completions.result",
+          "input_tokens": 1234567,
+          "output_tokens": 23456,
+          "input_cached_tokens": 100000,
+          "model": "gpt-5.4"
+        },
+        {
+          "object": "organization.usage.completions.result",
+          "input_tokens": 5000,
+          "output_tokens": 1000,
+          "input_cached_tokens": 0,
+          "model": "gpt-5.4-mini"
+        }
+      ]
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}

@@ -1,0 +1,15 @@
+version: 1
+agent:
+  extend: default
+  tools:
+    - "pythinker_code.tools.agent:Agent"
+    - "pythinker_code.tools.todo:SetTodoList"
+    - "pythinker_code.tools.shell:Shell"
+    - "pythinker_code.tools.file:ReadFile"
+    - "pythinker_code.tools.file:Glob"
+    - "pythinker_code.tools.file:Grep"
+    - "pythinker_code.tools.file:WriteFile"
+    - "pythinker_code.tools.file:StrReplaceFile"
+    - "pythinker_code.tools.web:SearchWeb"
+    - "pythinker_code.tools.web:FetchURL"
+    - "my_tools.ls:Ls" # custom tool

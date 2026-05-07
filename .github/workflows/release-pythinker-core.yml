@@ -1,0 +1,123 @@
+name: Release (pythinker-core)
+
+on:
+  push:
+    tags:
+      - "pythinker-core-*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Check version tag
+        run: |
+          python scripts/check_version_tag.py \
+            --pyproject packages/pythinker-core/pyproject.toml \
+            --expected-version "${GITHUB_REF_NAME#pythinker-core-}"
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pythinker-core/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "0.8.5"
+
+      - name: Build distributions
+        run: make build-pythinker-core
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pythinker-core
+
+  docs:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "0.8.5"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --project packages/pythinker-core
+
+      - name: Generate API documentation
+        run: |
+          VERSION="${GITHUB_REF_NAME#pythinker-core-}"
+          uv run --project packages/pythinker-core pdoc pythinker_core \
+            --docformat google \
+            --footer-text "pythinker-core ${VERSION}" \
+            -o packages/pythinker-core/docs
+
+      - name: Disable Jekyll processing
+        run: touch packages/pythinker-core/docs/.nojekyll
+
+      - name: Publish docs to gh-pages
+        env:
+          PYTHINKER_CORE_PAGES_TOKEN: ${{ secrets.PYTHINKER_CORE_PAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PYTHINKER_CORE_PAGES_TOKEN}" ]]; then
+            echo "PYTHINKER_CORE_PAGES_TOKEN is not set; skipping API documentation publish."
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#pythinker-core-}"
+          PAGES_REPO="https://x-access-token:${PYTHINKER_CORE_PAGES_TOKEN}@github.com/PythinkerAI/pythinker-core.git"
+          PAGES_DIR="${RUNNER_TEMP}/pythinker-core-gh-pages"
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          rm -rf "$PAGES_DIR"
+          git clone --depth 1 --branch gh-pages "$PAGES_REPO" "$PAGES_DIR"
+          rsync -a --delete --exclude '.git' "packages/pythinker-core/docs/" "$PAGES_DIR/"
+
+          git -C "$PAGES_DIR" add -A
+          if git -C "$PAGES_DIR" diff --cached --quiet; then
+            echo "No documentation changes to publish."
+            exit 0
+          fi
+
+          git -C "$PAGES_DIR" commit -m "docs: update for ${VERSION}"
+          git -C "$PAGES_DIR" push origin gh-pages

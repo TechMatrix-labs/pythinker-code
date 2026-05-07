@@ -1,0 +1,96 @@
+[project]
+name = "pythinker-core"
+version = "1.0.0"
+description = "Pythinker core LLM, message, provider, and tool abstractions."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Mohamed Elkholy", email = "moelkholy1995@gmail.com" }]
+keywords = ["llm", "ai", "anthropic", "openai", "google-genai", "mcp", "agent"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "anthropic>=0.78.0",
+    "google-genai>=1.56.0",
+    "jsonschema>=4.26.0",
+    "loguru>=0.6.0,<0.7",
+    "openai>=2.14.0,<2.15.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.1",
+    "typing-extensions>=4.15.0",
+    "mcp>=1,<1.17",
+]
+
+[project.optional-dependencies]
+contrib = [
+    "anthropic>=0.78.0",
+    "google-genai>=1.55.0",
+]
+
+[project.urls]
+Homepage      = "https://github.com/mohamed-elkholy95/Pythinker-Code"
+Repository    = "https://github.com/mohamed-elkholy95/Pythinker-Code"
+Issues        = "https://github.com/mohamed-elkholy95/Pythinker-Code/issues"
+Changelog     = "https://github.com/mohamed-elkholy95/Pythinker-Code/blob/main/packages/pythinker-core/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "ty>=0.0.7",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "respx>=0.23.1",
+    "ruff>=0.14.10",
+    "inline-snapshot[black]>=0.31.1",
+    "pdoc>=16.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.5,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["pythinker_core"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]

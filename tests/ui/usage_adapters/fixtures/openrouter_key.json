@@ -1,0 +1,18 @@
+{
+  "data": {
+    "label": "My API Key",
+    "limit": 100,
+    "limit_remaining": 74.5,
+    "limit_reset": "monthly",
+    "include_byok_in_limit": false,
+    "usage": 25.5,
+    "usage_daily": 1.25,
+    "usage_weekly": 8.32,
+    "usage_monthly": 25.5,
+    "byok_usage": 0,
+    "byok_usage_daily": 0,
+    "byok_usage_weekly": 0,
+    "byok_usage_monthly": 0,
+    "is_free_tier": false
+  }
+}

@@ -1,0 +1,25 @@
+version: 1
+agent:
+  extend: ./agent.yaml
+  system_prompt_args:
+    ROLE_ADDITIONAL: |
+      You are now running as a subagent. All the `user` messages are sent by the main agent. The main agent cannot see your context, it can only see your last message when you finish the task. You must treat the parent agent as your caller. Do not directly ask the end user questions. If something is unclear, explain the ambiguity in your final summary to the parent agent.
+  when_to_use: |
+    Use this agent for non-trivial software engineering work that may require reading files, editing code, running commands, and returning a compact but technically complete summary to the parent agent.
+  allowed_tools:
+    - "pythinker_code.tools.shell:Shell"
+    - "pythinker_code.tools.file:ReadFile"
+    - "pythinker_code.tools.file:ReadMediaFile"
+    - "pythinker_code.tools.file:Glob"
+    - "pythinker_code.tools.file:Grep"
+    - "pythinker_code.tools.file:WriteFile"
+    - "pythinker_code.tools.file:StrReplaceFile"
+    - "pythinker_code.tools.web:SearchWeb"
+    - "pythinker_code.tools.web:FetchURL"
+  exclude_tools:
+    - "pythinker_code.tools.agent:Agent"
+    - "pythinker_code.tools.ask_user:AskUserQuestion"
+    - "pythinker_code.tools.todo:SetTodoList"
+    - "pythinker_code.tools.plan:ExitPlanMode"
+    - "pythinker_code.tools.plan.enter:EnterPlanMode"
+  subagents:

@@ -1,0 +1,61 @@
+name: Release (pythinker-host)
+
+on:
+  push:
+    tags:
+      - "pythinker-host-*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Check version tag
+        run: |
+          python scripts/check_version_tag.py \
+            --pyproject packages/pythinker-host/pyproject.toml \
+            --expected-version "${GITHUB_REF_NAME#pythinker-host-}"
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pythinker-host/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "0.8.5"
+
+      - name: Build distributions
+        run: make build-pythinker-host
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pythinker-host

@@ -1,0 +1,80 @@
+[project]
+name = "pythinker-host"
+version = "1.0.0"
+description = "Pythinker OS-abstraction layer (local + SSH filesystem and shell)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Mohamed Elkholy", email = "moelkholy1995@gmail.com" }]
+keywords = ["ssh", "filesystem", "shell", "async", "asyncssh", "host"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Filesystems",
+    "Topic :: System :: Shells",
+]
+dependencies = [
+    "aiofiles>=24.0,<26.0",
+    "asyncssh==2.22.0",
+]
+
+[project.urls]
+Homepage      = "https://github.com/mohamed-elkholy95/Pythinker-Code"
+Repository    = "https://github.com/mohamed-elkholy95/Pythinker-Code"
+Issues        = "https://github.com/mohamed-elkholy95/Pythinker-Code/issues"
+Changelog     = "https://github.com/mohamed-elkholy95/Pythinker-Code/blob/main/packages/pythinker-host/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "inline-snapshot[black]>=0.31.1",
+    "pyright>=1.1.407",
+    "ty>=0.0.7",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.14.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.5,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["pythinker_host"]
+source-exclude = ["tests/**/*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]

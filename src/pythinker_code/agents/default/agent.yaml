@@ -1,0 +1,36 @@
+version: 1
+agent:
+  name: ""
+  system_prompt_path: ./system.md
+  system_prompt_args:
+    ROLE_ADDITIONAL: ""
+  tools:
+    - "pythinker_code.tools.agent:Agent"
+    # - "pythinker_code.tools.dmail:SendDMail"
+    # - "pythinker_code.tools.think:Think"
+    - "pythinker_code.tools.ask_user:AskUserQuestion"
+    - "pythinker_code.tools.todo:SetTodoList"
+    - "pythinker_code.tools.shell:Shell"
+    - "pythinker_code.tools.background:TaskList"
+    - "pythinker_code.tools.background:TaskOutput"
+    - "pythinker_code.tools.background:TaskStop"
+    - "pythinker_code.tools.file:ReadFile"
+    - "pythinker_code.tools.file:ReadMediaFile"
+    - "pythinker_code.tools.file:Glob"
+    - "pythinker_code.tools.file:Grep"
+    - "pythinker_code.tools.file:WriteFile"
+    - "pythinker_code.tools.file:StrReplaceFile"
+    - "pythinker_code.tools.web:SearchWeb"
+    - "pythinker_code.tools.web:FetchURL"
+    - "pythinker_code.tools.plan:ExitPlanMode"
+    - "pythinker_code.tools.plan.enter:EnterPlanMode"
+  subagents:
+    coder:
+      path: ./coder.yaml
+      description: "Good at general software engineering tasks."
+    explore:
+      path: ./explore.yaml
+      description: "Fast codebase exploration with prompt-enforced read-only behavior."
+    plan:
+      path: ./plan.yaml
+      description: "Read-only implementation planning and architecture design."

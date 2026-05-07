@@ -1,0 +1,14 @@
+{
+  "rate_limit": {
+    "five_hour": {
+      "limit_window_seconds": 18000,
+      "percent_left": 73,
+      "reset_at": "2026-05-06T18:00:00Z"
+    },
+    "weekly": {
+      "limit_window_seconds": 604800,
+      "percent_left": 41,
+      "reset_at": "2026-05-12T00:00:00Z"
+    }
+  }
+}
