@@ -50,7 +50,12 @@ from pythinker_code.ui.shell.prompt import (
 from pythinker_code.ui.shell.replay import replay_recent_history
 from pythinker_code.ui.shell.slash import SKILL_COMMAND_PREFIX, shell_mode_registry
 from pythinker_code.ui.shell.slash import registry as shell_slash_registry
-from pythinker_code.ui.shell.update import LATEST_VERSION_FILE, UpdateResult, do_update, semver_tuple
+from pythinker_code.ui.shell.update import (
+    LATEST_VERSION_FILE,
+    UpdateResult,
+    do_update,
+    semver_tuple,
+)
 from pythinker_code.ui.shell.visualize import (
     ApprovalPromptDelegate,
     visualize,
@@ -1611,7 +1616,7 @@ def _value_style_for_label(label: str, level: WelcomeInfoItem.Level) -> str:
 
 
 def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
-    head = Text.from_markup("Welcome to Pythinker CLI!")
+    head = Text.from_markup("Welcome to Pythinker Code!")
     help_text = Text.from_markup("[grey50]Send /help for help information.[/grey50]")
     help_text.highlight_regex(r"/help\b", "yellow bold")
 

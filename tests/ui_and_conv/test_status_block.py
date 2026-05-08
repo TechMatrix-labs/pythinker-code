@@ -1,7 +1,7 @@
 """Tests for _StatusBlock partial-update logic."""
 
 from pythinker_code.ui.shell.visualize import _StatusBlock
-from pythinker_code.wire.types import StatusUpdate
+from pythinker_code.wire.types import MCPServerSnapshot, MCPStatusSnapshot, StatusUpdate
 
 
 def test_full_initial_status():
@@ -68,3 +68,25 @@ def test_initial_all_none():
     """Initial status with all None fields — text should remain empty."""
     block = _StatusBlock(StatusUpdate())
     assert block.text.plain == ""
+
+
+def test_status_block_shows_mcp_loading_summary():
+    block = _StatusBlock(StatusUpdate())
+    block.update(
+        StatusUpdate(
+            mcp_status=MCPStatusSnapshot(
+                loading=True,
+                connected=1,
+                total=2,
+                tools=7,
+                servers=(
+                    MCPServerSnapshot(name="github", status="connected", tools=("issue",)),
+                    MCPServerSnapshot(name="docs", status="connecting", tools=()),
+                ),
+            )
+        )
+    )
+
+    assert "MCP" in block.text.plain
+    assert "1/2" in block.text.plain
+    assert "7 tools" in block.text.plain

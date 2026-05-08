@@ -9,7 +9,12 @@ import pytest
 
 from pythinker_code.soul import _current_wire
 from pythinker_code.soul.toolset import current_tool_call
-from pythinker_code.tools.ask_user import AskUserQuestion, Params, QuestionOptionParam, QuestionParam
+from pythinker_code.tools.ask_user import (
+    AskUserQuestion,
+    Params,
+    QuestionOptionParam,
+    QuestionParam,
+)
 from pythinker_code.wire import Wire
 from pythinker_code.wire.types import QuestionNotSupported, QuestionRequest, ToolCall
 

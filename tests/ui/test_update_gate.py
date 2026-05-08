@@ -18,7 +18,9 @@ class TestCheckUpdateGate:
         self.skipped_file = tmp_path / "skipped_version.txt"
 
         monkeypatch.setattr("pythinker_code.ui.shell.update.LATEST_VERSION_FILE", self.latest_file)
-        monkeypatch.setattr("pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file)
+        monkeypatch.setattr(
+            "pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file
+        )
         monkeypatch.setattr("pythinker_code.constant.VERSION", "1.2.3")
 
         # Ensure stdin.isatty() returns True by default
@@ -148,7 +150,9 @@ class TestRunUpdateGate:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path, monkeypatch):
         self.skipped_file = tmp_path / "skipped_version.txt"
-        monkeypatch.setattr("pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file)
+        monkeypatch.setattr(
+            "pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file
+        )
         # Silence rich output
         monkeypatch.setattr("pythinker_code.ui.shell.update.console", MagicMock())
 
@@ -342,7 +346,9 @@ class TestPrintWelcomeInfoSkipsVersion:
         self.skipped_file = tmp_path / "skipped_version.txt"
 
         monkeypatch.setattr("pythinker_code.ui.shell.LATEST_VERSION_FILE", self.latest_file)
-        monkeypatch.setattr("pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file)
+        monkeypatch.setattr(
+            "pythinker_code.ui.shell.update.SKIPPED_VERSION_FILE", self.skipped_file
+        )
         monkeypatch.setattr("pythinker_code.constant.VERSION", "1.2.3")
         monkeypatch.setattr("pythinker_code.ui.shell.console", MagicMock())
 

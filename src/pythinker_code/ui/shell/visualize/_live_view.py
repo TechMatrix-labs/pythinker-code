@@ -41,6 +41,7 @@ from pythinker_code.ui.shell.visualize._question_panel import (
     prompt_other_input,
     show_question_body_in_pager,
 )
+from pythinker_code.ui.shell.visualize._worklog import render_worklog_card
 from pythinker_code.utils.aioqueue import Queue, QueueShutDown
 from pythinker_code.utils.logging import logger
 from pythinker_code.wire import WireUISide
@@ -408,13 +409,13 @@ class _LiveView:
             case TurnEnd():
                 self._active_turn_depth = max(0, self._active_turn_depth - 1)
             case CompactionBegin():
-                self._compacting_spinner = Spinner("balloon", "Compacting...")
+                self._compacting_spinner = Spinner("dots", "Compacting context...")
                 self.refresh_soon()
             case CompactionEnd():
                 self._compacting_spinner = None
                 self.refresh_soon()
             case MCPLoadingBegin():
-                self._mcp_loading_spinner = Spinner("dots", "Connecting to MCP servers...")
+                self._mcp_loading_spinner = Spinner("dots", "Connecting MCP servers...")
                 self.refresh_soon()
             case MCPLoadingEnd():
                 self._mcp_loading_spinner = None
@@ -422,7 +423,7 @@ class _LiveView:
             case BtwBegin(question=question):
                 truncated = (question[:40] + "...") if len(question) > 40 else question
                 self._btw_question = question
-                self._btw_spinner = Spinner("dots", f"Side question: {rich_escape(truncated)}")
+                self._btw_spinner = Spinner("dots", f"Side question... {rich_escape(truncated)}")
                 self.refresh_soon()
             case BtwEnd(response=response, error=error):
                 self._btw_spinner = None
@@ -761,15 +762,11 @@ class _LiveView:
         self.flush_content()
         self.flush_finished_tool_calls()
         plan_body = Markdown(msg.content)
-        subtitle = Text(msg.file_path, style="dim")
-        panel = Panel(
+        panel = render_worklog_card(
+            "Plan",
             plan_body,
-            title="[bold cyan]Plan[/bold cyan]",
-            title_align="left",
-            subtitle=subtitle,
-            subtitle_align="left",
+            subtitle=msg.file_path,
             border_style="cyan",
-            padding=(1, 2),
         )
         console.print(panel)
 

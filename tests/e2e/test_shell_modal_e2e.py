@@ -71,7 +71,7 @@ def test_approval_reject_via_key3(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -110,7 +110,7 @@ def test_approval_escape_rejects(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -149,7 +149,7 @@ def test_approval_arrow_key_navigation_then_enter(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -207,7 +207,7 @@ def test_approval_consecutive_across_turns(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         # Turn 1: approve
@@ -272,7 +272,7 @@ def test_question_single_select_via_number_key(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -322,7 +322,7 @@ def test_question_escape_dismisses_with_empty_answer(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -382,7 +382,7 @@ def test_question_multi_step_with_tab_navigation(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -442,7 +442,7 @@ def test_approval_during_running_turn_shows_panel(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -500,7 +500,7 @@ def test_question_then_approval_in_same_turn(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -562,7 +562,7 @@ def test_approval_after_turn_end_still_responsive(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -610,7 +610,7 @@ def test_ctrl_c_during_approval_rejects(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -674,7 +674,7 @@ def test_question_single_question_returns_to_prompt(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -731,7 +731,7 @@ def test_question_multi_select_with_space_and_enter(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -796,12 +796,12 @@ def test_ctrl_c_during_running_turn_interrupts(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
         shell.send_line("run slow command")
-        shell.read_until_contains("Using Shell (sleep 30)", after=turn_mark, timeout=15.0)
+        shell.read_until_contains("Shell sleep 30 running", after=turn_mark, timeout=15.0)
         time.sleep(0.5)
         shell.send_key("ctrl_c")
         shell.read_until_contains("Interrupted by user", after=turn_mark, timeout=10.0)
@@ -842,7 +842,7 @@ def test_steer_text_during_approval_is_not_submitted(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -921,7 +921,7 @@ def test_two_question_tools_in_same_turn(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()

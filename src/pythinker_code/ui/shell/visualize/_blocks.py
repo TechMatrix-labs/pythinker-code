@@ -24,21 +24,20 @@ from rich.text import Text
 from pythinker_code.soul import format_context_status, format_token_count
 from pythinker_code.tools import extract_key_argument
 from pythinker_code.ui.shell.console import console
+from pythinker_code.ui.shell.visualize._worklog import (
+    WorkLogState,
+    denied_error,
+    render_display_blocks,
+    render_worklog_entry,
+    tool_style,
+)
 from pythinker_code.utils.datetime import format_elapsed
 from pythinker_code.utils.rich.columns import BulletColumns
-from pythinker_code.utils.rich.diff_render import (
-    collect_diff_hunks,
-    render_diff_panel,
-    render_diff_summary_panel,
-)
 from pythinker_code.utils.rich.markdown import Markdown
 from pythinker_code.wire.types import (
-    BackgroundTaskDisplayBlock,
-    BriefDisplayBlock,
-    DiffDisplayBlock,
+    MCPStatusSnapshot,
     Notification,
     StatusUpdate,
-    TodoDisplayBlock,
     ToolCall,
     ToolCallPart,
     ToolResult,
@@ -360,8 +359,9 @@ class _ToolCallBlock:
         if tool_call.function.arguments is not None:
             self._lexer.append_string(tool_call.function.arguments)
 
-        self._argument = extract_key_argument(self._lexer, self._tool_name)
-        self._full_url = self._extract_full_url(tool_call.function.arguments, self._tool_name)
+        self._argument = self._extract_worklog_argument(
+            tool_call.function.arguments, self._tool_name
+        )
         self._result: ToolReturnValue | None = None
         self._subagent_id: str | None = None
         self._subagent_type: str | None = None
@@ -373,7 +373,6 @@ class _ToolCallBlock:
             maxlen=MAX_SUBAGENT_TOOL_CALLS_TO_SHOW
         )
 
-        self._spinning_dots = Spinner("dots", text="")
         self._renderable: RenderableType = self._compose()
 
     def compose(self) -> RenderableType:
@@ -388,14 +387,10 @@ class _ToolCallBlock:
             return
         self._lexer.append_string(args_part)
         # TODO: maybe don't extract detail if it's already stable
-        argument = extract_key_argument(self._lexer, self._tool_name)
+        argument = self._extract_worklog_argument(self._lexer.complete_json(), self._tool_name)
         if argument and argument != self._argument:
             self._argument = argument
-            self._full_url = self._extract_full_url(self._lexer.complete_json(), self._tool_name)
-            self._renderable = BulletColumns(
-                self._build_headline_text(),
-                bullet=self._spinning_dots,
-            )
+            self._renderable = self._compose()
 
     def finish(self, result: ToolReturnValue):
         self._result = result
@@ -438,11 +433,9 @@ class _ToolCallBlock:
             self._renderable = self._compose()
 
     def _compose(self) -> RenderableType:
-        lines: list[RenderableType] = [
-            self._build_headline_text(),
-        ]
+        children: list[RenderableType] = []
         if self._subagent_id is not None and self._subagent_type is not None:
-            lines.append(
+            children.append(
                 BulletColumns(
                     Text(
                         f"subagent {self._subagent_type} ({self._subagent_id})",
@@ -454,7 +447,7 @@ class _ToolCallBlock:
 
         if self._n_finished_subagent_tool_calls > MAX_SUBAGENT_TOOL_CALLS_TO_SHOW:
             n_hidden = self._n_finished_subagent_tool_calls - MAX_SUBAGENT_TOOL_CALLS_TO_SHOW
-            lines.append(
+            children.append(
                 BulletColumns(
                     Text(
                         f"{n_hidden} more tool call{'s' if n_hidden > 1 else ''} ...",
@@ -476,66 +469,65 @@ class _ToolCallBlock:
                 arg_style = Style(color="grey50", link=sub_url) if sub_url else "grey50"
                 sub_text.append(argument, style=arg_style)
                 sub_text.append(")", style="grey50")
-            lines.append(
+            children.append(
                 BulletColumns(
                     sub_text,
                     bullet_style="green" if not sub_result.is_error else "dark_red",
                 )
             )
 
-        if self._result is not None:
-            display = self._result.display
-            idx = 0
-            while idx < len(display):
-                block = display[idx]
-                if isinstance(block, DiffDisplayBlock):
-                    # Collect consecutive same-file diff blocks
-                    path = block.path
-                    diff_blocks: list[DiffDisplayBlock] = []
-                    while idx < len(display):
-                        b = display[idx]
-                        if not isinstance(b, DiffDisplayBlock) or b.path != path:
-                            break
-                        diff_blocks.append(b)
-                        idx += 1
-                    if any(b.is_summary for b in diff_blocks):
-                        lines.append(render_diff_summary_panel(path, diff_blocks))
-                    else:
-                        hunks, added_total, removed_total = collect_diff_hunks(diff_blocks)
-                        if hunks:
-                            lines.append(render_diff_panel(path, hunks, added_total, removed_total))
-                elif isinstance(block, BriefDisplayBlock):
-                    style = "grey50" if not self._result.is_error else "dark_red"
-                    if block.text:
-                        lines.append(Markdown(block.text, style=style))
-                    idx += 1
-                elif isinstance(block, TodoDisplayBlock):
-                    markdown = self._render_todo_markdown(block)
-                    if markdown:
-                        lines.append(Markdown(markdown, style="grey50"))
-                    idx += 1
-                elif isinstance(block, BackgroundTaskDisplayBlock):
-                    lines.append(
-                        Markdown(
-                            (f"`{block.task_id}` [{block.status}] {block.description}"),
-                            style="grey50",
-                        )
-                    )
-                    idx += 1
-                else:
-                    idx += 1
+        style = tool_style(self._tool_name)
+        if self._result is None:
+            return render_worklog_entry(
+                label=style.label,
+                target=self._argument,
+                state=WorkLogState.RUNNING,
+                icon=style.icon,
+                icon_style=style.style,
+                children=children,
+            )
 
-        if self.finished:
-            assert self._result is not None
-            return BulletColumns(
-                Group(*lines),
-                bullet_style="green" if not self._result.is_error else "dark_red",
+        error_message = self._result.message if self._result.is_error else ""
+        if self._result.is_error and not error_message:
+            error_message = getattr(self._result, "brief", "") or "Tool failed"
+        state = (
+            WorkLogState.DENIED
+            if self._result.is_error and denied_error(error_message)
+            else WorkLogState.FAILED
+            if self._result.is_error
+            else WorkLogState.COMPLETED
+        )
+        children.extend(
+            render_display_blocks(
+                getattr(self._result, "display", []) or [], is_error=self._result.is_error
             )
-        else:
-            return BulletColumns(
-                Group(*lines),
-                bullet=self._spinning_dots,
-            )
+        )
+        return render_worklog_entry(
+            label=style.label,
+            target=self._argument,
+            state=state,
+            detail=error_message if self._result.is_error else None,
+            icon=style.icon,
+            icon_style=style.style,
+            children=children,
+        )
+
+    @staticmethod
+    def _extract_worklog_argument(arguments: str | None, tool_name: str) -> str | None:
+        argument = extract_key_argument(arguments or "", tool_name)
+        try:
+            args = json.loads(arguments or "{}", strict=False)
+        except json.JSONDecodeError:
+            return argument
+        if not isinstance(args, dict):
+            return argument
+        args = cast(dict[str, Any], args)
+        match tool_name:
+            case "ReadFile":
+                path = args.get("path") or args.get("file_path")
+                return str(path) if path else argument
+            case _:
+                return argument
 
     @staticmethod
     def _extract_full_url(arguments: str | None, tool_name: str) -> str | None:
@@ -551,32 +543,6 @@ class _ToolCallBlock:
             if url:
                 return str(url)
         return None
-
-    def _build_headline_text(self) -> Text:
-        text = Text()
-        text.append("Used " if self.finished else "Using ")
-        text.append(self._tool_name, style="blue")
-        if self._argument:
-            text.append(" (", style="grey50")
-            arg_style = Style(color="grey50", link=self._full_url) if self._full_url else "grey50"
-            text.append(self._argument, style=arg_style)
-            text.append(")", style="grey50")
-        return text
-
-    def _render_todo_markdown(self, block: TodoDisplayBlock) -> str:
-        lines: list[str] = []
-        for todo in block.items:
-            normalized = todo.status.replace("_", " ").lower()
-            match normalized:
-                case "pending":
-                    lines.append(f"- {todo.title}")
-                case "in progress":
-                    lines.append(f"- {todo.title} ←")
-                case "done":
-                    lines.append(f"- ~~{todo.title}~~")
-                case _:
-                    lines.append(f"- {todo.title}")
-        return "\n".join(lines)
 
 
 class _NotificationBlock:
@@ -609,6 +575,7 @@ class _StatusBlock:
         self._context_usage: float = 0.0
         self._context_tokens: int = 0
         self._max_context_tokens: int = 0
+        self._mcp_status: MCPStatusSnapshot | None = None
         self.update(initial)
 
     def render(self) -> RenderableType:
@@ -621,9 +588,21 @@ class _StatusBlock:
             self._context_tokens = status.context_tokens
         if status.max_context_tokens is not None:
             self._max_context_tokens = status.max_context_tokens
-        if status.context_usage is not None:
-            self.text.plain = format_context_status(
-                self._context_usage,
-                self._context_tokens,
-                self._max_context_tokens,
-            )
+        if status.mcp_status is not None:
+            self._mcp_status = status.mcp_status
+        if status.context_usage is not None or status.mcp_status is not None:
+            parts: list[str] = []
+            if self._context_usage or self._max_context_tokens:
+                parts.append(
+                    format_context_status(
+                        self._context_usage,
+                        self._context_tokens,
+                        self._max_context_tokens,
+                    )
+                )
+            if self._mcp_status is not None and self._mcp_status.loading:
+                parts.append(
+                    f"MCP {self._mcp_status.connected}/{self._mcp_status.total} · "
+                    f"{self._mcp_status.tools} tools"
+                )
+            self.text.plain = "  ".join(parts)

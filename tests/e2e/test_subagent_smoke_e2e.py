@@ -189,7 +189,7 @@ def test_foreground_coder_agent(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -280,7 +280,7 @@ def test_foreground_explore_agent(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -364,7 +364,7 @@ def test_background_agent_completes(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -465,7 +465,7 @@ def test_sequential_foreground_agents(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         # Turn 1
@@ -561,7 +561,7 @@ def test_background_agent_with_approval(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -675,7 +675,7 @@ def test_summary_continuation_triggers_on_short_response(tmp_path: Path) -> None
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()
@@ -772,7 +772,7 @@ def test_no_continuation_when_response_is_long(tmp_path: Path) -> None:
     )
 
     try:
-        shell.read_until_contains("Welcome to Pythinker CLI!")
+        shell.read_until_contains("Welcome to Pythinker Code!")
         _read_until_prompt(shell, after=shell.mark())
 
         turn_mark = shell.mark()

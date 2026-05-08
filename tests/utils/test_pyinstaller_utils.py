@@ -137,7 +137,9 @@ def test_pyinstaller_datas():
         ),
     ]
     if has_rg_binary:
-        expected_datas.append((f"src/pythinker_code/deps/bin/{rg_binary}", "pythinker_code/deps/bin"))
+        expected_datas.append(
+            (f"src/pythinker_code/deps/bin/{rg_binary}", "pythinker_code/deps/bin")
+        )
 
     assert sorted(datas) == sorted(expected_datas)
 

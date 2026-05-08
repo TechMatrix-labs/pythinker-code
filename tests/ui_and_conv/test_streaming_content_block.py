@@ -4,6 +4,7 @@ token estimation, and related utilities."""
 from __future__ import annotations
 
 import pytest
+from rich.console import Console
 
 from pythinker_code.ui.shell.visualize import (
     _ContentBlock,
@@ -206,6 +207,18 @@ class TestContentBlockTokenCount:
         block.append("Hi")  # 0.5
         block.append("world")  # 1.25
         assert block._token_count == pytest.approx(1.75)
+
+
+def test_composing_live_label_uses_professional_activity_wording():
+    block = _ContentBlock(is_think=False)
+    block.append("hello")
+    renderable = block.compose()
+    console = Console(record=True, width=120, color_system=None)
+    console.print(renderable)
+    output = console.export_text()
+
+    assert "Composing" in output
+    assert "tokens" in output
 
 
 class TestContentBlockCommitment:
