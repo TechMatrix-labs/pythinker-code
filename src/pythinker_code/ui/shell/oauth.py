@@ -53,6 +53,11 @@ from pythinker_code.auth.openrouter import (
 )
 from pythinker_code.cli import Reload
 from pythinker_code.ui.shell.console import console
+from pythinker_code.ui.shell.selectors.oauth import (
+    OAuthProviderEntry,
+    OAuthProviderStatus,
+    run_oauth_selector,
+)
 from pythinker_code.ui.shell.slash import ensure_pythinker_soul, registry
 
 if TYPE_CHECKING:
@@ -98,37 +103,22 @@ async def _prompt_api_key(label: str) -> str | None:
     return value.strip() or None
 
 
-_LOGIN_PROVIDER_OPTIONS: tuple[tuple[str, str, str], ...] = (
-    ("1", "browser", "OpenAI ChatGPT (browser)"),
-    ("2", "headless", "OpenAI ChatGPT (device code)"),
-    ("3", "api-key", "OpenAI API key"),
-    ("4", "opencode-go", "OpenCode Go"),
-    ("5", "minimax", "MiniMax"),
-    ("6", "deepseek", "DeepSeek"),
-    ("7", "anthropic", "Anthropic"),
-    ("8", "openrouter", "OpenRouter"),
-    ("9", "lm-studio", "LM Studio"),
-    ("10", "ollama", "Ollama"),
-)
+_SELECTOR_PROVIDER_ENTRIES: list[OAuthProviderEntry] = [
+    OAuthProviderEntry(id="browser", name="OpenAI ChatGPT (browser)", auth_type="oauth"),
+    OAuthProviderEntry(id="headless", name="OpenAI ChatGPT (device code)", auth_type="oauth"),
+    OAuthProviderEntry(id="api-key", name="OpenAI API key", auth_type="api_key"),
+    OAuthProviderEntry(id="opencode-go", name="OpenCode Go", auth_type="api_key"),
+    OAuthProviderEntry(id="minimax", name="MiniMax", auth_type="api_key"),
+    OAuthProviderEntry(id="deepseek", name="DeepSeek", auth_type="api_key"),
+    OAuthProviderEntry(id="anthropic", name="Anthropic", auth_type="api_key"),
+    OAuthProviderEntry(id="openrouter", name="OpenRouter", auth_type="api_key"),
+    OAuthProviderEntry(id="lm-studio", name="LM Studio", auth_type="api_key"),
+    OAuthProviderEntry(id="ollama", name="Ollama", auth_type="api_key"),
+]
 
 
-async def _prompt_login_provider() -> str | None:
-    console.print("\n[bold]Choose login provider:[/bold]")
-    for num, _, label in _LOGIN_PROVIDER_OPTIONS:
-        console.print(f"  {num}. {label}")
-
-    session = PromptSession[str]()
-    try:
-        choice = await session.prompt_async(" Enter [1-10] (default 1): ")
-    except (EOFError, KeyboardInterrupt):
-        return None
-
-    choice = choice.strip() or "1"
-    for num, mode, _ in _LOGIN_PROVIDER_OPTIONS:
-        if choice == num:
-            return mode
-    console.print(f"[red]Invalid choice: {choice}[/red]")
-    return None
+def _get_provider_status(provider_id: str) -> OAuthProviderStatus:
+    return OAuthProviderStatus(source="unconfigured")
 
 
 def current_model_key(soul: PythinkerSoul) -> str | None:
@@ -149,7 +139,11 @@ async def login(app: Shell, args: str) -> None:
         return
     mode = args.strip().lower()
     if mode == "":
-        chosen = await _prompt_login_provider()
+        chosen = await run_oauth_selector(
+            _SELECTOR_PROVIDER_ENTRIES,
+            _get_provider_status,
+            action="login",
+        )
         if chosen is None:
             return
         mode = chosen

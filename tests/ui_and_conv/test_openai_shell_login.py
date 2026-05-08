@@ -32,7 +32,7 @@ def _simple_soul(monkeypatch):
 async def test_shell_login_chooser_routes_to_browser(monkeypatch):
     browser = Mock(side_effect=_success_event)
     monkeypatch.setattr(shell_oauth, "login_openai_browser", browser, raising=False)
-    monkeypatch.setattr(shell_oauth, "_prompt_login_provider", lambda: _async_value("browser"))
+    monkeypatch.setattr(shell_oauth, "run_oauth_selector", lambda *a, **kw: _async_value("browser"))
 
     with pytest.raises(Reload):
         await cast(Any, shell_oauth.login)(_app(), "")
@@ -44,7 +44,7 @@ async def test_shell_login_chooser_routes_to_browser(monkeypatch):
 async def test_shell_login_chooser_routes_to_minimax(monkeypatch):
     minimax_login = Mock(side_effect=_success_event)
     monkeypatch.setattr(shell_oauth, "login_minimax_api_key", minimax_login, raising=False)
-    monkeypatch.setattr(shell_oauth, "_prompt_login_provider", lambda: _async_value("minimax"))
+    monkeypatch.setattr(shell_oauth, "run_oauth_selector", lambda *a, **kw: _async_value("minimax"))
     monkeypatch.setattr(shell_oauth, "_prompt_api_key", lambda label: _async_value("mx-test"))
 
     with pytest.raises(Reload):
@@ -57,7 +57,7 @@ async def test_shell_login_chooser_routes_to_minimax(monkeypatch):
 async def test_shell_login_chooser_cancel_returns_silently(monkeypatch):
     browser = Mock(side_effect=_success_event)
     monkeypatch.setattr(shell_oauth, "login_openai_browser", browser, raising=False)
-    monkeypatch.setattr(shell_oauth, "_prompt_login_provider", lambda: _async_value(None))
+    monkeypatch.setattr(shell_oauth, "run_oauth_selector", lambda *a, **kw: _async_value(None))
 
     # Cancelling the chooser must not raise Reload and must not invoke any login.
     await cast(Any, shell_oauth.login)(_app(), "")
@@ -70,7 +70,7 @@ async def test_shell_login_explicit_browser_skips_chooser(monkeypatch):
     browser = Mock(side_effect=_success_event)
     monkeypatch.setattr(shell_oauth, "login_openai_browser", browser, raising=False)
     chooser = Mock()
-    monkeypatch.setattr(shell_oauth, "_prompt_login_provider", chooser)
+    monkeypatch.setattr(shell_oauth, "run_oauth_selector", chooser)
 
     with pytest.raises(Reload):
         await cast(Any, shell_oauth.login)(_app(), "browser")
@@ -273,9 +273,9 @@ async def test_shell_logout_ollama_routes_to_ollama(monkeypatch):
 
 
 def test_login_chooser_includes_lm_studio_and_ollama():
-    labels = [label for _, _, label in shell_oauth._LOGIN_PROVIDER_OPTIONS]
-    assert "LM Studio" in labels
-    assert "Ollama" in labels
+    names = [entry.name for entry in shell_oauth._SELECTOR_PROVIDER_ENTRIES]
+    assert "LM Studio" in names
+    assert "Ollama" in names
 
 
 async def _async_value[T](value: T) -> T:
