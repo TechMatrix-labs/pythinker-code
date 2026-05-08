@@ -201,23 +201,17 @@ async def model(app: Shell, args: str):
     if "always_thinking" in capabilities:
         new_thinking = True
     elif "thinking" in capabilities:
-        thinking_choices: list[tuple[str, str]] = [
-            ("off", "off" + (" (current)" if not curr_thinking else "")),
-            ("on", "on" + (" (current)" if curr_thinking else "")),
-        ]
-        try:
-            thinking_selection = await ChoiceInput(
-                message="Enable thinking mode? (↑↓ navigate, Enter select, Ctrl+C cancel):",
-                options=thinking_choices,
-                default="on" if curr_thinking else "off",
-            ).prompt_async()
-        except (EOFError, KeyboardInterrupt):
+        from pythinker_code.ui.shell.selectors.thinking import ThinkingLevel, run_thinking_selector
+
+        _curr_level: ThinkingLevel = "high" if curr_thinking else "off"
+        _level = await run_thinking_selector(
+            current_level=_curr_level,
+            available_levels=["off", "minimal", "low", "medium", "high", "xhigh"],
+        )
+        if _level is None:
             return
 
-        if not thinking_selection:
-            return
-
-        new_thinking = thinking_selection == "on"
+        new_thinking = _level != "off"
     else:
         new_thinking = False
 
@@ -654,8 +648,8 @@ async def task(app: Shell, args: str):
 
 @registry.command
 @shell_mode_registry.command
-def theme(app: Shell, args: str):
-    """Switch terminal color theme (dark/light)"""
+async def theme(app: Shell, args: str) -> None:
+    """Switch terminal color theme — interactive picker when no args given"""
     from pythinker_code.ui.theme import get_active_theme
 
     soul = ensure_pythinker_soul(app)
@@ -666,9 +660,15 @@ def theme(app: Shell, args: str):
     arg = args.strip().lower()
 
     if not arg:
-        console.print(f"Current theme: [bold]{current}[/bold]")
-        console.print("[grey50]Usage: /theme dark | /theme light[/grey50]")
-        return
+        from pythinker_code.ui.shell.selectors.theme import run_theme_selector
+
+        chosen = await run_theme_selector(
+            current_theme=current,
+            available_themes=["dark", "light"],
+        )
+        if chosen is None or chosen == current:
+            return
+        arg = chosen
 
     if arg not in ("dark", "light"):
         console.print(f"[red]Unknown theme: {arg}. Use 'dark' or 'light'.[/red]")
@@ -686,7 +686,6 @@ def theme(app: Shell, args: str):
         )
         return
 
-    # Persist to disk first — only update in-memory state after success
     try:
         config_for_save = load_config(config_file)
         config_for_save.theme = arg  # type: ignore[assignment]
@@ -699,6 +698,54 @@ def theme(app: Shell, args: str):
 
     track("theme_switch", theme=arg)
     console.print(f"[green]Switched to {arg} theme. Reloading...[/green]")
+    raise Reload(session_id=soul.runtime.session.id)
+
+
+@registry.command
+@shell_mode_registry.command
+async def thinking(app: Shell, args: str) -> None:
+    """Switch thinking level — interactive picker"""
+    soul = ensure_pythinker_soul(app)
+    if soul is None:
+        return
+
+    from pythinker_code.ui.shell.selectors.thinking import ThinkingLevel, run_thinking_selector
+
+    curr_level: ThinkingLevel = "high" if soul.thinking else "off"
+    level = await run_thinking_selector(
+        current_level=curr_level,
+        available_levels=["off", "minimal", "low", "medium", "high", "xhigh"],
+    )
+    if level is None:
+        return
+
+    new_thinking = level != "off"
+    if new_thinking == soul.thinking:
+        console.print("[yellow]Thinking setting unchanged.[/yellow]")
+        return
+
+    config_file = soul.runtime.config.source_file
+    if config_file is None:
+        console.print(
+            "[yellow]Thinking requires a config file; "
+            "restart without --config to persist this setting.[/yellow]"
+        )
+        return
+
+    try:
+        config_for_save = load_config(config_file)
+        config_for_save.default_thinking = new_thinking
+        save_config(config_for_save, config_file)
+    except (ConfigError, OSError) as exc:
+        console.print(f"[red]Failed to save config: {exc}[/red]")
+        return
+
+    from pythinker_code.telemetry import track
+
+    track("thinking_toggle", enabled=new_thinking)
+    console.print(
+        f"[green]Thinking {'enabled' if new_thinking else 'disabled'}. Reloading...[/green]"
+    )
     raise Reload(session_id=soul.runtime.session.id)
 
 
