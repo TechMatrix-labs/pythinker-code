@@ -103,9 +103,11 @@ def _task_browser_style_light() -> PTKStyle:
 
 _PROMPT_STYLE_DARK = {
     "bottom-toolbar": "noreverse",
-    # Input area — subtle bordered chrome that matches the card backgrounds.
-    "compact-input": "bg:#1f2230 #e6e8ee",
-    "compact-input.prompt": "bg:#1f2230 #8abeb7 bold",
+    # Input area — minimal: no background bar, only the prompt glyph is
+    # colored. Lets the terminal background show through so the input row
+    # reads as a single line of text rather than a chrome panel.
+    "compact-input": "",
+    "compact-input.prompt": "fg:#8abeb7 bold",
     "compact-input.frame": "fg:#5f87ff",
     "running-prompt-placeholder": "fg:#7c8594 italic",
     "running-prompt-separator": "fg:#4a5568",
@@ -123,8 +125,8 @@ _PROMPT_STYLE_DARK = {
 
 _PROMPT_STYLE_LIGHT = {
     "bottom-toolbar": "noreverse",
-    "compact-input": "bg:#eef0f5 #1f2937",
-    "compact-input.prompt": "bg:#eef0f5 #5a8080 bold",
+    "compact-input": "",
+    "compact-input.prompt": "fg:#5a8080 bold",
     "compact-input.frame": "fg:#547da7",
     "running-prompt-placeholder": "fg:#6b7280 italic",
     "running-prompt-separator": "fg:#d1d5db",

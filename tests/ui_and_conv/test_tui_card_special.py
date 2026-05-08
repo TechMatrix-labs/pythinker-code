@@ -13,7 +13,6 @@ from pythinker_code.ui.shell.components import (
     truncate_to_visual_lines,
 )
 
-
 # ---------------------------------------------------------------------------
 # truncate_to_visual_lines
 # ---------------------------------------------------------------------------

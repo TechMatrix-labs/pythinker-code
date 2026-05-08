@@ -833,9 +833,7 @@ def settings(app: Shell, args: str):
 
     blocks: list[RenderableType] = [Text.from_markup("[bold]Settings[/bold]"), table]
     console.print(Group(*blocks))
-    console.print(
-        "[grey50]Tip: /theme, /tui, /model, /keys for related controls.[/grey50]"
-    )
+    console.print("[grey50]Tip: /theme, /tui, /model, /keys for related controls.[/grey50]")
 
 
 @registry.command
