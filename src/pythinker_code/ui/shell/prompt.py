@@ -587,15 +587,23 @@ class SlashCommandMenuControl(UIControl):
         )
         marker = "› " if is_current else "  "
 
+        # When a row is selected, use the row.current background for the
+        # gap and trailing padding so the highlight reads as a contiguous bar
+        # rather than a fragmented set of pieces.
+        gap_style = (
+            "class:slash-completion-menu.row.current"
+            if is_current
+            else "class:slash-completion-menu"
+        )
         fragments: FormattedText = FormattedText()
         fragments.append(("class:slash-completion-menu", " " * left_padding))
         fragments.append((marker_style, marker.ljust(marker_width)))
         fragments.append(
             (command_style, _truncate_to_width(completion.display_text, command_width))
         )
-        fragments.append(("class:slash-completion-menu", " " * gap_width))
+        fragments.append((gap_style, " " * gap_width))
         fragments.append((meta_style, _truncate_to_width(completion.display_meta_text, meta_width)))
-        fragments.append(("class:slash-completion-menu", " " * trailing_width))
+        fragments.append((gap_style, " " * trailing_width))
         return fragments
 
     def _render_selected_item_lines(

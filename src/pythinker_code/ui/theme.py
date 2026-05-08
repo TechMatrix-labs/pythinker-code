@@ -103,34 +103,40 @@ def _task_browser_style_light() -> PTKStyle:
 
 _PROMPT_STYLE_DARK = {
     "bottom-toolbar": "noreverse",
-    "compact-input": "bg:#2f2f2f #d4d4d4",
-    "compact-input.prompt": "bg:#2f2f2f #d4d4d4 bold",
+    # Input area — subtle bordered chrome that matches the card backgrounds.
+    "compact-input": "bg:#1f2230 #e6e8ee",
+    "compact-input.prompt": "bg:#1f2230 #8abeb7 bold",
+    "compact-input.frame": "fg:#5f87ff",
     "running-prompt-placeholder": "fg:#7c8594 italic",
     "running-prompt-separator": "fg:#4a5568",
+    # Slash completion menu — selected row gets the same selected-bg as cards.
     "slash-completion-menu": "",
     "slash-completion-menu.separator": "fg:#4a5568",
     "slash-completion-menu.marker": "fg:#4a5568",
-    "slash-completion-menu.marker.current": "fg:#4f9fff",
+    "slash-completion-menu.marker.current": "fg:#8abeb7 bold",
     "slash-completion-menu.command": "fg:#a6adba",
     "slash-completion-menu.meta": "fg:#7c8594",
-    "slash-completion-menu.command.current": "fg:#6fb7ff bold",
-    "slash-completion-menu.meta.current": "fg:#56a4ff",
+    "slash-completion-menu.command.current": "bg:#3a3a4a fg:#8abeb7 bold",
+    "slash-completion-menu.meta.current": "bg:#3a3a4a fg:#a6adba",
+    "slash-completion-menu.row.current": "bg:#3a3a4a",
 }
 
 _PROMPT_STYLE_LIGHT = {
     "bottom-toolbar": "noreverse",
-    "compact-input": "bg:#e5e7eb #111827",
-    "compact-input.prompt": "bg:#e5e7eb #111827 bold",
+    "compact-input": "bg:#eef0f5 #1f2937",
+    "compact-input.prompt": "bg:#eef0f5 #5a8080 bold",
+    "compact-input.frame": "fg:#547da7",
     "running-prompt-placeholder": "fg:#6b7280 italic",
     "running-prompt-separator": "fg:#d1d5db",
     "slash-completion-menu": "",
     "slash-completion-menu.separator": "fg:#d1d5db",
     "slash-completion-menu.marker": "fg:#9ca3af",
-    "slash-completion-menu.marker.current": "fg:#2563eb",
+    "slash-completion-menu.marker.current": "fg:#5a8080 bold",
     "slash-completion-menu.command": "fg:#4b5563",
     "slash-completion-menu.meta": "fg:#6b7280",
-    "slash-completion-menu.command.current": "fg:#1d4ed8 bold",
-    "slash-completion-menu.meta.current": "fg:#2563eb",
+    "slash-completion-menu.command.current": "bg:#d0d0e0 fg:#5a8080 bold",
+    "slash-completion-menu.meta.current": "bg:#d0d0e0 fg:#4b5563",
+    "slash-completion-menu.row.current": "bg:#d0d0e0",
 }
 
 

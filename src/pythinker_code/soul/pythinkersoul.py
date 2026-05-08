@@ -703,6 +703,7 @@ class PythinkerSoul:
                 reset_current_approval_source(approval_source_token)
 
     async def _turn(self, user_message: Message) -> TurnOutcome:
+        from pythinker_code.extensions import shared_event_bus
         from pythinker_code.telemetry import metrics as _m
         from pythinker_code.telemetry import otel as _otel
 
@@ -711,6 +712,15 @@ class PythinkerSoul:
 
         if missing_caps := check_message(user_message, self._runtime.llm.capabilities):
             raise LLMNotSupported(self._runtime.llm, list(missing_caps))
+
+        bus = shared_event_bus()
+        bus.emit(
+            "user.message",
+            {
+                "session_id": self._runtime.session.id,
+                "message": user_message,
+            },
+        )
 
         with _otel.start_span(
             "pythinker.turn",
@@ -732,6 +742,14 @@ class PythinkerSoul:
                 duration_seconds=time.monotonic() - turn_t0,
                 step_count=outcome.step_count,
                 stop_reason=outcome.stop_reason,
+            )
+            bus.emit(
+                "turn.end",
+                {
+                    "session_id": self._runtime.session.id,
+                    "stop_reason": outcome.stop_reason,
+                    "step_count": outcome.step_count,
+                },
             )
             return outcome
 
@@ -1169,6 +1187,8 @@ class PythinkerSoul:
         return StepOutcome(stop_reason="no_tool_calls", assistant_message=result.message)
 
     async def _grow_context(self, result: StepResult, tool_results: list[ToolResult]):
+        from pythinker_code.extensions import shared_event_bus
+
         logger.debug("Growing context with result: {result}", result=result)
 
         assert self._runtime.llm is not None
@@ -1180,6 +1200,25 @@ class PythinkerSoul:
                     caps=missing_caps,
                 )
                 raise LLMNotSupported(self._runtime.llm, list(missing_caps))
+
+        bus = shared_event_bus()
+        bus.emit(
+            "assistant.message",
+            {
+                "session_id": self._runtime.session.id,
+                "message": result.message,
+                "usage": result.usage,
+            },
+        )
+        for tr in tool_results:
+            bus.emit(
+                "tool.call.end",
+                {
+                    "session_id": self._runtime.session.id,
+                    "tool_call_id": getattr(tr, "tool_call_id", None),
+                    "is_error": getattr(tr, "is_error", False),
+                },
+            )
 
         await self._context.append_message(result.message)
         if result.usage is not None:
