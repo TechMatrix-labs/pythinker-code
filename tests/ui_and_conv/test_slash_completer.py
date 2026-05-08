@@ -178,14 +178,13 @@ def test_slash_menu_preselects_first_item_when_index_unset(monkeypatch):
         "".join(fragment[1] for fragment in content.get_line(i)) for i in range(content.line_count)
     ]
 
-    assert content.line_count == 1 + len(completions)
-    # Cursor on the first completion row (row 0 is the separator).
-    assert content.cursor_position.y == 1
+    assert content.line_count == len(completions)
+    assert content.cursor_position.y == 0
     # First row is highlighted, second row is not.
-    assert "›" in rendered_lines[1]
-    assert "›" not in rendered_lines[2]
-    assert "Ctrl-O" in rendered_lines[1]
-    assert rendered_lines[1].count("/editor") == 1
+    assert "›" in rendered_lines[0]
+    assert "›" not in rendered_lines[1]
+    assert "Ctrl-O" in rendered_lines[0]
+    assert rendered_lines[0].count("/editor") == 1
 
 
 def test_find_prompt_float_container_supports_conditional_container_shape():

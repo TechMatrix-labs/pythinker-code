@@ -109,7 +109,7 @@ def test_slash_completion_single_enter_executes(tmp_path: Path) -> None:
             home_dir=home_dir,
         )
         _wait_for_pane_text(session_name, "Welcome to Pythinker Code!")
-        _wait_for_pane_text(session_name, "── input")
+        _wait_for_pane_text(session_name, "─\n›")
 
         # Type "/session" (partial) to trigger completion menu.
         _tmux("send-keys", "-t", f"{session_name}:0.0", "/session", "")

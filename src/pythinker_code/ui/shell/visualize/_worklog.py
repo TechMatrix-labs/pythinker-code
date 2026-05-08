@@ -13,6 +13,7 @@ from pythinker_code.tools.display import (
     DiffDisplayBlock,
     TodoDisplayBlock,
 )
+from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.utils.rich.diff_render import (
     collect_diff_hunks,
     render_diff_panel,
@@ -96,11 +97,13 @@ def render_worklog_entry(
     detail: str | None = None,
     icon: str = "•",
     icon_style: str = "blue",
+    icon_renderable: RenderableType | None = None,
     children: list[RenderableType] | None = None,
 ) -> RenderableType:
     line = Text()
-    line.append(icon, style=icon_style)
-    line.append(" ")
+    if icon_renderable is None:
+        line.append(icon, style=icon_style)
+        line.append(" ")
     line.append(label, style="bold")
     if target:
         line.append(" ")
@@ -110,6 +113,11 @@ def render_worklog_entry(
     if detail:
         line.append(" · ", style="grey50")
         line.append(detail, style=_STATE_STYLE[state])
+    if icon_renderable is not None:
+        return BulletColumns(
+            line if not children else Group(line, *children),
+            bullet=icon_renderable,
+        )
     if not children:
         return line
     return Group(line, *children)

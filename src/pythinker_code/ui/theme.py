@@ -103,6 +103,8 @@ def _task_browser_style_light() -> PTKStyle:
 
 _PROMPT_STYLE_DARK = {
     "bottom-toolbar": "noreverse",
+    "compact-input": "bg:#2f2f2f #d4d4d4",
+    "compact-input.prompt": "bg:#2f2f2f #d4d4d4 bold",
     "running-prompt-placeholder": "fg:#7c8594 italic",
     "running-prompt-separator": "fg:#4a5568",
     "slash-completion-menu": "",
@@ -117,6 +119,8 @@ _PROMPT_STYLE_DARK = {
 
 _PROMPT_STYLE_LIGHT = {
     "bottom-toolbar": "noreverse",
+    "compact-input": "bg:#e5e7eb #111827",
+    "compact-input.prompt": "bg:#e5e7eb #111827 bold",
     "running-prompt-placeholder": "fg:#6b7280 italic",
     "running-prompt-separator": "fg:#d1d5db",
     "slash-completion-menu": "",

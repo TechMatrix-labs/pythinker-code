@@ -372,6 +372,7 @@ class _ToolCallBlock:
         self._finished_subagent_tool_calls = deque[_ToolCallBlock.FinishedSubCall](
             maxlen=MAX_SUBAGENT_TOOL_CALLS_TO_SHOW
         )
+        self._spinning_dots = Spinner("dots", text="")
 
         self._renderable: RenderableType = self._compose()
 
@@ -484,6 +485,7 @@ class _ToolCallBlock:
                 state=WorkLogState.RUNNING,
                 icon=style.icon,
                 icon_style=style.style,
+                icon_renderable=self._spinning_dots if style.label == "Subagent" else None,
                 children=children,
             )
 

@@ -62,6 +62,16 @@ def test_tool_call_block_renders_running_worklog_entry():
     assert "running" in output.lower()
 
 
+def test_tool_call_block_renders_running_subagent_with_dots_particle():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"Audit UI"}'))
+    output = _plain(block.compose())
+
+    assert any(frame in output for frame in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+    assert "Subagent" in output
+    assert "Audit UI" in output
+    assert "running" in output.lower()
+
+
 def test_tool_call_block_renders_completed_worklog_entry():
     block = _ToolCallBlock(_tool_call("Grep", '{"pattern":"FIXME"}'))
     block.finish(ToolOk(output=""))

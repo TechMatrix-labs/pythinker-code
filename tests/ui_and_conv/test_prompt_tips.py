@@ -8,6 +8,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from prompt_toolkit.completion import Completion
 
 from pythinker_code.soul import StatusSnapshot
 from pythinker_code.ui.shell import prompt as shell_prompt
@@ -586,8 +587,8 @@ def test_running_prompt_uses_shared_toolbar_and_separator_layout(monkeypatch: An
     rendered_message = prompt_session._render_agent_prompt_message()
     plain_message = "".join(fragment[1] for fragment in rendered_message)
     assert plain_message.startswith(f"live view ({width})\n\n")
-    # Input section header
-    assert "── input " in plain_message
+    assert plain_message.endswith(f"{'─' * width}\n› ")
+    assert "input" not in plain_message
 
     _toast_queues["left"].clear()
     _toast_queues["right"].clear()
@@ -665,6 +666,78 @@ def test_modal_prompt_hides_input_buffer_when_text_input_is_not_allowed() -> Non
     assert prompt_session._should_render_input_buffer() is False
 
 
+def test_prompt_buffer_window_is_limited_to_two_visible_rows() -> None:
+    prompt_session = CustomPromptSession(
+        status_provider=lambda: StatusSnapshot(context_usage=0.0),
+        model_capabilities=set(),
+        model_name=None,
+        thinking=False,
+        agent_mode_slash_commands=[],
+        shell_mode_slash_commands=[],
+    )
+
+    assert prompt_session._prompt_buffer_container is not None
+    buffer_window = prompt_session._prompt_buffer_container.content
+    assert isinstance(buffer_window, shell_prompt.Window)
+
+    assert buffer_window.dont_extend_height() is True
+    assert buffer_window.height.preferred == 2
+    assert buffer_window.height.max == 2
+    assert buffer_window.style == "class:compact-input"
+
+
+def test_slash_menu_layout_sits_below_compact_agent_input() -> None:
+    prompt_session = CustomPromptSession(
+        status_provider=lambda: StatusSnapshot(context_usage=0.0),
+        model_capabilities=set(),
+        model_name=None,
+        thinking=False,
+        agent_mode_slash_commands=[],
+        shell_mode_slash_commands=[],
+    )
+
+    root = prompt_session._session.layout.container
+    assert isinstance(root, shell_prompt.HSplit)
+    assert prompt_session._prompt_buffer_container is not None
+    assert prompt_session._slash_menu_control is not None
+
+    children = list(root.children)
+    input_index = next(
+        index
+        for index, child in enumerate(children)
+        if shell_prompt._container_contains(child, prompt_session._prompt_buffer_container)
+    )
+    slash_index = next(
+        index
+        for index, child in enumerate(children)
+        if shell_prompt._container_contains(child, prompt_session._slash_menu_control)
+    )
+
+    assert slash_index == input_index + 1
+
+
+def test_bottom_toolbar_hides_status_while_slash_menu_is_active(monkeypatch: Any) -> None:
+    completions = [
+        Completion(
+            text="/add-dir",
+            start_position=0,
+            display="/add-dir",
+            display_meta="Add a directory to the workspace",
+        )
+    ]
+    complete_state = SimpleNamespace(completions=completions, complete_index=0)
+    default_buffer = SimpleNamespace(
+        document=shell_prompt.Document(text="/", cursor_position=1),
+        complete_state=complete_state,
+    )
+    prompt_session = object.__new__(CustomPromptSession)
+    prompt_session._session = SimpleNamespace(default_buffer=default_buffer)
+
+    monkeypatch.setattr(shell_prompt, "get_app_or_none", lambda: object())
+
+    assert prompt_session._render_bottom_toolbar() == []
+
+
 def test_modal_prompt_keeps_input_buffer_when_text_input_is_allowed() -> None:
     prompt_session = CustomPromptSession(
         status_provider=lambda: StatusSnapshot(context_usage=0.0),
@@ -728,8 +801,8 @@ def test_idle_agent_prompt_uses_same_separator_layout(monkeypatch: Any) -> None:
 
     rendered_message = prompt_session._render_agent_prompt_message()
     plain_message = "".join(fragment[1] for fragment in rendered_message)
-    # Input section header
-    assert "── input " in plain_message
+    assert plain_message == f"\n{'─' * width}\n› "
+    assert "input" not in plain_message
 
 
 # ── Session mode / erase_when_done behavior ───────────────────────────────────

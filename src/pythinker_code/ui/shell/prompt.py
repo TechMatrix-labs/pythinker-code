@@ -31,7 +31,7 @@ from prompt_toolkit.completion import (
 )
 from prompt_toolkit.data_structures import Point
 from prompt_toolkit.document import Document
-from prompt_toolkit.filters import Condition, has_completions, has_focus, is_done
+from prompt_toolkit.filters import Condition, has_completions
 from prompt_toolkit.formatted_text import AnyFormattedText, FormattedText, to_formatted_text
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
@@ -39,7 +39,6 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.containers import (
     ConditionalContainer,
     DynamicContainer,
-    Float,
     FloatContainer,
     HSplit,
     Window,
@@ -77,6 +76,7 @@ CachedAttachment = prompt_placeholders.CachedAttachment
 _parse_attachment_kind = prompt_placeholders.parse_attachment_kind
 
 PROMPT_SYMBOL = "✨"
+PROMPT_SYMBOL_AGENT_INPUT = "›"
 PROMPT_SYMBOL_SHELL = "$"
 PROMPT_SYMBOL_THINKING = "💫"
 PROMPT_SYMBOL_PLAN = "📋"
@@ -333,6 +333,36 @@ def _find_default_buffer_container(
     return _walk(layout_container)
 
 
+def _container_contains(root: object, target: object) -> bool:
+    seen: set[int] = set()
+
+    def _walk(node: object) -> bool:
+        if id(node) in seen:
+            return False
+        seen.add(id(node))
+        if node is target:
+            return True
+        if isinstance(node, DynamicContainer):
+            with contextlib.suppress(Exception):
+                if _walk(node.get_container()):
+                    return True
+        for attr in ("children", "content", "floats", "container", "alternative_content"):
+            if not hasattr(node, attr):
+                continue
+            value = getattr(node, attr)
+            if attr == "children" and isinstance(value, Sequence):
+                if any(_walk(child) for child in value):
+                    return True
+            elif attr == "floats" and isinstance(value, Sequence):
+                if any(_walk(getattr(float_, "content", None)) for float_ in value):
+                    return True
+            elif value is not None and _walk(value):
+                return True
+        return False
+
+    return _walk(root)
+
+
 class SlashCommandMenuControl(UIControl):
     """Render slash command completions as a full-width menu that matches the shell UI."""
 
@@ -369,7 +399,7 @@ class SlashCommandMenuControl(UIControl):
         completions = complete_state.completions
         selected_index = complete_state.complete_index
         if selected_index is None:
-            return min(max_available_height, len(completions) + 1)
+            return min(max_available_height, len(completions))
         menu_width = max(0, width - self._left_padding())
         marker_width = 2
         command_width = self._command_column_width(completions, menu_width, marker_width)
@@ -379,7 +409,7 @@ class SlashCommandMenuControl(UIControl):
             completions[selected_index].display_meta_text,
             meta_width,
         )
-        return min(max_available_height, len(completions) + len(selected_meta_lines))
+        return min(max_available_height, len(completions) + len(selected_meta_lines) - 1)
 
     def create_content(self, width: int, height: int) -> UIContent:
         app = get_app_or_none()
@@ -391,7 +421,7 @@ class SlashCommandMenuControl(UIControl):
 
         completions = complete_state.completions
         selected_index = complete_state.complete_index
-        available_rows = max(1, height - 1)
+        available_rows = max(1, height)
 
         menu_width = max(0, width - self._left_padding())
         marker_width = 2
@@ -399,9 +429,7 @@ class SlashCommandMenuControl(UIControl):
         gap_width = 3 if menu_width > command_width + 6 else 1
         meta_width = max(0, menu_width - marker_width - command_width - gap_width)
 
-        rendered_lines: list[FormattedText] = [
-            FormattedText([("class:slash-completion-menu.separator", "─" * max(0, width))])
-        ]
+        rendered_lines: list[FormattedText] = []
         selected_line_index = 0
 
         if selected_index is None:
@@ -426,7 +454,7 @@ class SlashCommandMenuControl(UIControl):
             return UIContent(
                 get_line=lambda i: rendered_lines[i],
                 line_count=len(rendered_lines),
-                cursor_position=Point(x=0, y=1 if completions else 0),
+                cursor_position=Point(x=0, y=0),
             )
 
         selected_meta_lines = self._selected_meta_lines(
@@ -439,7 +467,7 @@ class SlashCommandMenuControl(UIControl):
             available_rows=available_rows,
             selected_item_height=len(selected_meta_lines),
         )
-        selected_line_index = 1
+        selected_line_index = 0
 
         for index in range(start, end + 1):
             completion = completions[index]
@@ -1221,6 +1249,7 @@ class CustomPromptSession:
         self._running_prompt_delegate: RunningPromptDelegate | None = None
         self._modal_delegates: list[RunningPromptDelegate] = []
         self._prompt_buffer_container: ConditionalContainer | None = None
+        self._slash_menu_control: SlashCommandMenuControl | None = None
         self._last_ui_state: PromptUIState = PromptUIState.NORMAL_INPUT
         self._suspended_buffer_document: Document | None = None
         clipboard_available = is_clipboard_available()
@@ -1566,36 +1595,31 @@ class CustomPromptSession:
         if not isinstance(float_container, FloatContainer):
             return
 
-        slash_menu_filter = (
-            has_focus(self._session.default_buffer)
-            & has_completions
-            & ~is_done
-            & Condition(self._should_show_slash_completion_menu)
+        self._slash_menu_control = SlashCommandMenuControl(
+            left_padding=self._slash_menu_left_padding
         )
         slash_menu = ConditionalContainer(
             Window(
-                content=SlashCommandMenuControl(left_padding=self._slash_menu_left_padding),
+                content=self._slash_menu_control,
                 dont_extend_height=True,
                 height=Dimension(max=10),
                 style="class:slash-completion-menu",
             ),
-            filter=slash_menu_filter,
+            filter=has_completions & Condition(self._should_show_slash_completion_menu),
         )
-        float_container.floats.insert(
-            0,
-            Float(
-                left=0,
-                right=0,
-                ycursor=True,
-                content=slash_menu,
-                z_index=10**8,
-            ),
-        )
+        root = self._session.layout.container
+        buffer_container = _find_default_buffer_container(root, self._session.default_buffer)
+        if isinstance(root, HSplit) and buffer_container is not None:
+            children = cast(list[object], root.children)
+            for index, child in enumerate(children):
+                if _container_contains(child, buffer_container):
+                    children.insert(index + 1, slash_menu)
+                    break
 
         original_float = next(
             (
                 float_
-                for float_ in float_container.floats[1:]
+                for float_ in float_container.floats
                 if isinstance(float_.content, CompletionsMenu)
             ),
             None,
@@ -1617,6 +1641,11 @@ class CustomPromptSession:
         buffer_container.filter = buffer_container.filter & Condition(
             self._should_render_input_buffer
         )
+        if isinstance(buffer_container.content, Window):
+            buffer_window = buffer_container.content
+            buffer_window.height = Dimension(preferred=2, max=2)
+            buffer_window.dont_extend_height = Condition(lambda: True)
+            buffer_window.style = "class:compact-input"
         self._prompt_buffer_container = buffer_container
 
     def _should_show_slash_completion_menu(self) -> bool:
@@ -1626,7 +1655,7 @@ class CustomPromptSession:
     def _slash_menu_left_padding(self) -> int:
         if self._mode == PromptMode.SHELL:
             return max(1, get_cwidth(f"{PROMPT_SYMBOL_SHELL} ") - 2)
-        # Agent mode: prompt prefix is "│  " (3 chars inside input panel)
+        # Agent mode: prompt prefix is "› " inside the compact input block.
         return 1
 
     def _render_message(self) -> FormattedText:
@@ -1811,32 +1840,10 @@ class CustomPromptSession:
         if self._active_modal_delegate() is not None:
             return fragments
 
-        # 4. Input section header — style varies by mode:
-        #    normal:  ── input ─────────────────  (grey, solid)
-        #    plan:    ╌╌ input · plan ╌╌╌╌╌╌╌╌╌  (blue, dashed)
-        status = self._status_provider()
-        # Build title parts
-        title_parts = ["input"]
-        if status.plan_mode:
-            title_parts.append("plan")
-        # Queue count from running prompt delegate
-        running = self._running_prompt_delegate
-        queue_count = len(getattr(running, "_queued_messages", []))
-        if queue_count > 0:
-            title_parts.append(f"{queue_count} queued")
-        title = f" {' · '.join(title_parts)} "
-        if status.plan_mode:
-            dash = "╌"
-            style = "fg:#60a5fa"  # blue
-        else:
-            dash = "─"
-            style = "class:running-prompt-separator"
-        border_fill = max(0, columns - len(title) - 2)
-        top_border = f"{dash}{dash}{title}{dash * border_fill}"
         fragments.append(("", "\n"))
-        fragments.append((style, top_border))
+        fragments.append(("class:running-prompt-separator", "─" * max(0, columns)))
         fragments.append(("", "\n"))
-        fragments.append(("", " "))
+        fragments.append(("class:compact-input.prompt", f"{PROMPT_SYMBOL_AGENT_INPUT} "))
         return fragments
 
     def _render_agent_status(self, columns: int) -> FormattedText:
