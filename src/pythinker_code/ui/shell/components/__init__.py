@@ -1,8 +1,9 @@
 """Pythinker TUI component foundation.
 
 This package provides reusable rendering primitives modeled after the
-internal component system. Components are pure
-data-to-Rich-renderable adapters with no event-loop knowledge.
+internal component system. Most components are pure data-to-Rich-renderable
+adapters; prompt_toolkit-backed interactive components live here too when
+shared across selectors.
 """
 
 from __future__ import annotations
@@ -44,6 +45,12 @@ from pythinker_code.ui.shell.components.render_utils import (
     truncate_to_visual_lines,
     truncate_to_width,
 )
+from pythinker_code.ui.shell.components.settings_list import (
+    SettingItem,
+    SettingsListConfig,
+    SettingsListResult,
+    run_settings_list,
+)
 from pythinker_code.ui.shell.components.special_messages import (
     BranchSummaryInput,
     CompactionSummaryInput,
@@ -67,6 +74,9 @@ __all__ = [
     "EditDiffResult",
     "FooterState",
     "FooterUsage",
+    "SettingItem",
+    "SettingsListConfig",
+    "SettingsListResult",
     "SkillInvocationInput",
     "ToolExecutionComponent",
     "ToolExecutionStatus",
@@ -87,6 +97,7 @@ __all__ = [
     "render_diff",
     "render_footer",
     "render_plain",
+    "run_settings_list",
     "render_skill_invocation",
     "render_user_message",
     "sanitize_ansi",
