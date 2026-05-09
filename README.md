@@ -9,11 +9,12 @@
 
 <br />
 
-[![PyPI](https://img.shields.io/pypi/v/pythinker-code?style=for-the-badge&logo=pypi&logoColor=white&color=2563eb&label=pythinker-code)](https://pypi.org/project/pythinker-code/)
+[![PyPI](https://img.shields.io/pypi/v/pythinker-code?style=for-the-badge&logo=pypi&logoColor=white&color=2563eb&label=pythinker-code&cacheSeconds=60)](https://pypi.org/project/pythinker-code/)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab?style=for-the-badge&logo=python&logoColor=white)](https://github.com/mohamed-elkholy95/Pythinker-Code/blob/main/pyproject.toml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-16a34a.svg?style=for-the-badge)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/mohamed-elkholy95/Pythinker-Code/ci-pythinker-cli.yml?label=CI&color=22c55e&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/mohamed-elkholy95/Pythinker-Code/actions/workflows/ci-pythinker-cli.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-16a34a.svg?style=for-the-badge)](https://github.com/mohamed-elkholy95/Pythinker-Code/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/mohamed-elkholy95/Pythinker-Code/ci-pythinker-cli.yml?branch=main&label=CI&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/mohamed-elkholy95/Pythinker-Code/actions/workflows/ci-pythinker-cli.yml?query=branch%3Amain)
 
+[![Downloads](https://static.pepy.tech/badge/pythinker-code)](https://pepy.tech/project/pythinker-code)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-f59e0b.svg?style=flat-square&logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
 [![ACP ready](https://img.shields.io/badge/ACP-ready-7c3aed.svg?style=flat-square)](https://github.com/agentclientprotocol/agent-client-protocol)
 [![MCP tools](https://img.shields.io/badge/MCP-tools-0891b2.svg?style=flat-square)](https://modelcontextprotocol.io/)
