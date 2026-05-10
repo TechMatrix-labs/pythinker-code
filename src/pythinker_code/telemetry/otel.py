@@ -36,9 +36,21 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import (
+    ALWAYS_OFF,
+    ALWAYS_ON,
+    ParentBased,
+    Sampler,
+    TraceIdRatioBased,
+)
 from opentelemetry.trace import Tracer
 
-from pythinker_code.telemetry.config import is_disabled, otel_endpoint, otel_ingest_token
+from pythinker_code.telemetry.config import (
+    is_disabled,
+    otel_endpoint,
+    otel_ingest_token,
+    otel_trace_sample_rate,
+)
 
 _TRACER_NAME = "pythinker-code"
 _initialized: bool = False
@@ -97,7 +109,17 @@ def init(
         headers=headers,
         timeout=10,
     )
-    tracer_provider = TracerProvider(resource=resource)
+    rate = otel_trace_sample_rate()
+    sampler: Sampler
+    if rate >= 1.0:
+        sampler = ALWAYS_ON
+    elif rate <= 0.0:
+        sampler = ALWAYS_OFF
+    else:
+        # ParentBased honors a parent's sampling decision (e.g. an upstream
+        # ACP/wire request). For root spans the ratio sampler decides.
+        sampler = ParentBased(root=TraceIdRatioBased(rate))
+    tracer_provider = TracerProvider(resource=resource, sampler=sampler)
     tracer_provider.add_span_processor(BatchSpanProcessor(span_exporter))
     trace.set_tracer_provider(tracer_provider)
     _tracer = tracer_provider.get_tracer(_TRACER_NAME, version)

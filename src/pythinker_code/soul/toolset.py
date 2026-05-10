@@ -614,6 +614,7 @@ class MCPTool[T: ClientTransport](CallableTool):
             **kwargs,
         )
         self._mcp_tool = mcp_tool
+        self._mcp_server_name = server_name
         self._client = client
         self._runtime = runtime
         self._timeout = timedelta(milliseconds=runtime.config.mcp.client.tool_call_timeout_ms)
@@ -625,21 +626,36 @@ class MCPTool[T: ClientTransport](CallableTool):
         if not result:
             return result.rejection_error()
 
+        from pythinker_code.telemetry import otel as _otel
+
+        # `start_span` returns a sync context manager (the OTel SDK uses
+        # `_AgnosticContextManager`, which intentionally has no __aenter__).
+        # Keep it as a sync `with` and use `async with` only on the fastmcp
+        # client.
         try:
-            async with self._client as client:
-                result = await client.call_tool(
-                    self._mcp_tool.name,
-                    kwargs,
-                    timeout=self._timeout,
-                    raise_on_error=False,
-                )
-                if result.is_error:
-                    logger.warning(
-                        "MCP tool returned error: {tool_name}: {content}",
-                        tool_name=self._mcp_tool.name,
-                        content=[str(p) for p in result.content][:3],
+            with _otel.start_span(
+                "pythinker.mcp.call",
+                {
+                    "mcp.server": self._mcp_server_name,
+                    "mcp.tool": self._mcp_tool.name,
+                    "mcp.timeout_ms": int(self._timeout.total_seconds() * 1000),
+                },
+            ) as span:
+                async with self._client as client:
+                    result = await client.call_tool(
+                        self._mcp_tool.name,
+                        kwargs,
+                        timeout=self._timeout,
+                        raise_on_error=False,
                     )
-                return convert_mcp_tool_result(result)
+                    span.set_attribute("mcp.is_error", bool(result.is_error))
+                    if result.is_error:
+                        logger.warning(
+                            "MCP tool returned error: {tool_name}: {content}",
+                            tool_name=self._mcp_tool.name,
+                            content=[str(p) for p in result.content][:3],
+                        )
+                    return convert_mcp_tool_result(result)
         except Exception as e:
             from pythinker_code.telemetry.errors import report_handled_error
 

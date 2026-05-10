@@ -148,6 +148,24 @@ Override individual endpoints when running your own collectors:
 | `PYTHINKER_SENTRY_DSN` | `https://...@errors.pythinker.com/1` |
 | `PYTHINKER_OTEL_ENDPOINT` | `https://otel.pythinker.com` |
 | `PYTHINKER_OTEL_TOKEN` | (embedded) |
+| `PYTHINKER_OTEL_TRACE_SAMPLE_RATE` | `1.0` (always-on) |
+
+`PYTHINKER_OTEL_TRACE_SAMPLE_RATE` accepts a float in `[0.0, 1.0]`. Values are
+clamped; malformed input falls back to the default. Sampling is `ParentBased`
+on top of `TraceIdRatioBased`, so a parent's sample decision (e.g. an
+upstream ACP/wire request that already chose to sample) is honored —
+otherwise the rate decides at the root.
+
+## Spans
+
+Currently emitted (when traces are sampled):
+
+| Span | Where | Key attributes |
+|---|---|---|
+| `pythinker.turn` | `soul/pythinkersoul.py` | `session.id`, `agent.role`, `model`, `plan_mode`, `turn.stop_reason`, `turn.step_count` |
+| `pythinker.llm` | `soul/pythinkersoul.py` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.id`, `llm.tool_calls` |
+| `pythinker.tool_call` | `soul/toolset.py` | `tool.name`, `tool.success`, `tool.error_type` |
+| `pythinker.mcp.call` | `soul/toolset.py` | `mcp.server`, `mcp.tool`, `mcp.timeout_ms`, `mcp.is_error` |
 
 ## What's *not* collected
 

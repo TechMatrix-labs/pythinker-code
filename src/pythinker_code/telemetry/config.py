@@ -52,3 +52,32 @@ def is_disabled() -> bool:
     Sentry and OTel emission for the process."""
     raw = os.environ.get("PYTHINKER_DISABLE_TELEMETRY", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+# ---------------------------------------------------------------------------
+# Sampling
+# ---------------------------------------------------------------------------
+
+DEFAULT_OTEL_TRACE_SAMPLE_RATE = 1.0
+"""Default fraction of root-trace spans to record. 1.0 = always-on; 0.0 = none."""
+
+
+def otel_trace_sample_rate() -> float:
+    """Resolve the OTel trace sampling rate.
+
+    Honors ``PYTHINKER_OTEL_TRACE_SAMPLE_RATE``. Clamped to ``[0.0, 1.0]``.
+    Malformed input falls back to the default rather than disabling tracing
+    or raising — telemetry config must never break the host program.
+    """
+    raw = os.environ.get("PYTHINKER_OTEL_TRACE_SAMPLE_RATE", "").strip()
+    if not raw:
+        return DEFAULT_OTEL_TRACE_SAMPLE_RATE
+    try:
+        rate = float(raw)
+    except ValueError:
+        return DEFAULT_OTEL_TRACE_SAMPLE_RATE
+    if rate < 0.0:
+        return 0.0
+    if rate > 1.0:
+        return 1.0
+    return rate
