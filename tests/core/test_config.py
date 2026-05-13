@@ -55,10 +55,11 @@ def test_default_config_dump():
             },
             "services": {"pythinker_ai_search": None, "pythinker_ai_fetch": None},
             "mcp": {"client": {"tool_call_timeout_ms": 60000}},
+            "feedback": {"endpoint_url": "", "api_key": None, "custom_headers": None},
             "hooks": [],
             "merge_all_available_skills": True,
             "extra_skill_dirs": [],
-            "telemetry": False,
+            "telemetry": True,
             "skip_auto_prompt_injection": False,
             "tui": {"style": "card"},
         }

@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 import time
+import warnings
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -80,6 +81,32 @@ PROMPT_SYMBOL_AGENT_INPUT = "›"
 PROMPT_SYMBOL_SHELL = "$"
 PROMPT_SYMBOL_THINKING = "💫"
 PROMPT_SYMBOL_PLAN = "📋"
+
+
+# prompt_toolkit 3.0.52 can emit these during prompt shutdown on Python 3.14
+# when its internal background tasks are cancelled before first execution.
+# Keep the filter narrow so unrelated RuntimeWarnings still surface.
+warnings.filterwarnings(
+    "ignore",
+    message=(
+        r"coroutine 'Buffer\._create_completer_coroutine\.<locals>\.async_completer"
+        r"\.<locals>\.refresh_while_loading' was never awaited"
+    ),
+    category=RuntimeWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=(
+        r"coroutine 'Application\.run_async\.<locals>\._run_async\.<locals>"
+        r"\.auto_flush_input' was never awaited"
+    ),
+    category=RuntimeWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"coroutine 'KeyProcessor\._start_timeout\.<locals>\.wait' was never awaited",
+    category=RuntimeWarning,
+)
 
 
 class CwdLostError(OSError):

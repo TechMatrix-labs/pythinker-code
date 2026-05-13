@@ -168,6 +168,30 @@ class Services(BaseModel):
     """Pythinker AI Fetch configuration."""
 
 
+class FeedbackConfig(BaseModel):
+    """User-submitted feedback endpoint configuration."""
+
+    endpoint_url: str = Field(
+        default="",
+        description=(
+            "Full URL for the /feedback slash command. Overrides the built-in "
+            "Pythinker platform endpoint when set."
+        ),
+    )
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="Optional bearer token for the feedback endpoint.",
+    )
+    custom_headers: dict[str, str] | None = Field(
+        default=None,
+        description="Optional extra headers for feedback endpoint requests.",
+    )
+
+    @field_serializer("api_key", when_used="json")
+    def dump_secret(self, v: SecretStr | None):
+        return v.get_secret_value() if v is not None else None
+
+
 class MCPClientConfig(BaseModel):
     """MCP client configuration."""
 
@@ -251,6 +275,10 @@ class Config(BaseModel):
         default_factory=NotificationConfig, description="Notification configuration"
     )
     services: Services = Field(default_factory=Services, description="Services configuration")
+    feedback: FeedbackConfig = Field(
+        default_factory=FeedbackConfig,
+        description="User-submitted feedback endpoint configuration",
+    )
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="MCP configuration")
     tui: TUIConfig = Field(default_factory=TUIConfig, description="TUI rendering configuration")
     hooks: list[HookDef] = Field(default_factory=list, description="Hook definitions")  # pyright: ignore[reportUnknownVariableType]
@@ -274,9 +302,9 @@ class Config(BaseModel):
         ),
     )
     telemetry: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Enable anonymous telemetry to help improve pythinker-code. Set to true to enable."
+            "Enable anonymous telemetry to help improve pythinker-code. Set to false to opt out."
         ),
     )
 

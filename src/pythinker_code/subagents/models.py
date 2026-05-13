@@ -39,6 +39,8 @@ class AgentLaunchSpec:
     subagent_type: str
     model_override: str | None
     effective_model: str | None
+    thinking: bool | None = None
+    variant: str | None = None
     created_at: float = field(default_factory=time.time)
 
 

@@ -14,7 +14,7 @@ import pytest
 from pydantic import SecretStr
 from pythinker_core.tooling.empty import EmptyToolset
 
-from pythinker_code.config import LLMProvider, OAuthRef
+from pythinker_code.config import FeedbackConfig, LLMProvider, OAuthRef
 from pythinker_code.soul.agent import Agent, Runtime
 from pythinker_code.soul.context import Context
 from pythinker_code.soul.pythinkersoul import PythinkerSoul
@@ -117,41 +117,54 @@ class TestFeedbackGuards:
         open_mock.assert_called_once()
         assert "issues" in open_mock.call_args.args[0]
 
-    async def test_fallback_when_no_provider(
+    async def test_default_endpoint_without_provider(
         self, runtime: Runtime, tmp_path: Path, monkeypatch
     ) -> None:
-        """When managed:pythinker-code provider is missing, should fallback."""
+        """Feedback no longer requires managed:pythinker-code OAuth."""
         app = _make_shell_app(runtime, tmp_path)
 
-        open_mock = Mock(return_value=True)
-        monkeypatch.setattr("webbrowser.open", open_mock)
+        mock_session_factory = _mock_client_session(response_status=204)
+        _, open_mock = _setup_submission_mocks(
+            monkeypatch, feedback_text="No auth feedback", session_factory=mock_session_factory
+        )
 
         ret = shell_slash.feedback(cast(Shell, app), "")
         if isinstance(ret, Awaitable):
             await ret
 
-        open_mock.assert_called_once()
+        mock_session = await mock_session_factory.return_value.__aenter__()
+        post_call = mock_session.post.call_args
+        assert post_call.args[0] == "https://api.pythinker.com/coding/v1/feedback"
+        assert post_call.kwargs["headers"] == {}
+        open_mock.assert_not_called()
 
-    async def test_fallback_when_no_oauth(
+    async def test_provider_without_oauth_uses_api_key(
         self, runtime: Runtime, tmp_path: Path, monkeypatch
     ) -> None:
-        """When provider exists but has no oauth, should fallback."""
+        """A managed provider can authenticate feedback with only its configured API key."""
         runtime.config.providers["managed:pythinker-code"] = LLMProvider(
             type="pythinker",
             base_url="https://api.pythinker.com/coding/v1",
             api_key=SecretStr("test-api-key"),
             oauth=None,
+            custom_headers={"x-canary-kfc": "always"},
         )
         app = _make_shell_app(runtime, tmp_path)
 
-        open_mock = Mock(return_value=True)
-        monkeypatch.setattr("webbrowser.open", open_mock)
+        mock_session_factory = _mock_client_session(response_status=204)
+        _, open_mock = _setup_submission_mocks(
+            monkeypatch, feedback_text="API key feedback", session_factory=mock_session_factory
+        )
 
         ret = shell_slash.feedback(cast(Shell, app), "")
         if isinstance(ret, Awaitable):
             await ret
 
-        open_mock.assert_called_once()
+        mock_session = await mock_session_factory.return_value.__aenter__()
+        headers = mock_session.post.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer test-api-key"
+        assert headers["x-canary-kfc"] == "always"
+        open_mock.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +254,32 @@ class TestFeedbackSubmission:
         assert "version" in payload
         assert "os" in payload
         assert "model" in payload
+
+    async def test_configured_endpoint_overrides_platform(
+        self, runtime: Runtime, tmp_path: Path, monkeypatch
+    ) -> None:
+        runtime.config.feedback = FeedbackConfig(
+            endpoint_url="https://feedback.pythinker.com/submit",
+            api_key=SecretStr("feedback-secret"),
+            custom_headers={"x-feedback-source": "cli"},
+        )
+        app = _make_shell_app(runtime, tmp_path)
+
+        mock_session_factory = _mock_client_session(response_status=204)
+        _setup_submission_mocks(
+            monkeypatch, feedback_text="Configured feedback", session_factory=mock_session_factory
+        )
+
+        ret = shell_slash.feedback(cast(Shell, app), "")
+        if isinstance(ret, Awaitable):
+            await ret
+
+        mock_session = await mock_session_factory.return_value.__aenter__()
+        post_call = mock_session.post.call_args
+        assert post_call.args[0] == "https://feedback.pythinker.com/submit"
+        headers = post_call.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer feedback-secret"
+        assert headers["x-feedback-source"] == "cli"
 
     async def test_timeout_fallback(self, runtime: Runtime, tmp_path: Path, monkeypatch) -> None:
         _setup_feedback_provider(runtime)

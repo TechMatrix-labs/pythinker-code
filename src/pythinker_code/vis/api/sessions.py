@@ -609,14 +609,17 @@ async def import_session(file: UploadFile) -> dict[str, Any]:
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted")
 
-    content = await file.read()
+    # Reject uploads larger than 200 MB while streaming the request body.
+    _MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+    content = bytearray()
+    while chunk := await file.read(1024 * 1024):
+        content.extend(chunk)
+        if len(content) > _MAX_UPLOAD_BYTES:
+            await file.close()
+            raise HTTPException(status_code=413, detail="File too large (max 200 MB)")
+    await file.close()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
-
-    # Reject uploads larger than 200 MB
-    _MAX_UPLOAD_BYTES = 200 * 1024 * 1024
-    if len(content) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 200 MB)")
 
     # Validate ZIP
     buf = io.BytesIO(content)

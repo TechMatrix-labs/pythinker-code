@@ -18,8 +18,9 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.target }} python-${{ matrix.python-version }}
+    name: ${{ matrix.target }} python-${{ matrix.python-version }}${{ matrix.experimental && ' (experimental)' || '' }}
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +35,13 @@ jobs:
             target: aarch64-apple-darwin
           - runner: windows-2022
             target: x86_64-pc-windows-msvc
+          # Forward-compat probe for the GitHub Actions windows-latest -> VS 2026
+          # migration (rolling out 2026-06-08 to 2026-06-15). One Python only;
+          # experimental so a VS 2026 / MSVC v144 regression does not block PRs.
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+            python-version: "3.13"
+            experimental: true
     defaults:
       run:
         shell: bash

@@ -15,10 +15,17 @@ type TaskStatus = Literal[
     "failed",
     "killed",
     "lost",
+    "recoverable",
 ]
 type TaskOwnerRole = Literal["root", "subagent"]
 
-TERMINAL_TASK_STATUSES: tuple[TaskStatus, ...] = ("completed", "failed", "killed", "lost")
+TERMINAL_TASK_STATUSES: tuple[TaskStatus, ...] = (
+    "completed",
+    "failed",
+    "killed",
+    "lost",
+    "recoverable",
+)
 
 
 def is_terminal_status(status: TaskStatus) -> bool:
@@ -50,6 +57,12 @@ class TaskSpec(BaseModel):
     shell_path: str | None = None
     cwd: str | None = None
     timeout_s: int | None = None
+    parent_task_id: str | None = None
+    child_task_ids: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    budget_seconds: int | None = None
+    synthesis_state: str | None = None
+    isolation: str | None = None
     kind_payload: dict[str, Any] | None = None
 
 

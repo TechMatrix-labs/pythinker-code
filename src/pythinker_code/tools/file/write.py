@@ -8,6 +8,7 @@ from pythinker_host.path import HostPath
 
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.approval import Approval
+from pythinker_code.soul.permission import check_file_mutation_allowed
 from pythinker_code.tools.display import DisplayBlock
 from pythinker_code.tools.file import FileActions
 from pythinker_code.tools.file.plan_mode import inspect_plan_edit_target
@@ -44,6 +45,7 @@ class WriteFile(CallableTool2[Params]):
 
     def __init__(self, runtime: Runtime, approval: Approval):
         super().__init__()
+        self._runtime = runtime
         self._work_dir = runtime.builtin_args.PYTHINKER_WORK_DIR
         self._additional_dirs = runtime.additional_dirs
         self._approval = approval
@@ -101,6 +103,10 @@ class WriteFile(CallableTool2[Params]):
                 return plan_target
 
             is_plan_file_write = plan_target.is_plan_target
+            if err := check_file_mutation_allowed(
+                self._runtime, is_plan_artifact=is_plan_file_write
+            ):
+                return err
             if is_plan_file_write and plan_target.plan_path is not None:
                 plan_target.plan_path.parent.mkdir(parents=True, exist_ok=True)
 

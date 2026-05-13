@@ -24,6 +24,7 @@ from rich.table import Table
 from rich.text import Text
 
 from pythinker_code.background import list_task_views
+from pythinker_code.constant import get_version
 from pythinker_code.llm import model_display_name
 from pythinker_code.notifications import NotificationManager, NotificationWatcher
 from pythinker_code.soul import (
@@ -1680,9 +1681,16 @@ def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
     # Update notice is rendered as a standalone banner above the welcome panel
     # by `print_update_banner()` (called from app.py before this point).
 
+    version_title = Text.assemble(
+        ("Pythinker Code", _PYTHINKER_BORDER),
+        (f" v{get_version()}", "grey50"),
+    )
+
     console.print(
         Panel(
             Group(*rows),
+            title=version_title,
+            title_align="left",
             border_style=_PYTHINKER_BORDER,
             expand=False,
             padding=(1, 2),

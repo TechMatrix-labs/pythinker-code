@@ -44,6 +44,47 @@ def _scrub_path(path: str) -> str:
     return _PATH_SCRUB.sub(r"<env>/\2/", path)
 
 
+def _frame_path(frame: dict[str, Any]) -> str:
+    for key in ("abs_path", "filename"):
+        value = frame.get(key)
+        if isinstance(value, str):
+            return value.replace("\\", "/")
+    return ""
+
+
+def _event_has_test_frame(values: list[Any]) -> bool:
+    for exception_raw in values:
+        if not isinstance(exception_raw, dict):
+            continue
+        exception = cast(dict[str, Any], exception_raw)
+        stacktrace_raw = exception.get("stacktrace")
+        if not isinstance(stacktrace_raw, dict):
+            continue
+        stacktrace = cast(dict[str, Any], stacktrace_raw)
+        frames_raw = stacktrace.get("frames")
+        if not isinstance(frames_raw, list):
+            continue
+        frames = cast(list[Any], frames_raw)
+        for frame_raw in frames:
+            if not isinstance(frame_raw, dict):
+                continue
+            path = _frame_path(cast(dict[str, Any], frame_raw))
+            filename = path.rsplit("/", 1)[-1]
+            if "/tests/" in path or filename.startswith("test_"):
+                return True
+    return False
+
+
+def _event_is_normal_queue_shutdown(values: list[Any]) -> bool:
+    for exception_raw in values:
+        if not isinstance(exception_raw, dict):
+            continue
+        exception = cast(dict[str, Any], exception_raw)
+        if exception.get("module") == "asyncio.queues" and exception.get("type") == "QueueShutDown":
+            return True
+    return False
+
+
 def _before_send(event: Event, hint: Hint) -> Event | None:
     """Sentry hook applied to every outgoing event.
 
@@ -61,7 +102,11 @@ def _before_send(event: Event, hint: Hint) -> Event | None:
     if not isinstance(values, list):
         return event
 
-    for exception_raw in cast(list[Any], values):
+    typed_values = cast(list[Any], values)
+    if _event_has_test_frame(typed_values) or _event_is_normal_queue_shutdown(typed_values):
+        return None
+
+    for exception_raw in typed_values:
         if not isinstance(exception_raw, dict):
             continue
         exception = cast(dict[str, Any], exception_raw)

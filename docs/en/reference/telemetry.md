@@ -129,8 +129,19 @@ small, stable enumeration for dashboard slicing.
 ### `/feedback` slash command
 
 Distinct from automatic telemetry. The user types feedback explicitly; it is
-POSTed to the hosted feedback endpoint along with `session_id`, version, OS,
-and current model. No code or file context is attached.
+POSTed to the configured feedback endpoint along with `session_id`, version,
+OS, and current model. No code or file context is attached.
+
+Endpoint resolution order:
+
+1. `PYTHINKER_FEEDBACK_URL` environment variable.
+2. `feedback.endpoint_url` in `config.toml`.
+3. The built-in Pythinker platform endpoint.
+
+When using a configured endpoint, set `PYTHINKER_FEEDBACK_API_KEY` or
+`feedback.api_key` to send an `Authorization: Bearer ...` header. `feedback.custom_headers`
+can add static headers. The built-in Pythinker provider remains supported but
+OAuth is no longer required for self-hosted/dev feedback routing.
 
 ### `/report-error` slash command
 
@@ -154,8 +165,8 @@ When the user runs `/report-error`:
    `recent_errors[]` array constructed from the ring buffer.
 4. On success, the buffer is cleared.
 
-If managed-platform OAuth is unavailable, the slash falls back to opening
-the GitHub issue tracker in a browser.
+If submission is unavailable or fails, the slash falls back to opening the
+GitHub issue tracker in a browser.
 
 ## Opting out
 
@@ -164,6 +175,9 @@ Set either of the following before launching `pythinker`:
 - `PYTHINKER_DISABLE_TELEMETRY=1` — kills both Sentry and OTel emission for
   the process. The `/feedback` slash command is **not** affected (it only
   fires on explicit user invocation).
+- `PYTHINKER_FEEDBACK_URL` — overrides where explicit `/feedback` and
+  `/report-error` submissions are sent.
+- `PYTHINKER_FEEDBACK_API_KEY` — optional bearer token for that feedback endpoint.
 - `config.telemetry = false` in your config file (TOML) — same effect.
 
 Override individual endpoints when running your own collectors:

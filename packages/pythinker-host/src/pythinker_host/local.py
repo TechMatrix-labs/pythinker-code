@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
+import subprocess
 from asyncio.subprocess import Process as AsyncioProcess
 from collections.abc import AsyncGenerator
 from pathlib import Path, PurePath
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if os.name == "nt":
     import ntpath as pathmodule
@@ -66,6 +68,14 @@ class LocalHost:
             return await self._process.wait()
 
         async def kill(self) -> None:
+            if os.name != "nt":
+                try:
+                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
+                    return
+                except ProcessLookupError:
+                    return
+                except Exception:
+                    pass
             self._process.kill()
 
     def pathclass(self) -> type[PurePath]:
@@ -173,12 +183,21 @@ class LocalHost:
         if not args:
             raise ValueError("At least one argument (the program to execute) is required.")
 
+        process_options: dict[str, Any] = {}
+        if os.name == "nt":
+            process_options["creationflags"] = getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+            )
+        else:
+            process_options["start_new_session"] = True
+
         process = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            **process_options,
         )
         return self.Process(process)
 

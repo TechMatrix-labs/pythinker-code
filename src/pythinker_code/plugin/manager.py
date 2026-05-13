@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -12,7 +13,6 @@ from pythinker_code.plugin import (
     PluginError,
     PluginRuntime,
     PluginSpec,
-    inject_config,
     parse_plugin_json,
     write_runtime,
 )
@@ -51,12 +51,24 @@ def collect_host_values(config: Config, oauth: OAuthManager) -> dict[str, str]:
     return values
 
 
+_PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
 def _validate_name(name: str, plugins_dir: Path) -> Path:
     """Resolve and validate plugin name, returning the safe destination path."""
+    if not _PLUGIN_NAME_RE.fullmatch(name):
+        raise PluginError(f"Invalid plugin name: {name}")
     dest = (plugins_dir / name).resolve()
-    if not dest.is_relative_to(plugins_dir.resolve()):
+    plugins_root = plugins_dir.resolve()
+    if dest == plugins_root or not dest.is_relative_to(plugins_root):
         raise PluginError(f"Invalid plugin name: {name}")
     return dest
+
+
+def _validate_inject_values(spec: PluginSpec, host_values: dict[str, str]) -> None:
+    for source_key in spec.inject.values():
+        if source_key not in host_values:
+            raise PluginError(f"Host does not provide required inject key '{source_key}'")
 
 
 def install_plugin(
@@ -87,8 +99,9 @@ def install_plugin(
         staging_plugin = staging / spec.name
         shutil.copytree(source, staging_plugin)
 
-        # Apply inject + runtime on the staged copy
-        inject_config(staging_plugin, spec, host_values)
+        # Validate required host values, but do not persist credentials into plugin files.
+        # Plugin tools receive fresh credentials through environment variables at runtime.
+        _validate_inject_values(spec, host_values)
         runtime = PluginRuntime(host=host_name, host_version=host_version)
         write_runtime(staging_plugin, runtime)
 
@@ -123,8 +136,8 @@ def refresh_plugin_configs(plugins_dir: Path, host_values: dict[str, str]) -> No
             continue
         try:
             spec = parse_plugin_json(plugin_json)
-            if spec.inject and spec.config_file:
-                inject_config(child, spec, host_values)
+            if spec.inject:
+                _validate_inject_values(spec, host_values)
         except Exception:
             continue
 

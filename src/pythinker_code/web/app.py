@@ -272,10 +272,8 @@ def run_web_server(
         session_token = None
     elif auth_token:
         session_token = auth_token
-    elif public_mode:
-        session_token = secrets.token_urlsafe(32)
     else:
-        session_token = None
+        session_token = secrets.token_urlsafe(32)
 
     if session_token:
         os.environ[ENV_SESSION_TOKEN] = session_token
@@ -308,7 +306,7 @@ def run_web_server(
     else:
         os.environ.pop(ENV_ALLOWED_ORIGINS, None)
 
-    os.environ[ENV_ENFORCE_ORIGIN] = "1" if (public_mode and not lan_only) else "0"
+    os.environ[ENV_ENFORCE_ORIGIN] = "1" if session_token else "0"
     os.environ[ENV_RESTRICT_SENSITIVE_APIS] = "1" if restrict_sensitive_apis else "0"
     os.environ[ENV_LAN_ONLY] = "1" if lan_only else "0"
 

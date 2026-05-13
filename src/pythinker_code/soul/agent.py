@@ -439,7 +439,7 @@ async def load_agent(
             )
         )
 
-    toolset = PythinkerToolset()
+    toolset = PythinkerToolset(runtime)
     tool_deps = {
         PythinkerToolset: toolset,
         Runtime: runtime,

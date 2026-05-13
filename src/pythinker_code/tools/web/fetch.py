@@ -1,5 +1,8 @@
+import ipaddress
+import socket
 from pathlib import Path
 from typing import override
+from urllib.parse import urlparse
 
 import aiohttp
 import trafilatura
@@ -13,6 +16,52 @@ from pythinker_code.soul.toolset import get_current_tool_call_or_none
 from pythinker_code.tools.utils import ToolResultBuilder, load_desc
 from pythinker_code.utils.aiohttp import new_client_session
 from pythinker_code.utils.logging import logger
+
+MAX_FETCH_BYTES = 5 * 1024 * 1024
+
+
+def _validate_fetch_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return "Only http and https URLs are supported."
+    if not parsed.hostname:
+        return "URL must include a host."
+
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return None
+
+    for info in infos:
+        address = info[4][0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return (
+                "Fetching private, local, link-local, multicast, or reserved addresses is blocked."
+            )
+    return None
+
+
+async def _read_limited(response: aiohttp.ClientResponse, max_bytes: int) -> bytes:
+    length = response.headers.get(aiohttp.hdrs.CONTENT_LENGTH)
+    if length is not None:
+        try:
+            if int(length) > max_bytes:
+                raise ValueError("response too large")
+        except ValueError as exc:
+            raise ValueError("response too large") from exc
+
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError("response too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 class Params(BaseModel):
@@ -42,6 +91,8 @@ class FetchURL(CallableTool2[Params]):
     @staticmethod
     async def fetch_with_http_get(params: Params) -> ToolReturnValue:
         builder = ToolResultBuilder(max_line_length=None)
+        if reason := _validate_fetch_url(params.url):
+            return builder.error(f"Failed to fetch URL: {reason}", brief="URL blocked")
         try:
             # Fetching arbitrary web pages can take a while on large/slow sites.
             fetch_timeout = aiohttp.ClientTimeout(total=180, sock_read=60, sock_connect=15)
@@ -71,7 +122,16 @@ class FetchURL(CallableTool2[Params]):
                         brief=f"HTTP {response.status} error",
                     )
 
-                resp_text = (await response.read()).decode("utf-8", errors="replace")
+                try:
+                    resp_text = (await _read_limited(response, MAX_FETCH_BYTES)).decode(
+                        "utf-8", errors="replace"
+                    )
+                except ValueError:
+                    max_mb = MAX_FETCH_BYTES // 1024 // 1024
+                    return builder.error(
+                        f"Failed to fetch URL: response exceeds {max_mb}MB.",
+                        brief="Response too large",
+                    )
 
                 content_type = response.headers.get(aiohttp.hdrs.CONTENT_TYPE, "").lower()
                 if content_type.startswith(("text/plain", "text/markdown")):
@@ -136,6 +196,9 @@ class FetchURL(CallableTool2[Params]):
                 "Fetch service is not configured. You may want to try other methods to fetch.",
                 brief="Fetch service not configured",
             )
+        if reason := _validate_fetch_url(params.url):
+            return builder.error(f"Failed to fetch URL: {reason}", brief="URL blocked")
+
         headers = {
             "User-Agent": USER_AGENT,
             "Authorization": f"Bearer {api_key}",
@@ -165,7 +228,16 @@ class FetchURL(CallableTool2[Params]):
                         brief="Failed to fetch URL via fetch service",
                     )
 
-                content = (await response.read()).decode("utf-8", errors="replace")
+                try:
+                    content = (await _read_limited(response, MAX_FETCH_BYTES)).decode(
+                        "utf-8", errors="replace"
+                    )
+                except ValueError:
+                    max_mb = MAX_FETCH_BYTES // 1024 // 1024
+                    return builder.error(
+                        f"Failed to fetch URL via service: response exceeds {max_mb}MB.",
+                        brief="Response too large",
+                    )
                 builder.write(content)
                 return builder.ok(
                     "The returned content is the main content extracted from the page."

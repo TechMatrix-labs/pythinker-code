@@ -13,7 +13,18 @@ from aiohttp import web
 from inline_snapshot import snapshot
 from pythinker_core.tooling import ToolReturnValue
 
+from pythinker_code.tools.web import fetch as fetch_module
 from pythinker_code.tools.web.fetch import FetchURL, Params
+
+
+@pytest.fixture(autouse=True)
+def _bypass_ssrf_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fetch tool blocks loopback / private IPs as SSRF mitigation, but
+    every test in this module either talks to a localhost mock server or
+    exercises malformed-URL handling that pre-dates the validator. Disable it
+    for these unit tests; production callers still get the protection.
+    """
+    monkeypatch.setattr(fetch_module, "_validate_fetch_url", lambda _url: None)
 
 
 class MockServerFactory(Protocol):

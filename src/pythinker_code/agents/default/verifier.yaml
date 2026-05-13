@@ -32,6 +32,7 @@ agent:
     - "pythinker_code.tools.file:ReadMediaFile"
     - "pythinker_code.tools.file:Glob"
     - "pythinker_code.tools.file:Grep"
+    - "pythinker_code.tools.file:SmartSearch"
   exclude_tools:
     - "pythinker_code.tools.agent:Agent"
     - "pythinker_code.tools.ask_user:AskUserQuestion"

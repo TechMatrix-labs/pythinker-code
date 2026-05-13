@@ -387,14 +387,6 @@ async def upload_session_file(
     upload_dir = session_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    # Read and validate file size
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)",
-        )
-
     # Generate safe filename
     file_name = str(uuid4())
     if file.filename:
@@ -403,12 +395,26 @@ async def upload_session_file(
         file_name = f"{name}_{file_name[:6]}{ext}"
 
     upload_path = upload_dir / file_name
-    upload_path.write_bytes(content)
+    size = 0
+    try:
+        with upload_path.open("wb") as out:
+            while chunk := await file.read(64 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_SIZE:
+                    out.close()
+                    upload_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)",
+                    )
+                out.write(chunk)
+    finally:
+        await file.close()
 
     return UploadSessionFileResponse(
         path=str(upload_path),
         filename=file_name,
-        size=len(content),
+        size=size,
     )
 
 
@@ -536,11 +542,10 @@ async def get_session_file(
         result.sort(key=lambda x: (cast(str, x["type"]), cast(str, x["name"])))
         return Response(content=json.dumps(result), media_type="application/json")
 
-    content = file_path.read_bytes()
     media_type, _ = mimetypes.guess_type(file_path.name)
     encoded_filename = quote(file_path.name, safe="")
-    return Response(
-        content=content,
+    return FileResponse(
+        file_path,
         media_type=media_type or "application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
     )

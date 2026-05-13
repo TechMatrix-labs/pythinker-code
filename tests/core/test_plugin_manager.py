@@ -60,9 +60,10 @@ def test_install_plugin(tmp_path: Path):
     assert installed.is_dir()
     assert (installed / "SKILL.md").exists()
 
-    # Check inject
+    # Host credentials are validated during install but injected as runtime env vars, not
+    # persisted into plugin files.
     config = json.loads((installed / "config" / "config.json").read_text())
-    assert config["app"]["api_key"] == "sk-real"
+    assert config["app"]["api_key"] == "PLACEHOLDER"
 
     # Check runtime in plugin.json
     pj = json.loads((installed / "plugin.json").read_text())
@@ -121,7 +122,7 @@ def test_reinstall_plugin(tmp_path: Path):
     )
 
     config = json.loads((plugins_dir / "test-plugin" / "config" / "config.json").read_text())
-    assert config["app"]["api_key"] == "sk-new"
+    assert config["app"]["api_key"] == "PLACEHOLDER"
 
     pj = json.loads((plugins_dir / "test-plugin" / "plugin.json").read_text())
     assert pj["runtime"]["host_version"] == "1.22.0"
@@ -187,6 +188,14 @@ def test_install_rejects_path_traversal_name(tmp_path: Path):
             host_name="pythinker-code",
             host_version="1.0.0",
         )
+
+
+def test_remove_rejects_plugin_root_name(tmp_path: Path):
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir()
+
+    with pytest.raises(PluginError, match="Invalid plugin name"):
+        remove_plugin(".", plugins_dir)
 
 
 @pytest.mark.asyncio

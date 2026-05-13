@@ -60,6 +60,20 @@ def _should_ignore_for_excepthook(exc_type: type[BaseException]) -> bool:
     return False
 
 
+def _should_ignore_for_asyncio(exc: BaseException) -> bool:
+    """Return True for normal async control-flow exceptions.
+
+    ``asyncio.QueueShutDown`` is raised by Python's queue API when a wire stream
+    is intentionally closed. UI consumers catch it, but vendor asyncio
+    integrations can still observe the task boundary, so treat it like
+    cancellation rather than a crash.
+    """
+    if isinstance(exc, asyncio.CancelledError):
+        return True
+    queue_shutdown = getattr(asyncio, "QueueShutDown", None)
+    return queue_shutdown is not None and isinstance(exc, queue_shutdown)
+
+
 # ---------------------------------------------------------------------------
 # sys.excepthook
 # ---------------------------------------------------------------------------
@@ -118,8 +132,7 @@ def _asyncio_handler(
     context: dict[str, Any],
 ) -> None:
     exc = context.get("exception")
-    # CancelledError during shutdown/cancellation is normal control flow.
-    if exc is not None and not isinstance(exc, asyncio.CancelledError):
+    if exc is not None and not _should_ignore_for_asyncio(exc):
         try:
             from pythinker_code.telemetry import sentry as _sentry
             from pythinker_code.telemetry import track

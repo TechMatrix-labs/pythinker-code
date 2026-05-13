@@ -192,6 +192,26 @@ class TestAsyncioHandler:
             loop.set_exception_handler(None)
 
     @pytest.mark.asyncio
+    async def test_queue_shutdown_ignored(self):
+        """asyncio.QueueShutDown during wire/UI shutdown is normal control flow."""
+        queue_shutdown = getattr(asyncio, "QueueShutDown", None)
+        if queue_shutdown is None:
+            pytest.skip("asyncio.QueueShutDown is unavailable on this Python")
+
+        loop = asyncio.get_running_loop()
+        original_default = loop.default_exception_handler
+        loop.default_exception_handler = lambda ctx: None  # type: ignore[method-assign]
+        try:
+            install_asyncio_handler(loop)
+
+            loop.call_exception_handler({"message": "queue closed", "exception": queue_shutdown()})
+
+            assert len(telemetry_mod._event_queue) == 0
+        finally:
+            loop.default_exception_handler = original_default  # type: ignore[method-assign]
+            loop.set_exception_handler(None)
+
+    @pytest.mark.asyncio
     async def test_original_handler_preserved(self):
         """An existing custom asyncio exception handler is still invoked."""
         captured: list[dict[str, Any]] = []

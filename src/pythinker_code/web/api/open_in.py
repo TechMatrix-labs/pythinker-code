@@ -76,30 +76,39 @@ def _open_app(app_name: str, path: Path, fallback: str | None = None) -> None:
 
 
 def _open_terminal(path: Path) -> None:
-    script = f'tell application "Terminal" to do script "cd " & quoted form of "{path}"'
-    _run_command(["osascript", "-e", script])
+    script = """
+on run argv
+  set targetPath to item 1 of argv
+  tell application "Terminal" to do script "cd " & quoted form of targetPath
+end run
+""".strip()
+    _run_command(["osascript", "-e", script, str(path)])
 
 
 def _open_iterm(path: Path) -> None:
-    script = "\n".join(
-        [
-            'tell application "iTerm"',
-            "  create window with default profile",
-            "  tell current session of current window",
-            f'    write text "cd " & quoted form of "{path}"',
-            "  end tell",
-            "end tell",
-        ]
-    )
+    def _script(app_name: str) -> str:
+        return "\n".join(
+            [
+                "on run argv",
+                "  set targetPath to item 1 of argv",
+                f'  tell application "{app_name}"',
+                "    create window with default profile",
+                "    tell current session of current window",
+                '      write text "cd " & quoted form of targetPath',
+                "    end tell",
+                "  end tell",
+                "end run",
+            ]
+        )
+
     try:
-        _run_command(["osascript", "-e", script])
+        _run_command(["osascript", "-e", _script("iTerm"), str(path)])
     except subprocess.CalledProcessError:
-        script = script.replace('"iTerm"', '"iTerm2"')
-        _run_command(["osascript", "-e", script])
+        _run_command(["osascript", "-e", _script("iTerm2"), str(path)])
 
 
 def _open_windows_app(command: str, path: Path) -> None:
-    _run_command(["cmd", "/c", "start", "", command, str(path)])
+    _spawn_process([command, str(path)])
 
 
 def _open_windows_explorer(path: Path, *, is_file: bool) -> None:
@@ -111,10 +120,10 @@ def _open_windows_explorer(path: Path, *, is_file: bool) -> None:
 
 def _open_windows_terminal(path: Path) -> None:
     try:
-        _run_command(["cmd", "/c", "start", "", "wt.exe", "-d", str(path)])
-    except subprocess.CalledProcessError as exc:
+        _spawn_process(["wt.exe", "-d", str(path)])
+    except OSError as exc:
         logger.warning("Open with Windows Terminal failed: {}", exc)
-        _run_command(["cmd", "/c", "start", "", "cmd.exe", "/K", f'cd /d "{path}"'])
+        subprocess.Popen(["cmd.exe"], cwd=str(path), close_fds=True)
 
 
 def _open_in_macos(app: OpenInRequest, path: Path, *, is_file: bool) -> None:
@@ -194,6 +203,12 @@ async def open_in(request: OpenInRequest) -> OpenInResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=detail,
+        ) from exc
+    except OSError as exc:
+        logger.warning("Open-in failed ({}): {}", request.app, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc) or "Failed to open application.",
         ) from exc
 
     return OpenInResponse(ok=True)

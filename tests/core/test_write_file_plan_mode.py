@@ -1,9 +1,8 @@
 """Tests for WriteFile plan mode integration.
 
 Verifies that plan mode allows writing to the plan file (auto-approved)
-while other write operations still go through normal approval.
-Plan mode constraints on Shell are enforced by the dynamic injection prompt,
-not by hard-blocking the tool — Shell remains usable through user approval.
+while other write operations are hard-blocked. Plan mode allows read-only shell
+commands but denies commands that look like workspace/environment mutations.
 """
 
 from __future__ import annotations
@@ -161,22 +160,18 @@ class TestWriteFilePlanMode:
 class TestPlanModeToolContract:
     """Verify the plan mode tool contract:
 
-    - Shell is NOT hard-blocked; plan mode constraints are enforced via dynamic
-      injection prompts and user approval, not at the tool layer.
+    - Shell read-only commands remain available through normal approval.
+    - Shell commands that look mutating are hard-blocked before approval.
     - WriteFile auto-approves plan file writes, bypassing user approval.
-    - Both Shell and WriteFile (plan file) work in the same plan mode session.
+    - Both read-only Shell and WriteFile (plan file) work in the same plan mode session.
     """
 
-    async def test_shell_still_works_in_plan_mode(
+    async def test_read_only_shell_still_works_in_plan_mode(
         self,
         runtime: Runtime,
         environment: Environment,
     ) -> None:
-        """Shell must not be hard-blocked in plan mode.
-
-        Plan mode read-only guidance is delivered via PlanModeInjectionProvider.
-        The tool itself remains usable through normal approval flow.
-        """
+        """Read-only Shell commands remain usable through normal approval flow."""
         runtime.session.state.plan_mode = True
         approval = Approval(yolo=True)
 
@@ -186,6 +181,25 @@ class TestPlanModeToolContract:
 
         assert not result.is_error
         assert "plan_shell_ok" in result.output
+
+    async def test_mutating_shell_is_denied_in_plan_mode(
+        self,
+        runtime: Runtime,
+        environment: Environment,
+        temp_work_dir: HostPath,
+    ) -> None:
+        """Plan mode must hard-block dangerous shell mutations before approval."""
+        runtime.session.state.plan_mode = True
+        target = temp_work_dir / "should-not-exist.txt"
+        approval = Approval(yolo=True)
+
+        with tool_call_context("Shell"):
+            shell = Shell(approval, environment, runtime)
+            result = await shell(ShellParams(command=f"touch {target}"))
+
+        assert result.is_error
+        assert "permission profile blocks" in result.message
+        assert not await target.exists()
 
     async def test_shell_and_plan_file_write_both_work_in_plan_mode(
         self,

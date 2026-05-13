@@ -222,6 +222,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                     "pythinker_code.tools.file:WriteFile",
                     "pythinker_code.tools.file:StrReplaceFile",
                     "pythinker_code.tools.web:SearchWeb",
@@ -240,6 +241,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                     "pythinker_code.tools.web:SearchWeb",
                     "pythinker_code.tools.web:FetchURL",
                 ),
@@ -255,6 +257,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                     "pythinker_code.tools.web:SearchWeb",
                     "pythinker_code.tools.web:FetchURL",
                 ),
@@ -271,6 +274,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                     "pythinker_code.tools.web:SearchWeb",
                     "pythinker_code.tools.web:FetchURL",
                 ),
@@ -287,6 +291,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                     "pythinker_code.tools.file:WriteFile",
                     "pythinker_code.tools.file:StrReplaceFile",
                     "pythinker_code.tools.web:SearchWeb",
@@ -305,6 +310,7 @@ At any time, you should be HELPFUL, CONCISE, and ACCURATE. Be thorough in your a
                     "pythinker_code.tools.file:ReadMediaFile",
                     "pythinker_code.tools.file:Glob",
                     "pythinker_code.tools.file:Grep",
+                    "pythinker_code.tools.file:SmartSearch",
                 ),
             ),
         ]
@@ -334,6 +340,7 @@ async def test_default_agent_background_bash_guardrails(runtime: Runtime):
             "ReadMediaFile",
             "Glob",
             "Grep",
+            "SmartSearch",
             "WriteFile",
             "StrReplaceFile",
             "SearchWeb",
@@ -353,12 +360,12 @@ instance can preserve previous findings and work.
 **Available Built-in Agent Types**
 
 - `mocker`: The mock agent for testing purposes. (Tools: *, Model: inherit, Background: yes).
-- `coder`: Good at general software engineering tasks. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, WriteFile, StrReplaceFile, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent for non-trivial software engineering work that may require reading files, editing code, running commands, and returning a compact but technically complete summary to the parent agent.
-- `explore`: Fast codebase exploration with prompt-enforced read-only behavior. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (e.g. "src/**/*.yaml"), search code for keywords (e.g. "database connection"), or answer questions about the codebase (e.g. "how does the auth module work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "thorough" for comprehensive analysis across multiple locations and naming conventions. Use this agent for any read-only exploration that will clearly require more than 3 tool calls. Prefer launching multiple explore agents concurrently when investigating independent questions.
-- `plan`: Read-only implementation planning and architecture design. (Tools: ReadFile, ReadMediaFile, Glob, Grep, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent when the parent agent needs a step-by-step implementation plan, key file identification, and architectural trade-off analysis before code changes are made.
-- `review`: Read-only code review with severity-scored findings. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent for read-only code review after changes are made or when the parent needs severity-scored findings before deciding what to fix.
-- `implementer`: Scoped implementation with minimal edits and verification. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, WriteFile, StrReplaceFile, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent when the required code change is already specified and should be implemented with minimal edits and a quick verification pass.
-- `verifier`: Read-only validation runner for tests, lint, and builds. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, Model: inherit, Background: yes). When to use: Use this agent when the parent needs tests, lint, type checks, builds, or other validation gates run and reported without applying fixes.
+- `coder`: Good at general software engineering tasks. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, WriteFile, StrReplaceFile, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent for non-trivial software engineering work that may require reading files, editing code, running commands, and returning a compact but technically complete summary to the parent agent.
+- `explore`: Fast codebase exploration with prompt-enforced read-only behavior. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (e.g. "src/**/*.yaml"), search code for keywords (e.g. "database connection"), or answer questions about the codebase (e.g. "how does the auth module work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "thorough" for comprehensive analysis across multiple locations and naming conventions. Use this agent for any read-only exploration that will clearly require more than 3 tool calls. Prefer launching multiple explore agents concurrently when investigating independent questions.
+- `plan`: Read-only implementation planning and architecture design. (Tools: ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent when the parent agent needs a step-by-step implementation plan, key file identification, and architectural trade-off analysis before code changes are made.
+- `review`: Read-only code review with severity-scored findings. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent for read-only code review after changes are made or when the parent needs severity-scored findings before deciding what to fix.
+- `implementer`: Scoped implementation with minimal edits and verification. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, WriteFile, StrReplaceFile, SearchWeb, FetchURL, Model: inherit, Background: yes). When to use: Use this agent when the required code change is already specified and should be implemented with minimal edits and a quick verification pass.
+- `verifier`: Read-only validation runner for tests, lint, and builds. (Tools: Shell, ReadFile, ReadMediaFile, Glob, Grep, SmartSearch, Model: inherit, Background: yes). When to use: Use this agent when the parent needs tests, lint, type checks, builds, or other validation gates run and reported without applying fixes.
 
 **Usage**
 
@@ -455,6 +462,25 @@ When calling explore, specify the desired thoroughness in the prompt:
                     ],
                     "default": None,
                     "description": "Timeout in seconds for the agent task. Foreground: no default timeout (runs until completion), max 3600s (1hr). Background: default from config (15min), max 3600s (1hr). The agent is stopped if it exceeds this limit.",
+                },
+                "dependencies": {
+                    "description": "Optional background task IDs this task depends on. Metadata only; the parent agent should launch dependent tasks after prerequisites are ready.",
+                    "items": {"type": "string"},
+                    "type": "array",
+                },
+                "budget_seconds": {
+                    "anyOf": [
+                        {"maximum": 3600, "minimum": 1, "type": "integer"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                    "description": "Optional budget in seconds for planning/synthesis metadata.",
+                },
+                "isolation": {
+                    "default": "none",
+                    "description": "Optional isolation request for background agents. `worktree` records a git-worktree isolation intent for orchestration/recovery; unsupported callers should leave `none`.",
+                    "enum": ["none", "worktree"],
+                    "type": "string",
                 },
             },
             "required": ["description", "prompt"],

@@ -14,6 +14,7 @@ from pythinker_code.soul.context import Context
 from pythinker_code.soul.pythinkersoul import PythinkerSoul
 from pythinker_code.telemetry import set_context
 from pythinker_code.utils.aioqueue import QueueShutDown
+from pythinker_code.wire import Wire
 from pythinker_code.wire.jsonrpc import (
     ClientInfo,
     ErrorCodes,
@@ -71,6 +72,34 @@ def test_wire_client_info_emits_session_started(
         assert event["properties"]["resumed"] is True
     finally:
         _reset_telemetry()
+
+
+@pytest.mark.asyncio
+async def test_stream_wire_messages_exits_cleanly_on_queue_shutdown(
+    runtime: Runtime,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    soul = _make_soul(runtime, tmp_path)
+    server = WireServer(soul)
+    sent: list[JSONRPCEventMessage] = []
+
+    async def fake_send_msg(msg: JSONRPCEventMessage) -> None:
+        sent.append(msg)
+
+    monkeypatch.setattr(server, "_send_msg", fake_send_msg)
+    wire = Wire()
+    task = asyncio.create_task(server._stream_wire_messages(wire))
+    await asyncio.sleep(0)
+
+    wire.soul_side.send(TextPart(text="hello"))
+    await asyncio.sleep(0)
+    wire.shutdown()
+    await task
+
+    assert len(sent) == 1
+    assert sent[0].method == "event"
+    assert sent[0].params == TextPart(text="hello")
 
 
 @pytest.mark.asyncio

@@ -61,6 +61,25 @@ def test_agent_params_schema(agent_tool: AgentTool):
                     "default": None,
                     "description": "Timeout in seconds for the agent task. Foreground: no default timeout (runs until completion), max 3600s (1hr). Background: default from config (15min), max 3600s (1hr). The agent is stopped if it exceeds this limit.",
                 },
+                "dependencies": {
+                    "description": "Optional background task IDs this task depends on. Metadata only; the parent agent should launch dependent tasks after prerequisites are ready.",
+                    "items": {"type": "string"},
+                    "type": "array",
+                },
+                "budget_seconds": {
+                    "anyOf": [
+                        {"maximum": 3600, "minimum": 1, "type": "integer"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                    "description": "Optional budget in seconds for planning/synthesis metadata.",
+                },
+                "isolation": {
+                    "default": "none",
+                    "description": "Optional isolation request for background agents. `worktree` records a git-worktree isolation intent for orchestration/recovery; unsupported callers should leave `none`.",
+                    "enum": ["none", "worktree"],
+                    "type": "string",
+                },
             },
             "required": ["description", "prompt"],
             "type": "object",

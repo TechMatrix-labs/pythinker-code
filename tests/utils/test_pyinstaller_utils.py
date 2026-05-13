@@ -177,6 +177,7 @@ def test_pyinstaller_hiddenimports():
             "pythinker_code.tools.file.write",
             "pythinker_code.tools.plan",
             "pythinker_code.tools.plan.enter",
+            "pythinker_code.tools.plan.handoff",
             "pythinker_code.tools.plan.heroes",
             "pythinker_code.tools.shell",
             "pythinker_code.tools.test",

@@ -678,10 +678,17 @@ def test_recover_marks_stale_agent_task_lost_and_clears_instance_running_state(r
     manager.recover()
 
     recovered = store.merged_view(spec.id)
-    assert recovered.runtime.status == "lost"
-    assert recovered.runtime.failure_reason == "In-process background agent is no longer running"
+    # When the stored kind_payload carries an agent_id, recovery marks the task
+    # as `recoverable` (resumable) rather than `lost`, leaves a resume hint in
+    # failure_reason, and parks the agent instance as `idle` so the user can
+    # resume it explicitly.
+    assert recovered.runtime.status == "recoverable"
+    assert recovered.runtime.failure_reason == (
+        "In-process background agent is no longer running; resume the stored agent "
+        "instance alostagent to continue."
+    )
     instance = runtime.subagent_store.require_instance("alostagent")
-    assert instance.status == "failed"
+    assert instance.status == "idle"
 
 
 def test_mark_task_running_does_not_overwrite_terminal_state(runtime):

@@ -1027,19 +1027,22 @@ class WireServer:
 
     async def _stream_wire_messages(self, wire: Wire) -> None:
         wire_ui = wire.ui_side(merge=False)
-        while True:
-            msg = await wire_ui.receive()
-            match msg:
-                case ApprovalRequest():
-                    await self._request_approval(msg)
-                case ToolCallRequest():
-                    await self._request_external_tool(msg)
-                case QuestionRequest():
-                    await self._request_question(msg)
-                case HookRequest():
-                    pass  # handled via hook engine callbacks
-                case _:
-                    await self._send_msg(JSONRPCEventMessage(method="event", params=msg))
+        try:
+            while True:
+                msg = await wire_ui.receive()
+                match msg:
+                    case ApprovalRequest():
+                        await self._request_approval(msg)
+                    case ToolCallRequest():
+                        await self._request_external_tool(msg)
+                    case QuestionRequest():
+                        await self._request_question(msg)
+                    case HookRequest():
+                        pass  # handled via hook engine callbacks
+                    case _:
+                        await self._send_msg(JSONRPCEventMessage(method="event", params=msg))
+        except QueueShutDown:
+            return
 
     async def _request_approval(self, request: ApprovalRequest) -> None:
         msg_id = request.id  # just use the approval request id as message id

@@ -371,6 +371,7 @@ def clone_llm_with_model_alias(
     *,
     session_id: str,
     oauth: OAuthManager | None,
+    thinking: bool | None = None,
 ) -> LLM | None:
     if model_alias is None:
         return llm
@@ -378,7 +379,8 @@ def clone_llm_with_model_alias(
         raise KeyError(f"Unknown model alias: {model_alias}")
     model = config.models[model_alias]
     provider = config.providers[model.provider]
-    thinking: bool | None = llm.thinking if llm is not None else None
+    if thinking is None and llm is not None:
+        thinking = llm.thinking
     if thinking is None and llm is not None:
         effort = getattr(llm.chat_provider, "thinking_effort", None)
         if effort is not None:

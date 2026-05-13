@@ -182,9 +182,41 @@ async def test_exit_plan_auto_auto_approves(exit_tool: ExitPlanMode, tmp_path: P
         assert not result.is_error
         assert tracker.get("called")
         assert "Test Plan" in result.output
+        assert "Implementation handoff saved to:" in result.output
+        assert (tmp_path / "plan.handoff.md").exists()
         assert "auto" in result.message.lower()
     finally:
         _current_wire.reset(wire_token)
+
+
+async def test_exit_plan_handoff_generation_fallback(
+    exit_tool: ExitPlanMode,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Handoff persistence failure must not block plan approval."""
+    tracker: dict = {}
+    plan_file = tmp_path / "plan.md"
+    plan_file.write_text("# Test Plan\n- Step 1")
+
+    def _boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("pythinker_code.tools.plan.handoff.persist_implementation_handoff", _boom)
+
+    exit_tool.bind(
+        toggle_callback=_make_toggle(tracker),
+        plan_file_path_getter=lambda: plan_file,
+        plan_mode_checker=lambda: True,
+        should_auto_approve_exit=lambda: True,
+    )
+
+    result = await exit_tool(ExitParams())
+
+    assert not result.is_error
+    assert tracker.get("called")
+    assert "Implementation handoff persistence failed" in result.output
+    assert "# Implementation Handoff" in result.output
 
 
 async def test_exit_plan_auto_auto_approve_with_options(exit_tool: ExitPlanMode, tmp_path: Path):

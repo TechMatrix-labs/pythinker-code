@@ -11,6 +11,7 @@ from pythinker_host import AsyncReadable
 from pythinker_code.background import TaskView, format_task
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.approval import Approval
+from pythinker_code.soul.permission import check_shell_command_allowed
 from pythinker_code.soul.toolset import get_current_tool_call_or_none
 from pythinker_code.tools.display import BackgroundTaskDisplayBlock, ShellDisplayBlock
 from pythinker_code.tools.utils import ToolResultBuilder, load_desc
@@ -79,6 +80,9 @@ class Shell(CallableTool2[Params]):
 
         if not params.command:
             return builder.error("Command cannot be empty.", brief="Empty command")
+
+        if err := check_shell_command_allowed(self._runtime, params.command):
+            return err
 
         if params.run_in_background:
             return await self._run_in_background(params)

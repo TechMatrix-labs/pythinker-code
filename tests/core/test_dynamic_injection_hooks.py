@@ -95,7 +95,9 @@ def _make_compactable_soul() -> Any:
     soul._checkpoint = AsyncMock()
 
     fake_result = MagicMock()
-    fake_result.messages = []
+    # Non-empty to satisfy the post-compaction guard against producing no
+    # messages; the exact contents do not matter for the injection-hook test.
+    fake_result.messages = [MagicMock()]
     fake_result.estimated_token_count = 2_000
     soul._run_with_connection_recovery = AsyncMock(return_value=fake_result)
 

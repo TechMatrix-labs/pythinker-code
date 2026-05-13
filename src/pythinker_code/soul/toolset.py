@@ -91,7 +91,8 @@ if TYPE_CHECKING:
 
 
 class PythinkerToolset:
-    def __init__(self) -> None:
+    def __init__(self, runtime: Runtime | None = None) -> None:
+        self._runtime = runtime
         self._tool_dict: dict[str, ToolType] = {}
         self._hidden_tools: set[str] = set()
         self._mcp_servers: dict[str, MCPServerInfo] = {}
@@ -160,6 +161,17 @@ class PythinkerToolset:
             async def _call():
                 tool_input_dict = arguments if isinstance(arguments, dict) else {}
 
+                if self._runtime is not None:
+                    from pythinker_code.soul.permission import check_tool_call_allowed
+
+                    if err := check_tool_call_allowed(
+                        self._runtime,
+                        tool_call.function.name,
+                        tool_input_dict,
+                        tool=tool,
+                    ):
+                        return ToolResult(tool_call_id=tool_call.id, return_value=err)
+
                 # --- PreToolUse ---
                 from pythinker_code.hooks import events
 
@@ -215,22 +227,17 @@ class PythinkerToolset:
                         call_id=tool_call.id,
                     )
                     # --- PostToolUseFailure (fire-and-forget) ---
-                    _hook_task = asyncio.create_task(
-                        self._hook_engine.trigger(
-                            "PostToolUseFailure",
-                            matcher_value=tool_call.function.name,
-                            input_data=events.post_tool_use_failure(
-                                session_id=_get_session_id(),
-                                cwd=str(Path.cwd()),
-                                tool_name=tool_call.function.name,
-                                tool_input=tool_input_dict,
-                                error=str(e),
-                                tool_call_id=tool_call.id,
-                            ),
-                        )
-                    )
-                    _hook_task.add_done_callback(
-                        lambda t: t.exception() if not t.cancelled() else None
+                    self._hook_engine.fire_and_forget_trigger(
+                        "PostToolUseFailure",
+                        matcher_value=tool_call.function.name,
+                        input_data=events.post_tool_use_failure(
+                            session_id=_get_session_id(),
+                            cwd=str(Path.cwd()),
+                            tool_name=tool_call.function.name,
+                            tool_input=tool_input_dict,
+                            error=str(e),
+                            tool_call_id=tool_call.id,
+                        ),
                     )
                     from pythinker_code.telemetry import track
 
@@ -280,21 +287,18 @@ class PythinkerToolset:
                 )
 
                 # --- PostToolUse (fire-and-forget) ---
-                _hook_task = asyncio.create_task(
-                    self._hook_engine.trigger(
-                        "PostToolUse",
-                        matcher_value=tool_call.function.name,
-                        input_data=events.post_tool_use(
-                            session_id=_get_session_id(),
-                            cwd=str(Path.cwd()),
-                            tool_name=tool_call.function.name,
-                            tool_input=tool_input_dict,
-                            tool_output=str(ret)[:2000],
-                            tool_call_id=tool_call.id,
-                        ),
-                    )
+                self._hook_engine.fire_and_forget_trigger(
+                    "PostToolUse",
+                    matcher_value=tool_call.function.name,
+                    input_data=events.post_tool_use(
+                        session_id=_get_session_id(),
+                        cwd=str(Path.cwd()),
+                        tool_name=tool_call.function.name,
+                        tool_input=tool_input_dict,
+                        tool_output=str(ret)[:2000],
+                        tool_call_id=tool_call.id,
+                    ),
                 )
-                _hook_task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
                 return ToolResult(tool_call_id=tool_call.id, return_value=ret)
 

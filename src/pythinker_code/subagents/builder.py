@@ -23,6 +23,7 @@ class SubagentBuilder:
             effective_model,
             session_id=self._root_runtime.session.id,
             oauth=self._root_runtime.oauth,
+            thinking=launch_spec.thinking,
         )
         runtime = self._root_runtime.copy_for_subagent(
             agent_id=agent_id,

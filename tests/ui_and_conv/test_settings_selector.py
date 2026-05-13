@@ -113,10 +113,11 @@ def test_apply_settings_changes_mutates_config():
         },
     )
 
+    # telemetry default is True, so passing "true" is a no-op and is correctly
+    # omitted from the changed list.
     assert changed == [
         "theme",
         "default_thinking",
-        "telemetry",
         "loop_control.max_retries_per_step",
     ]
     assert config.theme == "light"

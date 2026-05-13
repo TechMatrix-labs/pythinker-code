@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pythinker-feedback-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-12",
+  "routes": [
+    {
+      "pattern": "api.pythinker.com/coding/v1/feedback",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "GITHUB_REPO": "mohamed-elkholy95/Pythinker-Code",
+    "GITHUB_LABELS": "feedback,pythinker-cli",
+    "SUPPORT_EMAIL": "support@pythinker.com",
+    "FROM_EMAIL": "Pythinker Feedback <feedback@pythinker.com>"
+  }
+}

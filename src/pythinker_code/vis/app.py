@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,12 +21,15 @@ from pythinker_code.utils.server import (
 )
 from pythinker_code.vis.api import sessions_router, statistics_router, system_router
 from pythinker_code.web.api.open_in import router as open_in_router
+from pythinker_code.web.auth import AuthMiddleware, normalize_allowed_origins
 
 STATIC_DIR = Path(__file__).parent / "static"
 GZIP_MINIMUM_SIZE = 1024
 GZIP_COMPRESSION_LEVEL = 6
 DEFAULT_PORT = 5495
 _ENV_RESTRICT_OPEN_IN = "PYTHINKER_VIS_RESTRICT_OPEN_IN"
+_ENV_SESSION_TOKEN = "PYTHINKER_VIS_SESSION_TOKEN"
+_ENV_ALLOWED_ORIGINS = "PYTHINKER_VIS_ALLOWED_ORIGINS"
 
 
 def create_app() -> FastAPI:
@@ -35,6 +40,8 @@ def create_app() -> FastAPI:
         "1",
         "true",
     }
+    session_token = os.environ.get(_ENV_SESSION_TOKEN) or None
+    allowed_origins = normalize_allowed_origins(os.environ.get(_ENV_ALLOWED_ORIGINS))
 
     application = FastAPI(
         title="Pythinker Agent Tracing Visualizer",
@@ -50,10 +57,16 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         cast(Any, CORSMiddleware),
-        allow_origins=["*"],  # Local-only tool; port is dynamic so wildcard is acceptable
+        allow_origins=allowed_origins or ["http://localhost", "http://127.0.0.1"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    application.add_middleware(
+        AuthMiddleware,
+        session_token=session_token,
+        allowed_origins=allowed_origins or None,
+        enforce_origin=True,
     )
 
     application.state.restrict_open_in = restrict_open_in
@@ -106,9 +119,20 @@ def run_vis_server(
         label = "Local" if is_local_host(host) else "Network"
         display_hosts.append((label, host))
 
+    session_token = secrets.token_urlsafe(32)
+    os.environ[_ENV_SESSION_TOKEN] = session_token
+
+    origin_hosts = ["localhost", "127.0.0.1"]
+    if host not in {"0.0.0.0", "::"}:
+        origin_hosts.append(host)
+    elif host == "0.0.0.0":
+        origin_hosts.extend(get_network_addresses())
+    allowed_origins = [format_url(addr, actual_port) for addr in dict.fromkeys(origin_hosts)]
+    os.environ[_ENV_ALLOWED_ORIGINS] = ",".join(allowed_origins)
+
     # Browser should open localhost
     browser_host = "localhost" if host == "0.0.0.0" else host
-    browser_url = format_url(browser_host, actual_port)
+    browser_url = f"{format_url(browser_host, actual_port)}/?token={quote(session_token)}"
 
     banner_lines = [
         "<center>██╗  ██╗██╗███╗   ███╗██╗    ██╗   ██╗██╗███████╗",

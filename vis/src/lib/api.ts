@@ -1,6 +1,7 @@
 import { apiCache } from "./cache.ts";
 
 const BASE = "/api/vis";
+const TOKEN = new URLSearchParams(window.location.search).get("token");
 
 /** Simple concurrency limiter for batching API requests. */
 class ConcurrencyLimiter {
@@ -30,7 +31,8 @@ async function fetchJSON<T>(path: string, timeoutMs = 30_000): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${BASE}${path}`, { signal: controller.signal });
+    const headers = TOKEN ? { Authorization: `Bearer ${TOKEN}` } : undefined;
+    const res = await fetch(`${BASE}${path}`, { headers, signal: controller.signal });
     if (!res.ok) {
       throw new Error(`API error: ${res.status} ${res.statusText}`);
     }
@@ -251,7 +253,8 @@ export function getVisCapabilities(forceRefresh = false): Promise<VisCapabilitie
 }
 
 export function getSessionDownloadUrl(sessionId: string): string {
-  return `${BASE}/sessions/${sessionId}/download`;
+  const suffix = TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : "";
+  return `${BASE}/sessions/${sessionId}/download${suffix}`;
 }
 
 type OpenInApp = "finder";
@@ -260,9 +263,11 @@ export async function openInPath(app: OpenInApp, path: string): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
     const res = await fetch("/api/open-in", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ app, path }),
       signal: controller.signal,
     });

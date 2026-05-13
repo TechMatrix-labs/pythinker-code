@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import override
 
 import aiohttp
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pythinker_core.tooling import CallableTool2, ToolError, ToolReturnValue
 
 import pythinker_code
@@ -585,6 +585,108 @@ def _python_grep(params: Params, unavailable_reason: str) -> ToolReturnValue:
         return builder.ok(message="No matches found. " + " ".join(messages))
     builder.write("\n".join(matched_lines))
     return builder.ok(message=" ".join(messages))
+
+
+class SmartSearchParams(BaseModel):
+    query: str = Field(description="Natural-language or symbol query to search for")
+    path: str = Field(
+        default=".",
+        description="File or directory to search in. If specified, prefer an absolute path.",
+    )
+    type: str | None = Field(default=None, description="Optional ripgrep file type filter")
+    glob: str | None = Field(default=None, description="Optional glob filter")
+    max_results: int = Field(
+        default=60,
+        ge=1,
+        le=200,
+        description="Maximum combined result lines across planned search passes.",
+    )
+
+    @field_validator("query")
+    @classmethod
+    def query_non_empty(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("query must not be empty")
+        return value
+
+
+def _smart_search_patterns(query: str) -> list[tuple[str, str]]:
+    tokens = [token for token in re.split(r"\W+", query) if len(token) >= 3]
+    patterns: list[tuple[str, str]] = [("exact", re.escape(query))]
+    if tokens:
+        patterns.append(("all terms nearby", ".*".join(re.escape(token) for token in tokens[:5])))
+        patterns.append(("any term", "|".join(re.escape(token) for token in tokens[:8])))
+    seen: set[str] = set()
+    unique: list[tuple[str, str]] = []
+    for label, pattern in patterns:
+        if pattern in seen:
+            continue
+        seen.add(pattern)
+        unique.append((label, pattern))
+    return unique
+
+
+class SmartSearch(CallableTool2[SmartSearchParams]):
+    name: str = "SmartSearch"
+    description: str = (
+        "Plan and run a small set of bounded local grep passes for a symbol or concept. "
+        "Returns cited file/line spans and truncation guidance; use for exploration before "
+        "falling back to broad shell searches."
+    )
+    params: type[SmartSearchParams] = SmartSearchParams
+
+    @override
+    async def __call__(self, params: SmartSearchParams) -> ToolReturnValue:
+        seen_lines: set[str] = set()
+        sections: list[str] = []
+        per_pass_limit = max(10, min(params.max_results, 80))
+        grep = Grep()
+        for label, pattern in _smart_search_patterns(params.query):
+            grep_params = Params.model_validate(
+                {
+                    "pattern": pattern,
+                    "path": params.path,
+                    "glob": params.glob,
+                    "type": params.type,
+                    "output_mode": "content",
+                    "-C": 2,
+                    "-n": True,
+                    "-i": True,
+                    "head_limit": per_pass_limit,
+                }
+            )
+            result = await grep(grep_params)
+            if result.is_error:
+                sections.append(f"## {label}\nERROR: {result.message}")
+                continue
+            text = str(result.output or "").strip()
+            if not text:
+                continue
+            kept: list[str] = []
+            for line in text.splitlines():
+                if line in seen_lines:
+                    continue
+                seen_lines.add(line)
+                kept.append(line)
+                if len(seen_lines) >= params.max_results:
+                    break
+            if kept:
+                sections.append(f"## {label}\n" + "\n".join(kept))
+            if len(seen_lines) >= params.max_results:
+                break
+
+        builder = ToolResultBuilder()
+        if not sections:
+            return builder.ok(message="No matches found across smart search passes.")
+        builder.write("\n\n".join(sections))
+        message = (
+            f"SmartSearch ran {len(_smart_search_patterns(params.query))} planned grep passes; "
+            f"returned {len(seen_lines)} unique result lines."
+        )
+        if len(seen_lines) >= params.max_results:
+            message += " Results truncated; narrow query/path or increase max_results."
+        return builder.ok(message=message)
 
 
 class Grep(CallableTool2[Params]):

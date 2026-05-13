@@ -13,6 +13,7 @@ telemetry entirely with ``PYTHINKER_DISABLE_TELEMETRY=1``.
 from __future__ import annotations
 
 import os
+import sys
 
 # ---------------------------------------------------------------------------
 # Bugsink (Sentry-protocol error tracking)
@@ -47,11 +48,33 @@ def otel_ingest_token() -> str:
     return os.environ.get("PYTHINKER_OTEL_TOKEN", DEFAULT_OTEL_INGEST_TOKEN)
 
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in _TRUTHY
+
+
+def is_test_environment() -> bool:
+    """Return True when running under pytest unless explicitly overridden.
+
+    Unit tests deliberately raise synthetic exceptions (``boom``, ``disk full``,
+    cancelled subagents, and so on). Those are useful for local assertions but
+    must never be exported to the production Bugsink/SigNoz projects.
+    """
+    if _env_truthy("PYTHINKER_FORCE_TELEMETRY_IN_TESTS"):
+        return False
+    return "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+
+
 def is_disabled() -> bool:
-    """Master kill switch. ``PYTHINKER_DISABLE_TELEMETRY=1`` (or ``true``) disables both
-    Sentry and OTel emission for the process."""
-    raw = os.environ.get("PYTHINKER_DISABLE_TELEMETRY", "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    """Master kill switch for external Sentry/OTel emission.
+
+    ``PYTHINKER_DISABLE_TELEMETRY=1`` disables telemetry explicitly. Pytest is
+    treated as disabled by default so test suites cannot leak deliberate test
+    failures to production telemetry backends.
+    """
+    return _env_truthy("PYTHINKER_DISABLE_TELEMETRY") or is_test_environment()
 
 
 # ---------------------------------------------------------------------------

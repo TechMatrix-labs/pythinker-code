@@ -52,6 +52,7 @@ from pythinker_code.telemetry.config import (
     otel_trace_sample_rate,
 )
 
+_SERVICE_NAME = "pythinker-cli"
 _TRACER_NAME = "pythinker-code"
 _initialized: bool = False
 _tracer: Tracer | None = None
@@ -68,7 +69,7 @@ def _bearer_headers() -> dict[str, str]:
 def _resource(*, version: str, ui_mode: str, device_id: str | None) -> Resource:
     """Build the static resource attributes for every emitted span/log."""
     attrs: dict[str, Any] = {
-        "service.name": "pythinker-code",
+        "service.name": _SERVICE_NAME,
         "service.version": version or "unknown",
         "deployment.environment": "production",
         "ui.mode": ui_mode or "shell",

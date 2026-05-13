@@ -871,7 +871,9 @@ class TestCompactionTracking:
         # .estimated_token_count — shape it with MagicMock to avoid depending
         # on the internal NamedTuple layout.
         fake_result = MagicMock()
-        fake_result.messages = []
+        # Non-empty so the post-compaction guard does not raise; the exact
+        # contents do not affect telemetry assertions below.
+        fake_result.messages = [MagicMock()]
         fake_result.estimated_token_count = estimated_after
         soul._run_with_connection_recovery = AsyncMock(return_value=fake_result)
 

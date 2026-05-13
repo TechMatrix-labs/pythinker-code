@@ -215,6 +215,9 @@ class BackgroundTaskManager:
         model_override: str | None,
         timeout_s: int | None = None,
         resumed: bool = False,
+        dependencies: list[str] | None = None,
+        budget_seconds: int | None = None,
+        isolation: str | None = None,
     ) -> TaskView:
         from .agent_runner import BackgroundAgentRunner
 
@@ -244,12 +247,19 @@ class BackgroundTaskManager:
             # an explicit per-agent timeout instead of always falling back to
             # ``config.background.agent_task_timeout_s``.
             timeout_s=effective_timeout,
+            dependencies=list(dependencies or ()),
+            budget_seconds=budget_seconds,
+            synthesis_state="pending",
+            isolation=isolation,
             kind_payload={
                 "agent_id": agent_id,
                 "subagent_type": subagent_type,
                 "prompt": prompt,
                 "model_override": model_override,
                 "launch_mode": "background",
+                "dependencies": list(dependencies or ()),
+                "budget_seconds": budget_seconds,
+                "isolation": isolation,
             },
         )
         self._store.create_task(spec)
@@ -427,10 +437,15 @@ class BackgroundTaskManager:
                 runtime = view.runtime.model_copy()
                 runtime.finished_at = now
                 runtime.updated_at = now
-                runtime.status = "lost"
-                runtime.failure_reason = "In-process background agent is no longer running"
-                self._store.write_runtime(view.spec.id, runtime)
                 agent_id = (view.spec.kind_payload or {}).get("agent_id")
+                runtime.status = "recoverable" if isinstance(agent_id, str) else "lost"
+                runtime.failure_reason = (
+                    "In-process background agent is no longer running; resume the stored agent "
+                    f"instance {agent_id} to continue."
+                    if isinstance(agent_id, str)
+                    else "In-process background agent is no longer running"
+                )
+                self._store.write_runtime(view.spec.id, runtime)
                 if (
                     isinstance(agent_id, str)
                     and self._runtime is not None
@@ -438,7 +453,7 @@ class BackgroundTaskManager:
                 ):
                     record = self._runtime.subagent_store.get_instance(agent_id)
                     if record is not None and record.status == "running_background":
-                        self._runtime.subagent_store.update_instance(agent_id, status="failed")
+                        self._runtime.subagent_store.update_instance(agent_id, status="idle")
                 continue
             last_progress_at = (
                 view.runtime.heartbeat_at
@@ -506,6 +521,9 @@ class BackgroundTaskManager:
                 case "lost":
                     severity = "warning"
                     title = f"Background task lost: {view.spec.description}"
+                case "recoverable":
+                    severity = "warning"
+                    title = f"Background task recoverable: {view.spec.description}"
                 case _:
                     severity = "info"
                     title = f"Background task updated: {view.spec.description}"

@@ -8,6 +8,7 @@ from pythinker_host.local import local_host
 
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.approval import Approval
+from pythinker_code.soul.permission import check_shell_command_allowed
 from pythinker_code.soul.toolset import PythinkerToolset
 from pythinker_code.tools.shell import Params as ShellParams
 from pythinker_code.tools.shell import Shell
@@ -35,6 +36,7 @@ def replace_tools(
                 acp_conn,
                 acp_session_id,
                 runtime.approval,
+                runtime,
             )
         )
 
@@ -52,6 +54,7 @@ class Terminal(CallableTool2[ShellParams]):
         acp_conn: acp.Client,
         acp_session_id: str,
         approval: Approval,
+        runtime: Runtime,
     ) -> None:
         # Use the `name`, `description`, and `params` from the existing Shell tool,
         # so that when this is added to the toolset, it replaces the original Shell tool.
@@ -59,6 +62,7 @@ class Terminal(CallableTool2[ShellParams]):
         self._acp_conn = acp_conn
         self._acp_session_id = acp_session_id
         self._approval = approval
+        self._runtime = runtime
 
     async def __call__(self, params: ShellParams) -> ToolReturnValue:
         from pythinker_code.acp.session import get_current_acp_tool_call_id_or_none
@@ -70,6 +74,9 @@ class Terminal(CallableTool2[ShellParams]):
 
         if not params.command:
             return builder.error("Command cannot be empty.", brief="Empty command")
+
+        if err := check_shell_command_allowed(self._runtime, params.command):
+            return err
 
         approval_result = await self._approval.request(
             self.name,

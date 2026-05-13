@@ -1,16 +1,46 @@
 default_install_hook_types:
   - pre-commit
+  - pre-push
 
 repos:
   - repo: local
     hooks:
+      # ---- pre-commit: auto-format + lint on staged commits ----
       - id: make-format-pythinker-code
-        name: make format-pythinker-code
+        name: make format-pythinker-code (pre-commit)
         entry: make format-pythinker-code
         language: system
+        stages: [pre-commit]
         pass_filenames: false
       - id: make-check-pythinker-code
-        name: make check-pythinker-code
+        name: make check-pythinker-code (pre-commit)
         entry: make check-pythinker-code
         language: system
+        stages: [pre-commit]
+        pass_filenames: false
+
+      # ---- pre-push: mirror CI gate so nothing leaves the dev box that the
+      # CI `check` job would reject. Format first (auto-fixes; prek/pre-commit
+      # aborts the push if any files were modified — dev must re-stage and
+      # re-commit before pushing again), then ruff check --fix --exit-non-zero
+      # for any residual lint, then the same `make check-pythinker-code`
+      # target the CI workflow runs (ruff check + ruff format --check +
+      # pyright). Passing this hook means `check` will pass on the PR.
+      - id: pre-push-ruff-format
+        name: pre-push: ruff format (auto-fix, blocks push if modified)
+        entry: make format-pythinker-code
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+      - id: pre-push-ruff-check-fix
+        name: pre-push: ruff check --fix (auto-fix lints)
+        entry: bash -c "uv run ruff check --fix --exit-non-zero-on-fix"
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+      - id: pre-push-ci-check
+        name: pre-push: make check-pythinker-code (CI-equivalent gate)
+        entry: make check-pythinker-code
+        language: system
+        stages: [pre-push]
         pass_filenames: false

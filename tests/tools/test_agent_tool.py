@@ -194,7 +194,7 @@ async def test_agent_tool_rejects_resume_when_instance_is_already_running(agent_
     )
 
     assert result.is_error
-    assert result.brief == "Agent failed"
+    assert result.brief == "Agent already running"
     assert "cannot be resumed concurrently" in result.message
 
 

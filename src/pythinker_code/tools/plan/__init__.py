@@ -133,15 +133,43 @@ class ExitPlanMode(CallableTool2[Params]):
                 brief="No plan file",
             )
 
+        def build_handoff_output(selected_option: str | None = None) -> str:
+            try:
+                from pythinker_code.tools.plan.handoff import persist_implementation_handoff
+
+                assert plan_path is not None
+                handoff_path, handoff = persist_implementation_handoff(
+                    plan_path,
+                    plan_content,
+                    selected_option=selected_option,
+                )
+                return f"Implementation handoff saved to: {handoff_path}\n\n{handoff}"
+            except Exception as exc:
+                from pythinker_code.telemetry.errors import report_handled_error
+                from pythinker_code.tools.plan.handoff import build_implementation_handoff
+
+                report_handled_error(exc, site="tool.plan.handoff", tool="ExitPlanMode")
+                logger.warning("Failed to persist implementation handoff", exc_info=True)
+                fallback = build_implementation_handoff(
+                    plan_content,
+                    selected_option=selected_option,
+                )
+                return (
+                    "Implementation handoff persistence failed; using inline fallback.\n\n"
+                    f"{fallback}"
+                )
+
         # Auto-approve plan approval only when no user is present (auto mode).
         if self._should_auto_approve_exit and self._should_auto_approve_exit():
             await self._toggle_callback()
+            handoff_output = build_handoff_output()
             return ToolReturnValue(
                 is_error=False,
                 output=(
                     f"Plan approved (auto-approved). "
                     f"Plan mode deactivated. All tools are now available.\n"
                     f"Plan saved to: {plan_path}\n\n"
+                    f"{handoff_output}\n\n"
                     f"## Approved Plan:\n{plan_content}"
                 ),
                 message="Plan approved (auto)",
@@ -276,12 +304,14 @@ class ExitPlanMode(CallableTool2[Params]):
 
             if chosen_option:
                 await self._toggle_callback()
+                handoff_output = build_handoff_output(chosen_option)
                 return ToolReturnValue(
                     is_error=False,
                     output=(
                         f'Plan approved by user. Selected approach: "{chosen_option}"\n'
                         f"Plan mode deactivated. All tools are now available.\n"
                         f"Plan saved to: {plan_path}\n\n"
+                        f"{handoff_output}\n\n"
                         f'IMPORTANT: Execute ONLY the selected approach "{chosen_option}". '
                         f"Ignore other approaches in the plan.\n\n"
                         f"## Approved Plan:\n{plan_content}"
@@ -294,12 +324,14 @@ class ExitPlanMode(CallableTool2[Params]):
         chose_approve = not has_options and any(v == "Approve" for v in answers.values())
         if chose_approve:
             await self._toggle_callback()
+            handoff_output = build_handoff_output()
             return ToolReturnValue(
                 is_error=False,
                 output=(
                     f"Plan approved by user. Plan mode deactivated. "
                     f"All tools are now available.\n"
                     f"Plan saved to: {plan_path}\n\n"
+                    f"{handoff_output}\n\n"
                     f"## Approved Plan:\n{plan_content}"
                 ),
                 message="Plan approved",

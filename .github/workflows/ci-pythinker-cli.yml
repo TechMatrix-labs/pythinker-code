@@ -98,6 +98,9 @@ jobs:
 
   build:
     strategy:
+      # The release-blocking entries stay fail-fast. The experimental VS 2026
+      # probe below is opted out via continue-on-error so its failures do not
+      # cancel sibling jobs.
       fail-fast: true
       matrix:
         include:
@@ -113,7 +116,17 @@ jobs:
           - runner: windows-2022
             target: x86_64-pc-windows-msvc
             binary_path: dist/onefile/pythinker.exe
+          # Forward-compat probe for windows-latest -> VS 2026 migration
+          # (rolling out 2026-06-08 to 2026-06-15). Same Rust target as the
+          # release-blocking windows-2022 entry but built against VS 2026 /
+          # MSVC v144 to surface toolchain regressions before windows-2022
+          # is deprecated.
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+            binary_path: dist/onefile/pythinker.exe
+            experimental: true
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -176,7 +189,11 @@ jobs:
           BINARY_PATH: ${{ matrix.binary_path }}
 
       - name: Upload binary artifact
-        if: success()
+        # The experimental windows-2025-vs2026 probe shares its target string
+        # with the release-blocking windows-2022 entry, so uploading would
+        # collide on the artifact name. The probe only needs the build to
+        # succeed; we do not consume its binary.
+        if: success() && !matrix.experimental
         uses: actions/upload-artifact@v4
         with:
           name: pythinker-${{ matrix.target }}
@@ -250,6 +267,44 @@ jobs:
           python scripts/check_version_tag.py \
             --pyproject pyproject.toml \
             --expected-version "$EXPECTED_VERSION"
+
+      # Hard constraint: every pyproject version bump must be accompanied
+      # by a README "What's New" section + pinned upgrade snippet and a
+      # CHANGELOG entry. This is the same gate the release workflow
+      # enforces at tag time, run here on the PR so we never tag a
+      # version whose README/CHANGELOG drifted.
+      - name: Verify README references the new version
+        if: steps.version.outputs.bump == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.head_version }}
+        run: |
+          set -euo pipefail
+          missing=()
+          if ! grep -qF "What's New in ${RELEASE_VERSION}" README.md; then
+            missing+=("a '## What\'s New in ${RELEASE_VERSION}' section")
+          fi
+          if ! grep -qF "pythinker-code==${RELEASE_VERSION}" README.md; then
+            missing+=("a 'pip install --upgrade pythinker-code==${RELEASE_VERSION}' upgrade snippet")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error title=README out of sync with version bump %s::Update README.md in the same PR as the version bump. Missing: %s\n' \
+              "${RELEASE_VERSION}" "${missing[*]}"
+            exit 1
+          fi
+          echo "README.md references release ${RELEASE_VERSION}"
+
+      - name: Verify CHANGELOG references the new version
+        if: steps.version.outputs.bump == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.head_version }}
+        run: |
+          set -euo pipefail
+          if ! grep -qE "^## ${RELEASE_VERSION} \\(" CHANGELOG.md; then
+            printf '::error title=CHANGELOG out of sync with version bump %s::Add a "## %s (YYYY-MM-DD)" entry to CHANGELOG.md in the same PR as the version bump.\n' \
+              "${RELEASE_VERSION}" "${RELEASE_VERSION}"
+            exit 1
+          fi
+          echo "CHANGELOG.md has an entry for ${RELEASE_VERSION}"
 
   nix-test:
     strategy:

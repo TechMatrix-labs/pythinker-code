@@ -437,6 +437,47 @@ def changelog(app: Shell, args: str):
         console.print(Group(*renderables))
 
 
+def _feedback_destination(soul: PythinkerSoul) -> tuple[str, dict[str, str]] | None:
+    """Resolve the endpoint and headers for explicit user feedback submissions."""
+    import os
+
+    from pythinker_code.auth import PYTHINKER_CODE_PLATFORM_ID
+    from pythinker_code.auth.platforms import get_platform_by_id, managed_provider_key
+
+    headers: dict[str, str] = {}
+    feedback_config = soul.runtime.config.feedback
+
+    endpoint_url = os.getenv("PYTHINKER_FEEDBACK_URL", "").strip()
+    if not endpoint_url:
+        endpoint_url = feedback_config.endpoint_url.strip()
+
+    if endpoint_url:
+        if feedback_config.custom_headers:
+            headers.update(feedback_config.custom_headers)
+        api_key = os.getenv("PYTHINKER_FEEDBACK_API_KEY", "").strip()
+        if not api_key and feedback_config.api_key is not None:
+            api_key = feedback_config.api_key.get_secret_value()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return endpoint_url, headers
+
+    pythinker_platform = get_platform_by_id(PYTHINKER_CODE_PLATFORM_ID)
+    if pythinker_platform is None:
+        return None
+
+    provider = soul.runtime.config.providers.get(managed_provider_key(PYTHINKER_CODE_PLATFORM_ID))
+    if provider is not None:
+        if provider.custom_headers:
+            headers.update(provider.custom_headers)
+        api_key = provider.api_key.get_secret_value()
+        if provider.oauth is not None:
+            api_key = soul.runtime.oauth.resolve_api_key(provider.api_key, provider.oauth)
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    return f"{pythinker_platform.base_url.rstrip('/')}/feedback", headers
+
+
 @registry.command
 @shell_mode_registry.command
 async def feedback(app: Shell, args: str):
@@ -446,8 +487,6 @@ async def feedback(app: Shell, args: str):
 
     import aiohttp
 
-    from pythinker_code.auth import PYTHINKER_CODE_PLATFORM_ID
-    from pythinker_code.auth.platforms import get_platform_by_id, managed_provider_key
     from pythinker_code.constant import VERSION
     from pythinker_code.ui.shell.oauth import current_model_key
     from pythinker_code.utils.aiohttp import new_client_session
@@ -463,15 +502,11 @@ async def feedback(app: Shell, args: str):
         _fallback_to_issues()
         return
 
-    pythinker_platform = get_platform_by_id(PYTHINKER_CODE_PLATFORM_ID)
-    if pythinker_platform is None:
+    destination = _feedback_destination(soul)
+    if destination is None:
         _fallback_to_issues()
         return
-
-    provider = soul.runtime.config.providers.get(managed_provider_key(PYTHINKER_CODE_PLATFORM_ID))
-    if provider is None or provider.oauth is None:
-        _fallback_to_issues()
-        return
+    feedback_url, headers = destination
 
     from prompt_toolkit import PromptSession
 
@@ -486,9 +521,6 @@ async def feedback(app: Shell, args: str):
     if not content:
         console.print("[yellow]Feedback cannot be empty.[/yellow]")
         return
-
-    api_key = soul.runtime.oauth.resolve_api_key(provider.api_key, provider.oauth)
-    feedback_url = f"{pythinker_platform.base_url.rstrip('/')}/feedback"
 
     payload = {
         "session_id": soul.runtime.session.id,
@@ -505,10 +537,7 @@ async def feedback(app: Shell, args: str):
                 session.post(
                     feedback_url,
                     json=payload,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        **(provider.custom_headers or {}),
-                    },
+                    headers=headers,
                     raise_for_status=True,
                 ),
             ):
@@ -542,8 +571,6 @@ async def report_error(app: Shell, args: str):
 
     import aiohttp
 
-    from pythinker_code.auth import PYTHINKER_CODE_PLATFORM_ID
-    from pythinker_code.auth.platforms import get_platform_by_id, managed_provider_key
     from pythinker_code.constant import VERSION
     from pythinker_code.telemetry.errors import clear_recent_errors, recent_errors
     from pythinker_code.ui.shell.oauth import current_model_key
@@ -560,15 +587,11 @@ async def report_error(app: Shell, args: str):
         _fallback_to_issues()
         return
 
-    pythinker_platform = get_platform_by_id(PYTHINKER_CODE_PLATFORM_ID)
-    if pythinker_platform is None:
+    destination = _feedback_destination(soul)
+    if destination is None:
         _fallback_to_issues()
         return
-
-    provider = soul.runtime.config.providers.get(managed_provider_key(PYTHINKER_CODE_PLATFORM_ID))
-    if provider is None or provider.oauth is None:
-        _fallback_to_issues()
-        return
+    feedback_url, headers = destination
 
     errors = recent_errors()
     if errors:
@@ -596,9 +619,6 @@ async def report_error(app: Shell, args: str):
         console.print("[yellow]Nothing to report. Cancelled.[/yellow]")
         return
 
-    api_key = soul.runtime.oauth.resolve_api_key(provider.api_key, provider.oauth)
-    feedback_url = f"{pythinker_platform.base_url.rstrip('/')}/feedback"
-
     payload = {
         "session_id": soul.runtime.session.id,
         "type": "error",
@@ -625,10 +645,7 @@ async def report_error(app: Shell, args: str):
                 session.post(
                     feedback_url,
                     json=payload,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        **(provider.custom_headers or {}),
-                    },
+                    headers=headers,
                     raise_for_status=True,
                 ),
             ):

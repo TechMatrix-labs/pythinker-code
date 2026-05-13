@@ -17,6 +17,7 @@ from .models import (
     TaskSpec,
     TaskStatus,
     TaskView,
+    is_terminal_status,
 )
 
 _VALID_TASK_ID = re.compile(r"^[a-z0-9][a-z0-9\-]{1,24}$")
@@ -101,7 +102,12 @@ class BackgroundTaskStore:
         return TaskSpec.model_validate_json(self.spec_path(task_id).read_text(encoding="utf-8"))
 
     def write_runtime(self, task_id: str, runtime: TaskRuntime) -> None:
-        atomic_json_write(runtime.model_dump(mode="json"), self.runtime_path(task_id))
+        path = self.runtime_path(task_id)
+        if path.exists():
+            current = self.read_runtime(task_id)
+            if is_terminal_status(current.status) and not is_terminal_status(runtime.status):
+                return
+        atomic_json_write(runtime.model_dump(mode="json"), path)
 
     def read_runtime(self, task_id: str) -> TaskRuntime:
         path = self.runtime_path(task_id)

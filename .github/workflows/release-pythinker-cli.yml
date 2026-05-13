@@ -35,6 +35,43 @@ jobs:
             --pythinker-core-pyproject packages/pythinker-core/pyproject.toml \
             --pythinker-host-pyproject packages/pythinker-host/pyproject.toml
 
+      # Hard release gate: every PyPI release must ship a matching README +
+      # CHANGELOG update. README.md must contain a "What's New in <version>"
+      # heading and the pinned `pythinker-code==<version>` upgrade snippet
+      # (both are load-bearing on the project page that PyPI renders).
+      # CHANGELOG.md must have a top-level "## <version> (...)" entry.
+      # Missing any of these blocks both the GitHub Release and PyPI publish.
+      - name: Verify README references the new version
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          missing=()
+          if ! grep -qF "What's New in ${RELEASE_VERSION}" README.md; then
+            missing+=("a '## What\'s New in ${RELEASE_VERSION}' section")
+          fi
+          if ! grep -qF "pythinker-code==${RELEASE_VERSION}" README.md; then
+            missing+=("a 'pip install --upgrade pythinker-code==${RELEASE_VERSION}' upgrade snippet")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error title=README out of sync with release %s::Update README.md before tagging. Missing: %s\n' \
+              "${RELEASE_VERSION}" "${missing[*]}"
+            exit 1
+          fi
+          echo "README.md references release ${RELEASE_VERSION}"
+
+      - name: Verify CHANGELOG references the new version
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! grep -qE "^## ${RELEASE_VERSION} \\(" CHANGELOG.md; then
+            printf '::error title=CHANGELOG out of sync with release %s::Add a "## %s (YYYY-MM-DD)" entry to CHANGELOG.md before tagging.\n' \
+              "${RELEASE_VERSION}" "${RELEASE_VERSION}"
+            exit 1
+          fi
+          echo "CHANGELOG.md has an entry for ${RELEASE_VERSION}"
+
   build:
     name: Build binaries (${{ matrix.target }})
     needs: validate
@@ -448,7 +485,15 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [validate, build]
+    # Hard release gate: the GitHub Release is always created once the
+    # validate gate (version tag + README + CHANGELOG) passes, even if
+    # one or more matrix build targets failed. softprops/action-gh-release
+    # is configured with `fail_on_unmatched_files: false` so missing
+    # artifacts produce a warning, not a failure — the Release lists
+    # whatever binaries did build, and the missing target can be re-run
+    # against the same tag to upload its asset later.
+    if: always() && needs.validate.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
@@ -478,6 +523,10 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
+          # Tolerate missing matrix targets so the Release still publishes
+          # when (e.g.) a single Windows runner crashed mid-build.
+          fail_on_unmatched_files: false
+          make_latest: "true"
           files: |
             downloads/*.tar.gz
             downloads/*.zip

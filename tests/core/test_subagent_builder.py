@@ -91,9 +91,13 @@ async def test_builder_model_priority_prefers_override_then_type_default_then_in
     runtime, monkeypatch
 ):
     captured_aliases: list[str | None] = []
+    captured_thinking: list[bool | None] = []
 
-    def fake_clone_llm_with_model_alias(llm, config, model_alias, *, session_id, oauth):
+    def fake_clone_llm_with_model_alias(
+        llm, config, model_alias, *, session_id, oauth, thinking=None
+    ):
         captured_aliases.append(model_alias)
+        captured_thinking.append(thinking)
         return llm
 
     monkeypatch.setattr(
@@ -118,6 +122,7 @@ async def test_builder_model_priority_prefers_override_then_type_default_then_in
             subagent_type="explore",
             model_override="tool-override",
             effective_model="type-default",
+            thinking=False,
         ),
     )
     await builder.build_builtin_instance(
@@ -148,3 +153,4 @@ async def test_builder_model_priority_prefers_override_then_type_default_then_in
     )
 
     assert captured_aliases == ["tool-override", "type-default", None]
+    assert captured_thinking == [False, None, None]

@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Self
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -296,6 +296,41 @@ async def test_step_connection_error_recovery_only_retries_once(
 
     assert provider.generate_attempts == 2
     assert provider.recovery_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_step_connection_error_records_failed_llm_metrics(
+    runtime: Runtime, tmp_path: Path
+) -> None:
+    runtime.config.loop_control.max_retries_per_step = 5
+    provider = AlwaysConnectionErrorProvider()
+    llm = LLM(
+        chat_provider=provider,
+        max_context_size=100_000,
+        capabilities=set(),
+    )
+    soul, _ = _make_soul(runtime, llm, tmp_path)
+
+    with (
+        patch("pythinker_code.telemetry.metrics.record_llm_call") as record_llm_call,
+        patch("pythinker_code.telemetry.metrics.record_error") as record_error,
+        pytest.raises(APIConnectionError),
+    ):
+        await run_soul(soul, "trigger connection failure", _drain_ui_messages, asyncio.Event())
+
+    failed_llm_calls = [
+        call for call in record_llm_call.call_args_list if call.kwargs.get("success") is False
+    ]
+    assert len(failed_llm_calls) == 2
+    for call in failed_llm_calls:
+        assert call.kwargs["system"] == "alwaysconnectionerrorprovider"
+        assert call.kwargs["model"] == "always-connection-error"
+        assert call.kwargs["duration_seconds"] >= 0
+
+    assert [call.kwargs for call in record_error.call_args_list] == [
+        {"kind": "api_error", "error_type": "network"},
+        {"kind": "api_error", "error_type": "network"},
+    ]
 
 
 @pytest.mark.asyncio
