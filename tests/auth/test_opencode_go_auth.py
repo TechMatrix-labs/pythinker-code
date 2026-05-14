@@ -56,6 +56,10 @@ def test_opencode_go_model_catalog_contains_all_current_models():
 def test_opencode_go_env_key_precedence(monkeypatch):
     from pythinker_code.auth.opencode_go import get_opencode_go_api_key_from_env
 
+    monkeypatch.delenv("OPENCODE_GO_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCODE_ZEN_API_KEY", raising=False)
+
     monkeypatch.setenv("OPENCODE_ZEN_API_KEY", "zen-key")
     assert get_opencode_go_api_key_from_env() == "zen-key"
 
@@ -174,9 +178,12 @@ async def test_login_opencode_go_uses_discovered_context_length(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
-async def test_login_opencode_go_requires_key(tmp_path):
+async def test_login_opencode_go_requires_key(monkeypatch, tmp_path):
     from pythinker_code.auth.opencode_go import login_opencode_go_api_key
 
+    monkeypatch.delenv("OPENCODE_GO_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCODE_ZEN_API_KEY", raising=False)
     config = Config(is_from_default_location=True)
 
     events = [event async for event in login_opencode_go_api_key(config, "")]

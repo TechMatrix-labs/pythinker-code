@@ -114,6 +114,16 @@ from pythinker_core.tooling import (
 )
 from pythinker_core.tooling.simple import SimpleToolset
 
+from pythinker_sdk.client import AgentRunResult, MaxStepsReachedError, PythinkerClient
+from pythinker_sdk.conversation import Conversation, tool_result_to_message
+from pythinker_sdk.mcp import (
+    MCP_MAX_OUTPUT_CHARS,
+    MCPServerConfig,
+    MCPTool,
+    MCPToolset,
+    mcp_tool_result_to_return_value,
+)
+
 __all__ = [
     # providers
     "Pythinker",
@@ -153,6 +163,17 @@ __all__ = [
     "DisplayBlock",
     "BriefDisplayBlock",
     "UnknownDisplayBlock",
+    # SDK conveniences
+    "PythinkerClient",
+    "Conversation",
+    "AgentRunResult",
+    "MaxStepsReachedError",
+    "tool_result_to_message",
+    "MCPServerConfig",
+    "MCPTool",
+    "MCPToolset",
+    "MCP_MAX_OUTPUT_CHARS",
+    "mcp_tool_result_to_return_value",
     # generation
     "generate",
     "step",

@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["pythinker-core==1.1.0"]
+dependencies = ["pythinker-core==1.1.0", "mcp>=1,<1.17"]
 
 [project.urls]
 Homepage      = "https://github.com/mohamed-elkholy95/Pythinker-Code"

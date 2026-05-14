@@ -2547,6 +2547,7 @@ name = "pythinker-sdk"
 version = "1.0.0"
 source = { editable = "sdks/pythinker-sdk" }
 dependencies = [
+    { name = "mcp" },
     { name = "pythinker-core" },
 ]
 
@@ -2563,7 +2564,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pythinker-core", specifier = "==1.1.0" }]
+requires-dist = [
+    { name = "mcp", specifier = ">=1,<1.17" },
+    { name = "pythinker-core", specifier = "==1.1.0" },
+]
 
 [package.metadata.requires-dev]
 dev = [

@@ -170,9 +170,10 @@ async def test_login_minimax_uses_discovered_context_length(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_login_minimax_requires_key(tmp_path):
+async def test_login_minimax_requires_key(monkeypatch, tmp_path):
     from pythinker_code.auth.minimax import login_minimax_api_key
 
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
     config = Config(is_from_default_location=True)
 
     events = [event async for event in login_minimax_api_key(config, "")]
