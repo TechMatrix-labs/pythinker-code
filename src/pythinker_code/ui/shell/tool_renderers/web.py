@@ -15,6 +15,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     fg,
     format_lines_block,
     invalid_arg,
+    running_spinner,
     tool_title,
 )
 
@@ -40,7 +41,7 @@ def _render_fetch_call(ctx: ToolRenderContext) -> RenderableType:
         line.append_text(invalid_arg() if "url" in args else fg("muted", "..."))
     else:
         line.append_text(fg("accent", _shorten_url(url)))
-    return line
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_fetch_result(
@@ -96,7 +97,7 @@ def _render_search_call(ctx: ToolRenderContext) -> RenderableType:
         extras.append("with content")
     for extra in extras:
         line.append_text(fg("muted", f" ({extra})"))
-    return line
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_search_result(

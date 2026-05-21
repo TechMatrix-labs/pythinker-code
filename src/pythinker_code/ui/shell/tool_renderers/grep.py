@@ -24,6 +24,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     fg,
     format_lines_block,
     invalid_arg,
+    running_spinner,
     shorten_path,
     tool_title,
 )
@@ -68,7 +69,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
         extras.append(f"limit {head_limit}")
     for extra in extras:
         line.append_text(fg("tool_output", f" {extra}"))
-    return line
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:

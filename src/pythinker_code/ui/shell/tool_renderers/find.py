@@ -21,6 +21,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     fg,
     format_lines_block,
     invalid_arg,
+    running_spinner,
     shorten_path,
     tool_title,
 )
@@ -51,7 +52,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
 
     if args.get("include_dirs") is False:
         line.append_text(fg("tool_output", " (files only)"))
-    return line
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:

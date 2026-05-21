@@ -621,6 +621,8 @@ class _LiveView:
         for tool_call_id in list(self._tool_call_blocks.keys()):
             block = self._tool_call_blocks.pop(tool_call_id)
             console.print(block.compose())
+            if block.is_background_pending:
+                console.print(Text("  (background agent still running)", style="dim italic"))
             self.refresh_soon()
         self.flush_notifications()
 

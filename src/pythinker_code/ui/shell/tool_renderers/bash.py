@@ -32,6 +32,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
     invalid_arg,
+    running_spinner,
 )
 from pythinker_code.ui.theme import tui_rich_style
 
@@ -70,7 +71,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
         description = as_str(args.get("description"))
         suffix = f" (background: {description})" if description else " (background)"
         line.append_text(fg("muted", suffix))
-    return line
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:

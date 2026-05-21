@@ -32,6 +32,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
     invalid_arg,
+    running_spinner,
     shorten_path,
     tool_title,
 )
@@ -85,16 +86,18 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
 
     edits = _normalize_edits(args.get("edit"))
     if not edits:
-        return header
+        return running_spinner(header, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
     if len(edits) > 1:
         header.append_text(fg("tool_output", f" ({len(edits)} edits)"))
 
+    head = running_spinner(header, execution_started=ctx.execution_started, has_result=ctx.has_result)
+
     diff_text = _build_combined_diff(edits)
     if not diff_text:
-        return header
+        return head
     diff_renderable = render_diff(diff_text)
-    return Group(header, Text(""), diff_renderable)
+    return Group(head, Text(""), diff_renderable)
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
