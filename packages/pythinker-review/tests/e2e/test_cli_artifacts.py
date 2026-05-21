@@ -488,7 +488,11 @@ def test_similar_issues_chroma_without_persistence_stays_read_only(
             str(repo),
         ],
     )
-    if result.exit_code == 2 and "ChromaDB is not installed" in result.stderr:
+    if (
+        result.exit_code == 2
+        and "chromadb" in result.stderr.lower()
+        and "not installed" in result.stderr.lower()
+    ):
         pytest.skip("optional ChromaDB backend is not installed")
     assert result.exit_code == 0, result.stderr
     parsed = json.loads(result.stdout)

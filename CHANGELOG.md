@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 2.7.0 (2026-05-21)
+
+First-class review-first workflows: code review, security scanning, root-cause debugging, PR artifact helpers, and Reviewflow stateful review/fix workflows.
+
+- Added the `pythinker-review` workspace package and wired it into the root `pythinker-code` package via the pinned `pythinker-review==0.1.0` dependency.
+- Added `pythinker review`, `pythinker secscan`, `pythinker security-scan`, and `pythinker debug` command surfaces, backed by standalone `pythinker-review`, `pythinker-secscan`, `pythinker-security-scan`, and `pythinker-debug` console scripts.
+- Added read-only PR artifact/helper commands: `describe`, `improve`/`suggest`, `ask`, `ask-line`, `labels`, `changelog`, `docs`, `compliance`, `help-docs`, `similar-issues`, `tools`, and `config`.
+- Added Reviewflow workflow commands and state models for `init`, `map`, `review`, `report`, `next`, `show --finding`, `triage`, `revalidate`, `fix`, `open-pr`, `ci`, and `doctor`.
+- Added the `code-reviewer`, `security-reviewer`, and `debugger` subagent roles for interactive Pythinker sessions.
+- Hardened review output validation so unsafe paths, stale line ranges, mismatched evidence snippets, malformed model JSON, worker failures, and timeouts fail closed unless `--allow-partial` is explicitly used.
+- Refreshed README release notes with the 2.7.0 review/security/debug feature set and the pinned `pythinker-code==2.7.0` upgrade snippet required by the release gate.
+
+Upgrade with `pythinker update` or `pip install --upgrade pythinker-code==2.7.0`.
+
 ## 2.6.0 (2026-05-13)
 
 Packaging fix: pin `pythinker-core[contrib]==1.1.0` so the Kimi K2.x / DeepSeek strict-interleaved reasoning-replay fix reaches PyPI installs.
