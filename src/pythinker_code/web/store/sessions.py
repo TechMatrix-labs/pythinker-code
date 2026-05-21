@@ -29,6 +29,7 @@ from pydantic import ConfigDict, Field
 from pythinker_code.metadata import WorkDirMeta, load_metadata
 from pythinker_code.session import Session as PythinkerCLISession
 from pythinker_code.session_state import SessionState, load_session_state, save_session_state
+from pythinker_code.utils.logging import logger
 from pythinker_code.web.models import Session
 from pythinker_code.wire.file import WireFile
 
@@ -106,7 +107,7 @@ def _derive_title_from_wire(session_dir: Path) -> str:
                 except json.JSONDecodeError:
                     continue
     except Exception:
-        pass
+        logger.debug("Failed to derive session title from context file", exc_info=True)
     return "Untitled"
 
 

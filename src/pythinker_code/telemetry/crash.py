@@ -17,6 +17,8 @@ import sys
 from types import TracebackType
 from typing import Any
 
+from pythinker_code.utils.logging import logger
+
 # ---------------------------------------------------------------------------
 # Phase tracking
 # ---------------------------------------------------------------------------
@@ -74,6 +76,22 @@ def _should_ignore_for_asyncio(exc: BaseException) -> bool:
     return queue_shutdown is not None and isinstance(exc, queue_shutdown)
 
 
+def _should_suppress_asyncio_context(context: dict[str, Any]) -> bool:
+    """Return True for asyncio-handler contexts that should stay invisible.
+
+    Prompt-toolkit displays asyncio default-handler output in an overlay. During
+    Esc/interrupt cleanup, some cancelled/GC'd tasks can call the loop exception
+    handler with no ``exception`` field at all, which renders as
+    ``Unhandled exception in event loop: Exception None`` and steals focus until
+    ENTER is pressed. With no exception object there is nothing actionable to
+    report, so suppress the default handler for that known-noisy context.
+    """
+    exc = context.get("exception")
+    if exc is None:
+        return True
+    return isinstance(exc, BaseException) and _should_ignore_for_asyncio(exc)
+
+
 # ---------------------------------------------------------------------------
 # sys.excepthook
 # ---------------------------------------------------------------------------
@@ -100,7 +118,7 @@ def _excepthook(
             )
             _sentry.capture_exception(exc)
         except Exception:
-            pass
+            logger.debug("Telemetry crash capture failed", exc_info=True)
 
     # Always delegate so the traceback is still printed.
     handler = _original_excepthook if _original_excepthook is not None else sys.__excepthook__
@@ -145,7 +163,7 @@ def _asyncio_handler(
             )
             _sentry.capture_exception(exc)
         except Exception:
-            pass
+            logger.debug("Telemetry crash capture failed", exc_info=True)
 
     # Delegate so the original logging behavior (or custom handler) runs.
     if _original_asyncio_handler is not None:

@@ -242,7 +242,7 @@ async def replay_history(ws: WebSocket, session_dir: Path) -> None:
         for event_text in lines:
             await ws.send_text(event_text)
     except Exception:
-        pass
+        logger.debug("WebSocket wire replay failed", exc_info=True)
 
 
 @router.get("/", summary="List all sessions")
@@ -295,12 +295,32 @@ async def get_session(
     return session
 
 
+def _ensure_session_work_dir_allowed(work_dir_path: Path, request: Request) -> None:
+    if not getattr(request.app.state, "restrict_sensitive_apis", False):
+        return
+    startup_dir = getattr(request.app.state, "startup_dir", None)
+    if not startup_dir:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session work_dir is restricted in public mode.",
+        )
+    allowed_root = Path(str(startup_dir)).expanduser().resolve()
+    if not work_dir_path.is_relative_to(allowed_root):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session work_dir must stay within the public workspace.",
+        )
+
+
 @router.post("/", summary="Create a new session")
-async def create_session(request: CreateSessionRequest | None = None) -> Session:
+async def create_session(
+    http_request: Request, request: CreateSessionRequest | None = None
+) -> Session:
     """Create a new session."""
     # Use provided work_dir or default to user's home directory
     if request and request.work_dir:
         work_dir_path = Path(request.work_dir).expanduser().resolve()
+        _ensure_session_work_dir_allowed(work_dir_path, http_request)
         # Validate the directory exists
         if not work_dir_path.exists():
             if request.create_dir:
@@ -330,7 +350,9 @@ async def create_session(request: CreateSessionRequest | None = None) -> Session
             )
         work_dir = HostPath.unsafe_from_local_path(work_dir_path)
     else:
-        work_dir = HostPath.unsafe_from_local_path(Path.home())
+        work_dir_path = Path.home().resolve()
+        _ensure_session_work_dir_allowed(work_dir_path, http_request)
+        work_dir = HostPath.unsafe_from_local_path(work_dir_path)
     pythinker_code_session = await PythinkerCLISession.create(work_dir=work_dir)
     context_file = pythinker_code_session.dir / "context.jsonl"
     invalidate_sessions_cache()

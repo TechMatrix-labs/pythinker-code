@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import logging
 import platform
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 from opentelemetry import metrics, trace
@@ -43,7 +45,7 @@ from opentelemetry.sdk.trace.sampling import (
     Sampler,
     TraceIdRatioBased,
 )
-from opentelemetry.trace import Tracer
+from opentelemetry.trace import Status, StatusCode, Tracer
 
 from pythinker_code.telemetry.config import (
     is_disabled,
@@ -51,6 +53,7 @@ from pythinker_code.telemetry.config import (
     otel_ingest_token,
     otel_trace_sample_rate,
 )
+from pythinker_code.utils.logging import logger
 
 _SERVICE_NAME = "pythinker-cli"
 _TRACER_NAME = "pythinker-code"
@@ -189,15 +192,36 @@ def get_meter() -> Meter:
     return metrics.get_meter(_TRACER_NAME)
 
 
-def start_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+def _is_context_detach_mismatch(exc: ValueError) -> bool:  # pyright: ignore[reportUnusedFunction]
+    message = str(exc)
+    return "Token" in message and "created in a different Context" in message
+
+
+@contextmanager
+def start_span(name: str, attributes: dict[str, Any] | None = None) -> Generator[Any, None, None]:
     """Convenience: ``with start_span("pythinker.turn", {...}) as span:``.
 
     When OTel is uninitialized this returns a no-op span (the global tracer's
     no-op behaviour) — call sites stay clean and pay nothing in the disabled
     case. The span is the *current* span inside the with block, so child spans
     automatically nest.
+
+    Ctrl-C can cancel prompt/LLM tasks while an OTel current-span context
+    manager is being finalized from a different asyncio context. OpenTelemetry
+    logs that as ``Failed to detach context`` with a ValueError, which is noisy
+    for a CLI interrupt and does not affect user work. Avoid OTel's context
+    attach/detach path here: create and end the span manually instead.
     """
-    return get_tracer().start_as_current_span(name, attributes=attributes or {})
+    span = get_tracer().start_span(name, attributes=attributes or {})
+    try:
+        yield span
+    except BaseException as exc:
+        if exc.__class__ is not GeneratorExit:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+        raise
+    finally:
+        span.end()
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +270,7 @@ def emit_log(
         otel_logger.emit(record)
     except Exception:
         # Never propagate.
-        pass
+        logger.debug("OTel telemetry emit failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -266,14 +290,14 @@ def shutdown(timeout_millis: int = 2000) -> None:
         if hasattr(tp, "shutdown"):
             tp.shutdown()  # type: ignore[attr-defined]
     except Exception:
-        pass
+        logger.debug("OTel provider shutdown failed", exc_info=True)
     try:
         if _meter_provider is not None:
             _meter_provider.shutdown()
     except Exception:
-        pass
+        logger.debug("OTel provider shutdown failed", exc_info=True)
     try:
         if _logger_provider is not None:
             _logger_provider.shutdown()
     except Exception:
-        pass
+        logger.debug("OTel provider shutdown failed", exc_info=True)
