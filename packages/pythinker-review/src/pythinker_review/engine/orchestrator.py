@@ -89,14 +89,17 @@ def _added_lines_by_file(patch_text: str) -> dict[str, list[tuple[int, str]]]:
 def _branch_name(repo: Path) -> str | None:
     import subprocess
 
-    proc = subprocess.run(
-        ["git", "branch", "--show-current"],
-        cwd=repo,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=5.0,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=repo,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
     branch = proc.stdout.strip()
     return branch or None
 

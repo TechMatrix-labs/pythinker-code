@@ -14,4 +14,4 @@ def generate_run_id(*, now: datetime | None = None) -> str:
 
 def parse_run_id_timestamp(run_id: str) -> datetime:
     stamp, _hex = run_id.split("-", 1)
-    return datetime.strptime(stamp, "%Y%m%d%H%M%S")
+    return datetime.strptime(stamp, "%Y%m%d%H%M%S").replace(tzinfo=UTC)

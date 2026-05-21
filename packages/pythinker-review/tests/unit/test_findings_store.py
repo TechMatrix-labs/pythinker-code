@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from pythinker_review.store.findings_store import FindingsStore
 from pythinker_review.store.models import Category, Finding, Location, RunMeta, Severity
 
@@ -67,3 +69,12 @@ def test_atomic_meta_write_no_tmp_left(tmp_path: Path) -> None:
     store.finalize(meta)
     run_dir = tmp_path / ".pythinker-review" / "runs" / "20260520120000-aaaaaaaa"
     assert not any(p.suffix == ".tmp" for p in run_dir.iterdir())
+
+
+def test_begin_twice_without_finalize_raises(tmp_path: Path) -> None:
+    store = FindingsStore(repo_root=tmp_path)
+    meta = _meta("20260520120000-aaaaaaaa")
+    store.begin(meta)
+    with pytest.raises(RuntimeError, match="begin\\(\\) called twice"):
+        store.begin(meta)
+    store.finalize(meta)

@@ -23,6 +23,8 @@ class FindingsStore:
         return self.state_dir / "runs" / run_id
 
     def begin(self, meta: RunMeta) -> None:
+        if self._fp is not None:
+            raise RuntimeError("begin() called twice; call finalize() first")
         run_dir = self._run_dir(meta.id)
         run_dir.mkdir(parents=True, exist_ok=True)
         self._fp = (run_dir / "findings.jsonl").open("a", encoding="utf-8")

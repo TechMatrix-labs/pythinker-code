@@ -13,7 +13,7 @@ def ensure_gitignored(*, repo_root: Path) -> bool:
     if not gi.exists():
         return False
     text = gi.read_text(encoding="utf-8")
-    if _ENTRY in text:
+    if any(line.strip() == _ENTRY for line in text.splitlines()):
         return False
     prefix = "" if text.endswith("\n") else "\n"
     gi.write_text(f"{text}{prefix}\n{_MARKER}\n{_ENTRY}\n", encoding="utf-8")
