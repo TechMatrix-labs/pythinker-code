@@ -112,7 +112,7 @@ async def test_load_agent_registers_project_markdown_agents(runtime) -> None:
     work = Path(str(runtime.session.work_dir))
     _write_agent(
         work / ".claude" / "agents" / "planner.md",
-        "---\nname: markdown-planner\ndescription: Markdown planner\ntools: [\"Read\", \"Grep\"]\n---\nPlan carefully.",
+        '---\nname: markdown-planner\ndescription: Markdown planner\ntools: ["Read", "Grep"]\n---\nPlan carefully.',
     )
 
     agent = await load_agent(DEFAULT_AGENT_FILE, runtime, mcp_configs=[])

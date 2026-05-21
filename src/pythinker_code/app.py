@@ -780,8 +780,8 @@ class PythinkerCLI:
             WelcomeInfoItem(
                 name="Tip",
                 value=(
-                    "Pythinker reviews before it writes. Try \"review this diff\","
-                    " \"scan for vulnerabilities\", or \"find the root cause\""
+                    'Pythinker reviews before it writes. Try "review this diff",'
+                    ' "scan for vulnerabilities", or "find the root cause"'
                     " — code edits come after the analysis."
                 ),
                 level=WelcomeInfoItem.Level.INFO,

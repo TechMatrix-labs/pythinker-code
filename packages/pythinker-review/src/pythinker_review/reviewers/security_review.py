@@ -33,9 +33,7 @@ def _format_signals(signals: list[Signal]) -> str:
 def _build_user(
     chunk: Chunk, signals: list[Signal], advisor_context: str, *, max_findings: int = 5
 ) -> str:
-    cap = (
-        f"Return at most {max_findings} findings for this chunk.\n\n" if max_findings >= 0 else ""
-    )
+    cap = f"Return at most {max_findings} findings for this chunk.\n\n" if max_findings >= 0 else ""
     return (
         f"{advisor_context.strip()}\n\n"
         f"{_format_signals(signals)}\n\n"

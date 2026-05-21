@@ -1683,7 +1683,9 @@ def _value_style_for_label(label: str, level: WelcomeInfoItem.Level) -> str:
 
 def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
     head = Text.from_markup("Welcome to Pythinker — think first, then code.")
-    help_text = Text.from_markup("[grey50]Review · Secure · Diagnose · then Create. Send /help for help.[/grey50]")
+    help_text = Text.from_markup(
+        "[grey50]Review · Secure · Diagnose · then Create. Send /help for help.[/grey50]"
+    )
     help_text.highlight_regex(r"/help\b", "yellow bold")
 
     # Use Table for precise width control

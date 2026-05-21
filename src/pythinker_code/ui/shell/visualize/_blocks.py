@@ -75,6 +75,7 @@ def _is_active_background_agent(tool_name: str, result_text: str) -> bool:
             values[k.strip()] = v.strip()
     return values.get("kind") == "agent" and values.get("status") in _AGENT_ACTIVE_STATUSES
 
+
 # Animated bullet frames shown after the "Thinking" label. Dots grow in
 # from the left, reach three, then drain out from the left — a continuous
 # rightward flow that loops every ``_BULLET_FRAME_INTERVAL * len(frames)``.
@@ -772,9 +773,7 @@ class _CompactionBlock:
         filled = int(round(progress * self.BAR_WIDTH))
         empty = self.BAR_WIDTH - filled
         pct = int(progress * 100)
-        frame = self.SPINNER_FRAMES[
-            int(elapsed / self.SPINNER_PERIOD_S) % len(self.SPINNER_FRAMES)
-        ]
+        frame = self.SPINNER_FRAMES[int(elapsed / self.SPINNER_PERIOD_S) % len(self.SPINNER_FRAMES)]
 
         accent = tui_rich_style("accent")
         muted = tui_rich_style("muted")

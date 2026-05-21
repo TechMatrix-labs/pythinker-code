@@ -363,9 +363,7 @@ class _LiveView:
             # card would show. Suppress the matching card to avoid the duplicate.
             suppressed_tool_call_id: str | None = None
             if self._current_approval_request_panel is not None:
-                suppressed_tool_call_id = (
-                    self._current_approval_request_panel.request.tool_call_id
-                )
+                suppressed_tool_call_id = self._current_approval_request_panel.request.tool_call_id
             first_tool_block = True
             for tool_call in list(self._tool_call_blocks.values()):
                 if (

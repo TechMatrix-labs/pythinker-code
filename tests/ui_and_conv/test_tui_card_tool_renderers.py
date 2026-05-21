@@ -382,10 +382,10 @@ def test_card_has_top_and_bottom_padding():
     # first line is top padding — must be blank
     assert lines[0] == "", f"expected blank top padding, got {lines[0]!r}"
     # last blank line is bottom padding — find it after content
-    content_indices = [i for i, l in enumerate(lines) if l]
+    content_indices = [i for i, line in enumerate(lines) if line]
     last_content = content_indices[-1]
     assert last_content < len(lines) - 1, "expected a blank line after the last content line"
-    assert lines[last_content + 1] == "", f"expected blank bottom padding after content"
+    assert lines[last_content + 1] == "", "expected blank bottom padding after content"
 
 
 def test_card_has_blank_line_between_header_and_result():
@@ -394,14 +394,13 @@ def test_card_has_blank_line_between_header_and_result():
     lines = [line.strip() for line in rendered.splitlines()]
     # locate the header line (contains "find" and the pattern)
     header_idx = next(
-        (i for i, l in enumerate(lines) if "find" in l and "*.py" in l), None
+        (i for i, line in enumerate(lines) if "find" in line and "*.py" in line), None
     )
     assert header_idx is not None, "header line not found in rendered output"
     # the line immediately after the header must be blank
     assert lines[header_idx + 1] == "", (
-        f"expected blank spacer after header at index {header_idx}, "
-        f"got {lines[header_idx + 1]!r}"
+        f"expected blank spacer after header at index {header_idx}, got {lines[header_idx + 1]!r}"
     )
     # the result must appear after the spacer
     result_lines = lines[header_idx + 2 :]
-    assert any("foo.py" in l for l in result_lines), "result not found after spacer"
+    assert any("foo.py" in line for line in result_lines), "result not found after spacer"

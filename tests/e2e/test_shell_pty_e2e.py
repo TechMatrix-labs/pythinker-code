@@ -887,7 +887,9 @@ def test_shell_clear_reloads_without_replaying_old_turns(tmp_path: Path) -> None
         clear_mark = shell.mark()
         shell.send_line("/clear")
         shell.read_until_contains("The context has been cleared.", after=clear_mark)
-        shell.read_until_contains("Welcome to Pythinker — think first, then code.", after=clear_mark)
+        shell.read_until_contains(
+            "Welcome to Pythinker — think first, then code.", after=clear_mark
+        )
         clear_prompt_mark = shell.mark()
         _read_until_prompt(shell, after=clear_prompt_mark)
 

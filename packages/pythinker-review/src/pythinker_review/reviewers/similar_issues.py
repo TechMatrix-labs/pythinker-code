@@ -315,9 +315,7 @@ def _validate_chromadb_distribution() -> None:
     parsed = _version_tuple(version)
     if parsed < _MIN_CHROMADB_VERSION:
         required = ".".join(str(part) for part in _MIN_CHROMADB_VERSION)
-        raise SimilarIssuesError(
-            f"ChromaDB backend requires chromadb>={required}; found {version}"
-        )
+        raise SimilarIssuesError(f"ChromaDB backend requires chromadb>={required}; found {version}")
 
 
 def _version_tuple(version: str) -> tuple[int, int, int]:

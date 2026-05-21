@@ -94,7 +94,7 @@ async def test_builder_builds_project_markdown_agent(runtime):
         "---\n"
         "name: local-reviewer\n"
         "description: Local reviewer\n"
-        "tools: [\"Read\", \"Grep\"]\n"
+        'tools: ["Read", "Grep"]\n'
         "---\n"
         "You are the local markdown reviewer.",
         encoding="utf-8",

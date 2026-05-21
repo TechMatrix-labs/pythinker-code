@@ -57,6 +57,7 @@ from pythinker_review.reviewers.similar_issues import (
     SimilarIssuesError,
     find_similar_issues,
 )
+from pythinker_review.reviewflow.utils import InvalidIdentifierError, validate_identifier
 from pythinker_review.reviewflow.workflow import (
     ReviewflowWorkflowError,
     ci_project,
@@ -74,7 +75,6 @@ from pythinker_review.reviewflow.workflow import (
     status_project,
     triage_project,
 )
-from pythinker_review.reviewflow.utils import InvalidIdentifierError, validate_identifier
 from pythinker_review.store.findings_store import FindingsStore
 from pythinker_review.store.gitignore import ensure_gitignored
 from pythinker_review.store.models import SEVERITY_ORDER, Finding, Pass, RunMeta
