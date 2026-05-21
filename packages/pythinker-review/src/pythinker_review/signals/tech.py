@@ -1,4 +1,4 @@
-"""Small DeepSec-style technology detector for security prompt scoping."""
+"""Small Pythinker Security Scan technology detector for security prompt scoping."""
 
 from __future__ import annotations
 

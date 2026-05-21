@@ -1,7 +1,7 @@
 """Durable Pythinker Security Scan data mirror for Pythinker.
 
-The store keeps the source Pythinker Security Scan idea of one append-only JSON record per
-source file, but avoids Node globals and shell-heavy wrappers.
+The store keeps one append-only JSON record per source file, but avoids Node globals and
+shell-heavy wrappers.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pythinker_review.security_scan.models import (
-    SecurityScanProjectSettings,
     FileRecord,
     ProcessorConfig,
     ProjectConfig,
@@ -25,6 +24,7 @@ from pythinker_review.security_scan.models import (
     RunStats,
     RunType,
     ScannerConfig,
+    SecurityScanProjectSettings,
     now_iso,
 )
 from pythinker_review.security_scan.paths import (

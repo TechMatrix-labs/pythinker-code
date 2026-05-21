@@ -22,5 +22,5 @@ def clip_text(text: str, budget_chars: int, *, ellipsis: str = ELLIPSIS) -> str:
 
 
 def approx_tokens(text: str) -> int:
-    """Return the DeepSec-style rough token estimate (4 chars ≈ 1 token)."""
+    """Return the Pythinker Security Scan rough token estimate (4 chars ≈ 1 token)."""
     return (len(text) + 3) // 4

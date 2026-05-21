@@ -31,7 +31,7 @@ class LazySubcommandGroup(typer.core.TyperGroup):
         "security-scan": (
             "pythinker_code.cli.security_scan",
             "cli",
-            "Repo-wide Pythinker Security Scan security scanner (Python-native).",
+            "Repo-wide Pythinker Security Scan pipeline (Python-native).",
         ),
         "debug": (
             "pythinker_code.cli.debug",

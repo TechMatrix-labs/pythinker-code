@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pythinker_review.llm.protocol import ReviewLLM
 from pythinker_review.security_scan.models import (
     AnalysisEntry,
     FileRecord,
@@ -29,7 +30,6 @@ from pythinker_review.security_scan.store import (
     write_run_meta,
 )
 from pythinker_review.security_scan.tech import read_tech_json
-from pythinker_review.llm.protocol import ReviewLLM
 
 
 @dataclass(frozen=True, slots=True)

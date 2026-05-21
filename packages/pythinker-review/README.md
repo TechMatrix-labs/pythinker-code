@@ -1,8 +1,8 @@
 # pythinker-review
 
 Agent-first code review, security review, and root-cause debugging engine for Pythinker. Standalone
-CLI (`pythinker-review`, `pythinker-secscan`, `pythinker-debug`) and integration into
-`pythinker-code` as the `review` / `secscan` / `debug` subcommands and the
+CLI (`pythinker-review`, `pythinker-secscan`, `pythinker-security-scan`, `pythinker-debug`) and integration into
+`pythinker-code` as the `review` / `secscan` / `security-scan` / `debug` subcommands and the
 `code-reviewer` / `security-reviewer` / `debugger` subagent roles.
 
 ## CLI
@@ -56,8 +56,8 @@ pythinker-debug failure failure.log --command "pytest tests/test_app.py::test_ca
 
 ## Configuration
 
-`pythinker-review` and `pythinker-secscan` accept explicit/env model configuration. When invoked via
-`pythinker review` / `pythinker secscan` / `pythinker debug`, the active Pythinker model is wired in
+`pythinker-review`, `pythinker-secscan`, and `pythinker-security-scan` accept explicit/env model configuration. When invoked via
+`pythinker review` / `pythinker secscan` / `pythinker security-scan` / `pythinker debug`, the active Pythinker model is wired in
 automatically through a `ReviewLLM` adapter.
 
 ## Persistence

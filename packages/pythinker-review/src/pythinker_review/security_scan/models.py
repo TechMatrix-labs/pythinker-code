@@ -1,7 +1,7 @@
-"""Pydantic domain models for the Python-native Pythinker Security Scan migration.
+"""Pydantic domain models for Python-native Pythinker Security Scan.
 
-The shapes intentionally mirror the source Pythinker Security Scan data layout, but use
-Python-first validation and snake_case-friendly aliases where useful.
+The shapes use Python-first validation with snake_case-friendly aliases while preserving the
+repo-wide scanner's JSON data layout.
 """
 
 from __future__ import annotations

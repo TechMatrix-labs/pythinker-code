@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pythinker_review.llm.protocol import ReviewLLM
 from pythinker_review.reviewflow.mapping import detect_project, map_features
 from pythinker_review.reviewflow.models import (
     AnalysisEntry,
-    ReviewflowConfig,
     EvidenceRef,
     FeatureLock,
     FeatureRecord,
@@ -25,6 +25,7 @@ from pythinker_review.reviewflow.models import (
     PatchGit,
     PatchProvider,
     ProjectRecord,
+    ReviewflowConfig,
     RunError,
     RunRecord,
     derive_finding_triage,
@@ -79,7 +80,6 @@ from pythinker_review.reviewflow.utils import (
     source_dirty,
     stable_id,
 )
-from pythinker_review.llm.protocol import ReviewLLM
 
 
 @dataclass(frozen=True, slots=True)

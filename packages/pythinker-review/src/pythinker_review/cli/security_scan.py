@@ -11,9 +11,15 @@ from typing import Literal
 
 import typer
 
+from pythinker_review.llm.fake import FakeReviewLLM
+from pythinker_review.llm.protocol import ReviewLLM
 from pythinker_review.security_scan.matchers import create_default_registry
 from pythinker_review.security_scan.paths import DEFAULT_STATE_DIR, get_data_root
-from pythinker_review.security_scan.processor import process_project, revalidate_project, triage_project
+from pythinker_review.security_scan.processor import (
+    process_project,
+    revalidate_project,
+    triage_project,
+)
 from pythinker_review.security_scan.prompt import assemble_prompt, batch_languages
 from pythinker_review.security_scan.reporting import (
     export_findings,
@@ -33,8 +39,6 @@ from pythinker_review.security_scan.store import (
     write_info,
 )
 from pythinker_review.security_scan.tech import detect_tech, read_tech_json, write_tech_json
-from pythinker_review.llm.fake import FakeReviewLLM
-from pythinker_review.llm.protocol import ReviewLLM
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 

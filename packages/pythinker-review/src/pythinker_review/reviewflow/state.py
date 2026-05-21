@@ -10,12 +10,12 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from pythinker_review.reviewflow.models import (
-    ReviewflowConfig,
     FeatureLock,
     FeatureRecord,
     FindingRecord,
     PatchAttempt,
     ProjectRecord,
+    ReviewflowConfig,
     RunRecord,
 )
 

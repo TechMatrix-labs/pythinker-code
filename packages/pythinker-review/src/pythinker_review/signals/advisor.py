@@ -1,4 +1,4 @@
-"""DeepSec-style security advisor prompt context assembly."""
+"""Pythinker Security Scan advisor prompt context assembly."""
 
 from __future__ import annotations
 

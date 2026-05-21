@@ -4,16 +4,16 @@ import asyncio
 import json
 from pathlib import Path
 
+from pythinker_review.llm.fake import FakeReviewLLM
 from pythinker_review.security_scan.matchers import create_default_registry
 from pythinker_review.security_scan.processor import parse_investigate_results, process_project
 from pythinker_review.security_scan.prompt import assemble_prompt, batch_languages
 from pythinker_review.security_scan.scanner import scan_project
 from pythinker_review.security_scan.store import load_all_file_records, read_file_record
 from pythinker_review.security_scan.tech import detect_tech
-from pythinker_review.llm.fake import FakeReviewLLM
 
 
-def test_security-scan_registry_ports_all_source_matchers() -> None:
+def test_security_scan_registry_ports_all_source_matchers() -> None:
     registry = create_default_registry()
     assert len(registry.get_all()) == 198
     assert registry.get_by_slug("auth-bypass") is not None
@@ -21,7 +21,7 @@ def test_security-scan_registry_ports_all_source_matchers() -> None:
     assert registry.get_by_slug("py-fastapi-route") is not None
 
 
-def test_security-scan_scan_writes_file_records(tmp_path: Path) -> None:
+def test_security_scan_writes_file_records(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "pyproject.toml").write_text('dependencies = ["fastapi"]\n', encoding="utf-8")
@@ -43,7 +43,7 @@ def test_security-scan_scan_writes_file_records(tmp_path: Path) -> None:
     assert any(candidate.vuln_slug == "py-fastapi-route" for candidate in record.candidates)
 
 
-def test_security-scan_prompt_includes_system_policy_and_file(tmp_path: Path) -> None:
+def test_security_scan_prompt_includes_system_policy_and_file(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "pyproject.toml").write_text('dependencies = ["fastapi"]\n', encoding="utf-8")
@@ -64,12 +64,12 @@ def test_security-scan_prompt_includes_system_policy_and_file(tmp_path: Path) ->
         project_root=repo,
     )
 
-    assert "Pythinker Pythinker Security Scan" in assembled.system
+    assert "Pythinker Security Scan" in assembled.system
     assert "FastAPI" in assembled.system
     assert "app.py" in assembled.user
 
 
-def test_security-scan_parse_adds_empty_results_for_missing_files() -> None:
+def test_security_scan_parse_adds_empty_results_for_missing_files() -> None:
     payload = '[{"filePath":"a.py","findings":[]}]'
 
     class R:
@@ -82,7 +82,7 @@ def test_security-scan_parse_adds_empty_results_for_missing_files() -> None:
     assert {item["filePath"] for item in results} == {"a.py", "b.py"}
 
 
-def test_security-scan_process_uses_review_llm(tmp_path: Path) -> None:
+def test_security_scan_process_uses_review_llm(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "pyproject.toml").write_text('dependencies = ["fastapi"]\n', encoding="utf-8")

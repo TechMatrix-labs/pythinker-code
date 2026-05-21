@@ -5,17 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pythinker_review.llm.protocol import ReviewLLM
+from pythinker_review.reviewers.common import complete_typed_json
 from pythinker_review.reviewflow.models import (
-    ReviewflowConfig,
     FeatureRecord,
     FeatureReviewOutput,
     FindingRecord,
     FixPlanOutput,
     RevalidateOutput,
+    ReviewflowConfig,
 )
 from pythinker_review.reviewflow.utils import read_text_bounded
-from pythinker_review.llm.protocol import ReviewLLM
-from pythinker_review.reviewers.common import complete_typed_json
 
 REVIEW_SYSTEM = (
     "You are Pythinker Review running a pure-Python Reviewflow review.\n"

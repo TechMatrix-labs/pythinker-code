@@ -46,9 +46,10 @@ Commands:
   export   Export session data.
   mcp      Manage MCP server configurations.
   plugin   Manage plugins.
-  review   Diff-focused code review (delegates to pythinker-review).
-  secscan  Diff-focused security review (delegates to pythinker-review).
-  debug    Failure/log root-cause analysis (delegates to pythinker-review).
+  review          Diff-focused code review (delegates to pythinker-review).
+  secscan         Diff-focused security review (delegates to pythinker-review).
+  security-scan   Repo-wide Pythinker Security Scan pipeline (Python-native).
+  debug           Failure/log root-cause analysis (delegates to pythinker-review).
   update   Check for and install Pythinker CLI updates.
   vis      Run Pythinker Agent Tracing Visualizer.
   web      Run Pythinker CLI web interface.

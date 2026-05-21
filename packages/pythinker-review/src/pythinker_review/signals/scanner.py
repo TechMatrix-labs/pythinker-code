@@ -1,4 +1,4 @@
-"""Deterministic DeepSec-style security-signal scanner. Prompt anchors only."""
+"""Deterministic Pythinker Security Scan signal scanner. Prompt anchors only."""
 
 from __future__ import annotations
 

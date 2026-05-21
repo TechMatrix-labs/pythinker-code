@@ -1,4 +1,4 @@
-# Auto-generated during the Pythinker Security Scan Python migration from blackbox/security-scan-main.
+# Auto-generated during the Pythinker Security Scan Python migration from blackbox/deepsec-main.
 # Runtime code is pure Python; this file is static matcher metadata.
 
 GENERATED_MATCHERS = [

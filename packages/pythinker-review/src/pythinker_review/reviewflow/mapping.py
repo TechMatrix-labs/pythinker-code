@@ -13,7 +13,6 @@ from collections import defaultdict
 from pathlib import Path
 
 from pythinker_review.reviewflow.models import (
-    ReviewflowConfig,
     DetectedProject,
     FeatureEntrypoint,
     FeatureFileRef,
@@ -22,6 +21,7 @@ from pythinker_review.reviewflow.models import (
     GitInfo,
     ProjectCommands,
     ProjectRecord,
+    ReviewflowConfig,
 )
 from pythinker_review.reviewflow.utils import (
     discover_git,

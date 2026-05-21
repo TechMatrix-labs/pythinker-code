@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from pythinker_review.engine.token_budget import clip_text
 from pythinker_review.security_scan.models import FileRecord
 from pythinker_review.security_scan.tech import languages_for_paths
-from pythinker_review.engine.token_budget import clip_text
 
 _FRAMEWORK_SECTION_CHAR_BUDGET = 6_000
 _DEFAULT_FILE_CHAR_BUDGET = 8_000
