@@ -146,7 +146,7 @@ async def load_agents_md(work_dir: HostPath) -> str | None:
     # The annotation overhead (<!-- From: ... -->\n and \n\n separators)
     # is included in the budget so the final output never exceeds the limit.
     remaining = _AGENTS_MD_MAX_BYTES
-    budgeted: list[tuple[HostPath, str]] = [None] * len(discovered)  # type: ignore[list-item]
+    budgeted: list[tuple[HostPath, str] | None] = [None] * len(discovered)
     for i in reversed(range(len(discovered))):
         path, content = discovered[i]
         annotation = f"<!-- From: {path} -->\n"

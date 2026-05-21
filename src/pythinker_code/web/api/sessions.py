@@ -401,7 +401,6 @@ async def upload_session_file(
             while chunk := await file.read(64 * 1024):
                 size += len(chunk)
                 if size > MAX_UPLOAD_SIZE:
-                    out.close()
                     upload_path.unlink(missing_ok=True)
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -585,7 +584,7 @@ async def delete_session(
         save_metadata(metadata)
     session_dir = session.pythinker_code_session.dir
     if session_dir.exists():
-        shutil.rmtree(session_dir)
+        shutil.rmtree(session_dir, ignore_errors=True)
     invalidate_sessions_cache()
 
 
