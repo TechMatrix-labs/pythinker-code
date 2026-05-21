@@ -172,7 +172,11 @@ class ToolExecutionComponent:
         if not children:
             return Text("")
 
-        body: RenderableType = children[0] if len(children) == 1 else Group(*children)
+        if len(children) <= 1:
+            body: RenderableType = children[0] if children else Text("")
+        else:
+            # Insert blank line between call header (children[0]) and result/hints.
+            body = Group(children[0], Text(""), *children[1:])
 
         if self._definition.render_shell == "self":
             return body
