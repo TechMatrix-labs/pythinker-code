@@ -47,7 +47,6 @@ from pythinker_code.ui.shell.visualize._question_panel import (
     show_question_body_in_pager,
 )
 from pythinker_code.ui.shell.visualize._worklog import render_worklog_card
-from pythinker_code.ui.tui_config import is_card_style
 from pythinker_code.utils.aioqueue import Queue, QueueShutDown
 from pythinker_code.utils.logging import logger
 from pythinker_code.wire import WireUISide
@@ -83,6 +82,14 @@ from pythinker_code.wire.types import (
 MAX_LIVE_NOTIFICATIONS = 4
 EXTERNAL_MESSAGE_GRACE_S = 0.1
 _LIVE_VERTICAL_OVERFLOW: Literal["crop", "ellipsis", "visible"] = "ellipsis"
+_ACTION_SPACER = Text(" ")
+
+
+def _append_action_block(blocks: list[RenderableType], block: RenderableType) -> None:
+    """Append a live action block with a one-row gap after any previous action."""
+    if blocks:
+        blocks.append(_ACTION_SPACER)
+    blocks.append(block)
 
 
 @asynccontextmanager
@@ -357,46 +364,34 @@ class _LiveView:
         """
         blocks: list[RenderableType] = []
         if self._btw_spinner is not None:
-            blocks.append(self._btw_spinner)
+            _append_action_block(blocks, self._btw_spinner)
         if self._mcp_loading_spinner is not None:
-            blocks.append(self._mcp_loading_spinner)
+            _append_action_block(blocks, self._mcp_loading_spinner)
         elif self._compaction_block is not None:
-            blocks.append(self._compaction_block)
+            _append_action_block(blocks, self._compaction_block)
         else:
-            has_main_content = False
             if self._current_content_block is not None:
-                blocks.append(self._current_content_block.compose())
-                has_main_content = True
+                _append_action_block(blocks, self._current_content_block.compose())
             # When an approval panel is on-screen for a specific tool call, the
             # panel already previews the same command/diff that the pending tool
             # card would show. Suppress the matching card to avoid the duplicate.
             suppressed_tool_call_id: str | None = None
             if self._current_approval_request_panel is not None:
                 suppressed_tool_call_id = self._current_approval_request_panel.request.tool_call_id
-            first_tool_block = True
             for tool_call in list(self._tool_call_blocks.values()):
                 if (
                     suppressed_tool_call_id is not None
                     and tool_call.tool_call_id == suppressed_tool_call_id
                 ):
                     continue
-                # Blank-line spacer between consecutive tool cards so adjacent
-                # tinted backgrounds don't visually merge into one block. Use a
-                # single space rather than an empty Text so Rich keeps the row.
-                if not first_tool_block and is_card_style():
-                    blocks.append(Text(" "))
-                blocks.append(tool_call.compose())
-                has_main_content = True
-                first_tool_block = False
+                _append_action_block(blocks, tool_call.compose())
             if self._active_turn_depth > 0:
                 # Keep a stable activity indicator visible even while content or
                 # tool cards are already on-screen. This makes long-running
                 # background waits feel alive instead of frozen.
-                if has_main_content and is_card_style():
-                    blocks.append(Text(" "))
-                blocks.append(self._working_indicator())
+                _append_action_block(blocks, self._working_indicator())
         for notification in list(self._live_notification_blocks):
-            blocks.append(notification.compose())
+            _append_action_block(blocks, notification.compose())
         return blocks
 
     def _working_indicator(self) -> Text:

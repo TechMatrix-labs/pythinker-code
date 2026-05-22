@@ -31,3 +31,18 @@ def test_wide_markdown_table_renders_as_readable_records() -> None:
     assert "Suggested improvement:" in output
     assert "Priority: High" in output
     assert "Effort: XS" in output
+
+
+def test_fenced_code_block_renders_as_labeled_report_panel() -> None:
+    console = Console(width=72, record=True, color_system=None)
+    markdown = Markdown(
+        "## Example\n\n```python\ndef review_target() -> str:\n    return 'ok'\n```\n"
+    )
+
+    console.print(markdown)
+    output = console.export_text()
+
+    assert "python" in output
+    assert "def review_target" in output
+    assert "╭" in output
+    assert "╰" in output

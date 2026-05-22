@@ -156,6 +156,25 @@ def test_working_indicator_stays_visible_when_content_block_visible():
     assert "esc to interrupt" in rendered
 
 
+def test_action_spacer_between_content_and_spinner_in_all_tui_styles(monkeypatch):
+    """Streaming content and the activity spinner stay separated by one blank row."""
+    from rich.text import Text
+
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "pythinker")
+    view = _LiveView(StatusUpdate())
+    view.dispatch_wire_message(TurnBegin(user_input="test"))
+    view.dispatch_wire_message(StepBegin(n=1))
+    view.dispatch_wire_message(TextPart(text="Hello"))
+
+    agent_blocks = view.compose_agent_output()
+
+    assert len(agent_blocks) >= 3
+    assert isinstance(agent_blocks[-2], Text)
+    assert agent_blocks[-2].plain.strip() == ""
+    rendered = _render(agent_blocks[-1])
+    assert "esc to interrupt" in rendered
+
+
 def test_moon_fallback_after_all_tools_flushed(monkeypatch):
     """After all tool calls finish, moon fallback reappears automatically."""
     from pythinker_code.ui.shell.console import console as shell_console
@@ -203,6 +222,27 @@ def test_working_indicator_stays_visible_while_parallel_tool_still_running(monke
     rendered = _render(agent_blocks[-1])
     assert "Working" not in rendered
     assert "esc to interrupt" in rendered
+
+
+def test_action_spacer_between_parallel_tools_in_all_tui_styles(monkeypatch):
+    """Parallel tool action rows stay separated by one blank row."""
+    from rich.text import Text
+
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "pythinker")
+    view = _LiveView(StatusUpdate())
+    view.dispatch_wire_message(TurnBegin(user_input="test"))
+    view.dispatch_wire_message(_make_tool_call("call_1"))
+    view.dispatch_wire_message(_make_tool_call("call_2"))
+
+    agent_blocks = view.compose_agent_output()
+
+    spacer_indices = [
+        index
+        for index, block in enumerate(agent_blocks)
+        if isinstance(block, Text) and block.plain.strip() == ""
+    ]
+    assert spacer_indices
+    assert any(0 < index < len(agent_blocks) - 1 for index in spacer_indices)
 
 
 def test_moon_survives_status_update(monkeypatch):

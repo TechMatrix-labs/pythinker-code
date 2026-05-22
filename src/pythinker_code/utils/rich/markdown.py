@@ -15,6 +15,7 @@ from rich._stack import Stack
 from rich.console import Console, ConsoleOptions, JustifyMethod, RenderResult
 from rich.containers import Renderables
 from rich.jupyter import JupyterMixin
+from rich.panel import Panel
 from rich.rule import Rule
 from rich.segment import Segment
 from rich.style import Style, StyleStack
@@ -240,7 +241,20 @@ class CodeBlock(TextElement):
         highlighted.rstrip()
         stripped = _strip_background(highlighted)
         stripped.rstrip()
-        yield stripped
+        title = self.lexer_name if self.lexer_name and self.lexer_name != "text" else None
+        border_style = console.get_style(
+            "markdown.code_block.border",
+            default=_FALLBACK_STYLES["markdown.hr"],
+        )
+        yield Panel(
+            stripped,
+            title=title,
+            title_align="left",
+            box=box.ROUNDED,
+            border_style=border_style,
+            padding=(0, 1),
+            expand=True,
+        )
 
 
 class BlockQuote(TextElement):
