@@ -63,7 +63,7 @@ from pythinker_code.ui.shell.placeholders import (
     normalize_pasted_text,
     sanitize_surrogates,
 )
-from pythinker_code.ui.shell.spinner_words import spinner_frame, spinner_message
+from pythinker_code.ui.shell.spinner_words import spinner_message
 from pythinker_code.ui.theme import get_prompt_style, get_toolbar_colors
 from pythinker_code.utils.clipboard import (
     grab_media_from_clipboard,
@@ -142,50 +142,44 @@ class CwdLostError(OSError):
     """Raised when the working directory no longer exists (e.g. external drive unplugged)."""
 
 
+def _slash_command_token_before_cursor(document: Document) -> str | None:
+    """Return the active slash-command token, or ``None`` when completion should stay hidden."""
+    text = document.text_before_cursor
+
+    if document.text_after_cursor.strip():
+        return None
+
+    last_space = text.rfind(" ")
+    token = text[last_space + 1 :]
+    prefix = text[: last_space + 1] if last_space != -1 else ""
+
+    if prefix.strip() or not token.startswith("/"):
+        return None
+    return token
+
+
 class SlashCommandCompleter(Completer):
     """
     A completer that:
     - Shows one line per slash command using the canonical "/name"
-    - Fuzzy-matches by primary name or any alias while inserting the canonical "/name"
+    - Matches exact names first, then name/alias prefixes, while inserting the canonical "/name"
     - Only activates when the current token starts with '/'
     """
 
     def __init__(self, available_commands: Sequence[SlashCommand[Any]]) -> None:
         super().__init__()
-        self._available_commands = list(available_commands)
+        self._available_commands = sorted(available_commands, key=lambda c: c.name)
         self._command_lookup: dict[str, list[SlashCommand[Any]]] = {}
-        words: list[str] = []
 
-        for cmd in sorted(self._available_commands, key=lambda c: c.name):
-            if cmd.name not in self._command_lookup:
-                self._command_lookup[cmd.name] = []
-                words.append(cmd.name)
-            self._command_lookup[cmd.name].append(cmd)
+        for cmd in self._available_commands:
+            self._command_lookup.setdefault(cmd.name, []).append(cmd)
             for alias in cmd.aliases:
-                if alias in self._command_lookup:
-                    self._command_lookup[alias].append(cmd)
-                else:
-                    self._command_lookup[alias] = [cmd]
-                    words.append(alias)
-
-        self._word_pattern = re.compile(r"[^\s]+")
-        self._fuzzy_pattern = r"^[^\s]*"
-        self._word_completer = WordCompleter(words, WORD=False, pattern=self._word_pattern)
-        self._fuzzy = FuzzyCompleter(self._word_completer, WORD=False, pattern=self._fuzzy_pattern)
+                self._command_lookup.setdefault(alias, []).append(cmd)
 
     @staticmethod
     def should_complete(document: Document) -> bool:
         """Return whether slash command completion should be active for the current buffer."""
-        text = document.text_before_cursor
-
-        if document.text_after_cursor.strip():
-            return False
-
-        last_space = text.rfind(" ")
-        token = text[last_space + 1 :]
-        prefix = text[: last_space + 1] if last_space != -1 else ""
-
-        return not prefix.strip() and token.startswith("/")
+        return _slash_command_token_before_cursor(document) is not None
 
     @override
     def get_completions(
@@ -193,30 +187,43 @@ class SlashCommandCompleter(Completer):
     ) -> Iterable[Completion]:
         if not self.should_complete(document):
             return
-        text = document.text_before_cursor
-        last_space = text.rfind(" ")
-        token = text[last_space + 1 :]
+        token = _slash_command_token_before_cursor(document)
+        if token is None:
+            return
 
         typed = token[1:]
-        mention_doc = Document(text=typed, cursor_position=len(typed))
-        candidates = list(self._fuzzy.get_completions(mention_doc, complete_event))
-
+        typed_lower = typed.lower()
         seen: set[str] = set()
 
-        for candidate in candidates:
-            commands = self._command_lookup.get(candidate.text)
-            if not commands:
-                continue
-            for cmd in commands:
-                if cmd.name in seen:
-                    continue
-                seen.add(cmd.name)
-                yield Completion(
-                    text=f"/{cmd.name}",
-                    start_position=-len(token),
-                    display=f"/{cmd.name}",
-                    display_meta=cmd.description,
-                )
+        def emit(cmd: SlashCommand[Any]) -> Iterable[Completion]:
+            if cmd.name in seen:
+                return
+            seen.add(cmd.name)
+            yield Completion(
+                text=f"/{cmd.name}",
+                start_position=-len(token),
+                display=f"/{cmd.name}",
+                display_meta=cmd.description,
+            )
+
+        if not typed:
+            for cmd in self._available_commands:
+                yield from emit(cmd)
+            return
+
+        exact: list[SlashCommand[Any]] = []
+        prefix: list[SlashCommand[Any]] = []
+        for candidate, commands in self._command_lookup.items():
+            candidate_lower = candidate.lower()
+            if candidate_lower == typed_lower:
+                exact.extend(commands)
+            elif candidate_lower.startswith(typed_lower):
+                prefix.extend(commands)
+
+        for cmd in exact:
+            yield from emit(cmd)
+        for cmd in prefix:
+            yield from emit(cmd)
 
 
 def _truncate_to_width(text: str, width: int) -> str:
@@ -252,10 +259,72 @@ def _truncate_to_width(text: str, width: int) -> str:
     return "".join(chars) + ellipsis + (" " * max(0, width - total - ellipsis_width))
 
 
+def _formatted_text_display_rows(fragments: FormattedText, columns: int) -> list[FormattedText]:
+    """Split formatted text into terminal display rows, preserving styles."""
+    rows: list[FormattedText] = [FormattedText()]
+    col = 0
+    for style, text, *_ in fragments:
+        for ch in text:
+            if ch == "\n":
+                rows.append(FormattedText())
+                col = 0
+                continue
+            width = max(0, get_cwidth(ch))
+            if width and col + width > columns:
+                rows.append(FormattedText())
+                col = 0
+            rows[-1].append((style, ch))
+            col += width
+    return rows
+
+
+def _extend_rows(out: FormattedText, rows: list[FormattedText]) -> None:
+    for index, row in enumerate(rows):
+        out.extend(row)
+        if index != len(rows) - 1:
+            out.append(("", "\n"))
+
+
+def _background_task_summary(counts: BgTaskCounts) -> str | None:
+    total = counts.bash + counts.agent
+    if total <= 0:
+        return None
+    noun = "background task" if total == 1 else "background tasks"
+    parts: list[str] = []
+    if counts.bash:
+        parts.append(f"{counts.bash} bash")
+    if counts.agent:
+        parts.append(f"{counts.agent} agent")
+    detail = f" ({', '.join(parts)})" if parts else ""
+    return f"{total} {noun} running{detail} · /task to view"
+
+
+def _append_footer_hint_fragments(
+    fragments: list[tuple[str, str]],
+    tip_text: str,
+    *,
+    tip_style: str,
+    key_style: str,
+) -> None:
+    """Append toolbar tips with Codex-like key emphasis while preserving plain text."""
+    parts = tip_text.split(_TIP_SEPARATOR)
+    for index, part in enumerate(parts):
+        if index:
+            fragments.append((tip_style, _TIP_SEPARATOR))
+        key, sep, label = part.partition(": ")
+        if sep:
+            fragments.append((key_style, key))
+            fragments.append((tip_style, sep + label))
+        else:
+            fragments.append((tip_style, part))
+
+
 def _fit_formatted_text_to_rows(
     fragments: FormattedText,
     columns: int,
     max_rows: int,
+    *,
+    preserve_tail_rows: int = 0,
 ) -> FormattedText:
     """Crop prompt preamble text so it cannot cover the input/footer area.
 
@@ -263,66 +332,45 @@ def _fit_formatted_text_to_rows(
     prompt message grows taller than the terminal, the rendered tool card can
     visually run underneath the input row and footer. Count wrapped display rows
     and leave a compact truncation hint instead of allowing overlap.
+
+    ``preserve_tail_rows`` keeps important trailing status rows, such as the
+    live thinking-word spinner, visible when a tall tool card has to be clipped.
     """
     if max_rows <= 0:
         return FormattedText([])
     if columns <= 0:
         columns = 80
 
-    line_count = 1
-    col = 0
-    for _, text, *_ in fragments:
-        for ch in text:
-            if ch == "\n":
-                line_count += 1
-                col = 0
-                continue
-            width = max(0, get_cwidth(ch))
-            if width and col + width > columns:
-                line_count += 1
-                col = 0
-            col += width
-    if line_count <= max_rows:
+    rows = _formatted_text_display_rows(fragments, columns)
+    if len(rows) <= max_rows:
         return fragments
 
-    content_rows = max(0, max_rows - 1)
+    tail_rows: list[FormattedText] = []
+    if preserve_tail_rows > 0 and max_rows > 2:
+        for row in reversed(rows):
+            if not any(text for _, text, *_ in row):
+                continue
+            tail_rows.append(row)
+            if len(tail_rows) >= preserve_tail_rows:
+                break
+        tail_rows.reverse()
+        tail_rows = tail_rows[: max(0, max_rows - 2)]
+
+    content_rows = max(0, max_rows - 1 - len(tail_rows))
     if content_rows == 0:
-        return FormattedText([("class:dim", _truncate_right("… Ctrl+E expand", columns))])
+        return FormattedText(
+            [("class:dim", _truncate_right("… output clipped to fit terminal", columns))]
+        )
 
     out: FormattedText = FormattedText()
-    row = 1
-    col = 0
-    stop = False
-    for style, text, *_ in fragments:
-        if stop:
-            break
-        chunk: list[str] = []
-        for ch in text:
-            if ch == "\n":
-                if row >= content_rows:
-                    stop = True
-                    break
-                chunk.append(ch)
-                row += 1
-                col = 0
-                continue
-            width = max(0, get_cwidth(ch))
-            if width and col + width > columns:
-                if row >= content_rows:
-                    stop = True
-                    break
-                chunk.append("\n")
-                row += 1
-                col = 0
-            chunk.append(ch)
-            col += width
-        if chunk:
-            out.append((style, "".join(chunk)))
-
+    _extend_rows(out, rows[:content_rows])
     if out and not out[-1][1].endswith("\n"):
         out.append(("", "\n"))
-    clip_hint = _truncate_right("… output clipped to fit terminal · Ctrl+E expand", columns)
+    clip_hint = _truncate_right("… output clipped to fit terminal", columns)
     out.append(("class:dim", clip_hint))
+    if tail_rows:
+        out.append(("", "\n"))
+        _extend_rows(out, tail_rows)
     return out
 
 
@@ -561,6 +609,7 @@ class SlashCommandMenuControl(UIControl):
         completions = complete_state.completions
         selected_index = complete_state.complete_index
         available_rows = max(1, height)
+        match_prefix_len = self._match_prefix_len(app)
 
         menu_width = max(0, width - self._left_padding())
         marker_width = 2
@@ -587,6 +636,7 @@ class SlashCommandMenuControl(UIControl):
                         meta_width=meta_width,
                         gap_width=gap_width,
                         is_current=index == 0,
+                        match_prefix_len=match_prefix_len,
                     )
                 )
 
@@ -621,6 +671,7 @@ class SlashCommandMenuControl(UIControl):
                         meta_width=meta_width,
                         gap_width=gap_width,
                         meta_lines=selected_meta_lines,
+                        match_prefix_len=match_prefix_len,
                     )
                 )
                 continue
@@ -634,6 +685,7 @@ class SlashCommandMenuControl(UIControl):
                     meta_width=meta_width,
                     gap_width=gap_width,
                     is_current=False,
+                    match_prefix_len=match_prefix_len,
                 )
             )
 
@@ -642,6 +694,15 @@ class SlashCommandMenuControl(UIControl):
             line_count=len(rendered_lines),
             cursor_position=Point(x=0, y=selected_line_index),
         )
+
+    def _match_prefix_len(self, app: Any) -> int:
+        document = getattr(getattr(app, "current_buffer", None), "document", None)
+        if not isinstance(document, Document):
+            return 0
+        token = _slash_command_token_before_cursor(document)
+        if token is None:
+            return 0
+        return len(token[1:])
 
     def _selected_meta_lines(self, text: str, meta_width: int) -> list[str]:
         lines = _wrap_to_width(
@@ -691,6 +752,33 @@ class SlashCommandMenuControl(UIControl):
         maximum = max(minimum, min(28, usable_width // 2))
         return max(minimum, min(preferred, maximum))
 
+    def _render_command_text(
+        self,
+        text: str,
+        *,
+        width: int,
+        base_style: str,
+        is_current: bool,
+        match_prefix_len: int,
+    ) -> FormattedText:
+        display = _truncate_to_width(text, width)
+        if match_prefix_len <= 0:
+            return FormattedText([(base_style, display)])
+
+        # Match highlighting mirrors Codex's slash popup: the leading slash stays
+        # in the normal command style; the typed command prefix is emphasized.
+        match_end = min(len(text), 1 + match_prefix_len)
+        match_style = (
+            "class:slash-completion-menu.command.match.current"
+            if is_current
+            else "class:slash-completion-menu.command.match"
+        )
+        fragments: FormattedText = FormattedText()
+        for index, ch in enumerate(display):
+            style = match_style if 0 < index < match_end and index < len(text) else base_style
+            fragments.append((style, ch))
+        return fragments
+
     def _render_single_line_item(
         self,
         *,
@@ -701,6 +789,7 @@ class SlashCommandMenuControl(UIControl):
         meta_width: int,
         gap_width: int,
         is_current: bool,
+        match_prefix_len: int,
     ) -> FormattedText:
         padding_width = max(0, width - marker_width - command_width - meta_width - gap_width)
         left_padding = min(self._left_padding(), padding_width)
@@ -737,8 +826,14 @@ class SlashCommandMenuControl(UIControl):
         fragments: FormattedText = FormattedText()
         fragments.append(("class:slash-completion-menu", " " * left_padding))
         fragments.append((marker_style, marker.ljust(marker_width)))
-        fragments.append(
-            (command_style, _truncate_to_width(completion.display_text, command_width))
+        fragments.extend(
+            self._render_command_text(
+                completion.display_text,
+                width=command_width,
+                base_style=command_style,
+                is_current=is_current,
+                match_prefix_len=match_prefix_len,
+            )
         )
         fragments.append((gap_style, " " * gap_width))
         fragments.append((meta_style, _truncate_to_width(completion.display_meta_text, meta_width)))
@@ -755,6 +850,7 @@ class SlashCommandMenuControl(UIControl):
         meta_width: int,
         gap_width: int,
         meta_lines: Sequence[str],
+        match_prefix_len: int,
     ) -> list[FormattedText]:
         lines = [
             self._render_single_line_item(
@@ -770,6 +866,7 @@ class SlashCommandMenuControl(UIControl):
                 meta_width=meta_width,
                 gap_width=gap_width,
                 is_current=True,
+                match_prefix_len=match_prefix_len,
             )
         ]
 
@@ -1371,7 +1468,9 @@ class CustomPromptSession:
     ) -> None:
         history_dir = get_share_dir() / "user-history"
         history_dir.mkdir(parents=True, exist_ok=True)
-        work_dir_id = md5(str(HostPath.cwd()).encode(encoding="utf-8")).hexdigest()
+        work_dir_id = md5(
+            str(HostPath.cwd()).encode(encoding="utf-8"), usedforsecurity=False
+        ).hexdigest()
         self._history_file = (history_dir / work_dir_id).with_suffix(".jsonl")
         self._status_provider = status_provider
         self._status_block_provider = status_block_provider
@@ -1836,17 +1935,14 @@ class CustomPromptSession:
                 preamble,
                 columns,
                 _prompt_preamble_max_rows(getattr(size, "rows", None)),
+                preserve_tail_rows=1,
             )
             fragments.extend(preamble)
 
         if self._active_modal_delegate() is not None:
             return fragments
-        has_content = bool(preamble)
-        if has_content:
+        if preamble:
             fragments.append(("", "\n"))
-        # Shell mode: simple separator + $ prefix (no panel border)
-        fragments.append(("class:running-prompt-separator", "─" * max(0, columns)))
-        fragments.append(("", "\n"))
         fragments.append(("bold", f"{PROMPT_SYMBOL_SHELL} "))
         return fragments
 
@@ -2000,6 +2096,7 @@ class CustomPromptSession:
                 preamble,
                 columns,
                 _prompt_preamble_max_rows(getattr(size, "rows", None)),
+                preserve_tail_rows=1,
             )
             fragments.extend(preamble)
 
@@ -2007,8 +2104,6 @@ class CustomPromptSession:
         if self._active_modal_delegate() is not None:
             return fragments
 
-        fragments.append(("", "\n"))
-        fragments.append(("class:running-prompt-separator", "─" * max(0, columns)))
         fragments.append(("", "\n"))
         fragments.append(("class:compact-input.prompt", f"{PROMPT_SYMBOL_AGENT_INPUT} "))
         return fragments
@@ -2036,7 +2131,7 @@ class CustomPromptSession:
         if total <= 0:
             return FormattedText([])
         now = time.monotonic()
-        frame = spinner_frame(now)
+        frame = "●" if int(now / 0.8) % 2 == 0 else " "
         noun = "process" if total == 1 else "processes"
         detail = f"{total} background {noun}"
         if counts.agent and counts.bash:
@@ -2444,7 +2539,12 @@ class CustomPromptSession:
         if tip_text and _display_width(tip_text) > remaining:
             tip_text = self._get_one_rotating_tip()
         if tip_text and _display_width(tip_text) <= remaining:
-            fragments.append((tc.tip, tip_text))
+            _append_footer_hint_fragments(
+                fragments,
+                tip_text,
+                tip_style=tc.tip,
+                key_style=tc.tip_key,
+            )
 
         # ── line 2: toast (left) + context (right) — always rendered ──────
         fragments.append(("", "\n"))
@@ -2539,19 +2639,32 @@ class CustomPromptSession:
         right_text = "  ".join(right_parts)
         right_width = _display_width(right_text)
 
-        # Left side: prefer extension statuses, then any active toast.
+        # Left side: prefer extension statuses, then active background work,
+        # then any active toast. The background-work copy mirrors Codex's
+        # compact footer summary while keeping Pythinker's single /task command.
+        max_left_width = max(0, columns - right_width - 2)
         ext = footer_statuses()
         if ext:
             ordered = sorted(ext.items())
             ext_line = " ".join(f"{k}:{v}" for k, v in ordered)
-            ext_line = _truncate_right(ext_line, max(0, columns - right_width - 2))
+            ext_line = _truncate_right(ext_line, max_left_width)
             fragments.append((tc.tip, ext_line))
             left_width = _display_width(ext_line)
+        elif (
+            bg_summary := _background_task_summary(
+                self._background_task_count_provider()
+                if self._background_task_count_provider
+                else BgTaskCounts()
+            )
+        ) is not None:
+            bg_summary = _truncate_right(bg_summary, max_left_width)
+            fragments.append((tc.bg_tasks, bg_summary))
+            left_width = _display_width(bg_summary)
         else:
             left_toast = _current_toast("left")
             if left_toast is not None:
                 left_text = left_toast.message
-                left_text = _truncate_right(left_text, max(0, columns - right_width - 2))
+                left_text = _truncate_right(left_text, max_left_width)
                 fragments.append(("", left_text))
                 left_width = _display_width(left_text)
             else:

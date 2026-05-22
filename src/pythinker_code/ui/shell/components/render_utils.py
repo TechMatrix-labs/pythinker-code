@@ -68,6 +68,40 @@ def truncate_to_visual_lines(
     return VisualTruncateResult(visual[-max_visual_lines:], skipped)
 
 
+def truncate_middle_to_visual_lines(
+    text: str,
+    max_visual_lines: int,
+    width: int,
+    *,
+    hint: str = "Ctrl+E expand",
+) -> VisualTruncateResult:
+    """Truncate visual lines with a Codex-style head/tail ellipsis in the middle.
+
+    Unlike :func:`truncate_to_visual_lines`, this preserves both early context
+    and the most recent tail. This is better for terminal/tool output where the
+    first few lines identify the command/result and the tail often contains the
+    actionable failure.
+    """
+    full = truncate_to_visual_lines(text, max_visual_lines=10**9, width=width)
+    lines = full.visual_lines
+    if len(lines) <= max_visual_lines:
+        return VisualTruncateResult(lines, 0)
+    if max_visual_lines <= 0:
+        return VisualTruncateResult([], len(lines))
+
+    omitted = len(lines) - max_visual_lines + 1
+    ellipsis = f"… +{omitted} lines ({hint})" if hint else f"… +{omitted} lines"
+    ellipsis = truncate_to_width(ellipsis, width)
+    if max_visual_lines == 1:
+        return VisualTruncateResult([ellipsis], omitted)
+
+    remaining = max_visual_lines - 1
+    head_count = remaining // 2
+    tail_count = remaining - head_count
+    visible = [*lines[:head_count], ellipsis, *lines[-tail_count:]]
+    return VisualTruncateResult(visible, omitted)
+
+
 def cell_width(text: str) -> int:
     """Return terminal cell width of *text* (CJK-aware)."""
     return cell_len(text)

@@ -380,7 +380,7 @@ class MCPToolset:
     def _deduplicated_tool_name(self, base_name: str, *, original: str) -> str:
         if base_name not in self._tool_dict:
             return base_name
-        digest = hashlib.sha1(original.encode("utf-8")).hexdigest()[:8]
+        digest = hashlib.sha1(original.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
         suffix = f"_{digest}"
         candidate = f"{base_name[: _TOOL_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
         if candidate not in self._tool_dict:
@@ -395,7 +395,7 @@ def _safe_tool_name(name: str) -> str:
         safe = "mcp_tool"
     if len(safe) <= _TOOL_NAME_MAX_LENGTH:
         return safe
-    digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(name.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
     suffix = f"_{digest}"
     return f"{safe[: _TOOL_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
 

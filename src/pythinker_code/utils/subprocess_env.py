@@ -19,6 +19,14 @@ _PYINSTALLER_LD_VARS = [
     "LD_PRELOAD",
 ]
 
+# Process-local bearer tokens used by the web/visualization servers. They are
+# needed by those server processes at startup, but should not be inherited by
+# arbitrary child tools, plugins, hooks, git helpers, or shell commands.
+_INTERNAL_SESSION_TOKEN_VARS = {
+    "PYTHINKER_WEB_SESSION_TOKEN",
+    "PYTHINKER_VIS_SESSION_TOKEN",
+}
+
 
 def get_clean_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
     """
@@ -35,6 +43,8 @@ def get_clean_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
         A dictionary of environment variables safe for subprocess use.
     """
     env = dict(base_env if base_env is not None else os.environ)
+    for var in _INTERNAL_SESSION_TOKEN_VARS:
+        env.pop(var, None)
 
     # Only process in PyInstaller frozen environment on Linux
     if not getattr(sys, "frozen", False) or sys.platform != "linux":

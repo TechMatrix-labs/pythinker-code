@@ -25,6 +25,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     tool_title,
 )
 from pythinker_code.ui.theme import tui_rich_style
+from pythinker_code.utils.datetime import format_elapsed
 
 _TOOL_NAME = "Agent"
 _DEFAULT_COLLAPSED_LINES = 6
@@ -102,7 +103,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
         label = "background subagent working"
         if description:
             label = f"{label}: {description}"
-        line = loading_marker(pulse=False)
+        line = loading_marker()
         line.append(label, style=tui_rich_style("muted"))
         return Group(line, fg("dim", f"  status: {background_status}"))
     # Distinct success symbol so the eye doesn't mistake a finished subagent
@@ -118,6 +119,10 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     head.append_text(icon)
     head.append(" ")
     head.append("subagent finished", style=tui_rich_style("muted") + RichStyle(bold=True))
+    if ctx.elapsed_s is not None:
+        head.append(
+            f" · Crunched for {format_elapsed(ctx.elapsed_s)}", style=tui_rich_style("muted")
+        )
     if not body.plain:
         return head
     if remaining > 0:

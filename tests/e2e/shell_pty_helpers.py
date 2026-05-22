@@ -252,7 +252,9 @@ def start_shell_pty(
 
 
 def find_session_dir(home_dir: Path, work_dir: Path) -> Path:
-    path_md5 = hashlib.md5(str(work_dir.resolve()).encode("utf-8")).hexdigest()
+    path_md5 = hashlib.md5(
+        str(work_dir.resolve()).encode("utf-8"), usedforsecurity=False
+    ).hexdigest()
     sessions_root = home_dir / ".pythinker" / "sessions" / path_md5
     session_dirs = [path for path in sessions_root.iterdir() if path.is_dir()]
     if len(session_dirs) != 1:

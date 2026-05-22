@@ -3,7 +3,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from pythinker_code.ui.shell.console import console as shell_console
-from pythinker_code.ui.shell.visualize import _LiveView
+from pythinker_code.ui.shell.visualize import _LiveView, _PromptLiveView
 from pythinker_code.wire.types import Notification, StatusUpdate
 
 
@@ -13,12 +13,12 @@ def _render(renderable) -> str:
     return console.export_text()
 
 
-def _notification(index: int = 1) -> Notification:
+def _notification(index: int = 1, *, source_kind: str = "background_task") -> Notification:
     return Notification(
         id=f"n{index:07d}",
         category="task",
         type="task.completed",
-        source_kind="background_task",
+        source_kind=source_kind,
         source_id=f"b{index:07d}",
         title=f"Background task completed: build project {index}",
         body=(f"Task ID: b{index:07d}\nStatus: completed\nDescription: build project {index}"),
@@ -38,6 +38,37 @@ def test_live_view_renders_notification_block():
     assert "Task ID: b0000001" in rendered
     assert "Status: completed" in rendered
     assert "..." in rendered
+
+
+def test_prompt_live_view_suppresses_background_task_notifications(monkeypatch):
+    view = object.__new__(_PromptLiveView)
+    view._pending_local_steer_count = 0
+    view._btw_spinner = None
+
+    forwarded: list[Notification] = []
+    monkeypatch.setattr(
+        _LiveView, "dispatch_wire_message", lambda _self, msg: forwarded.append(msg)
+    )
+
+    view.dispatch_wire_message(_notification())
+
+    assert forwarded == []
+
+
+def test_prompt_live_view_keeps_non_background_task_notifications(monkeypatch):
+    view = object.__new__(_PromptLiveView)
+    view._pending_local_steer_count = 0
+    view._btw_spinner = None
+
+    forwarded: list[Notification] = []
+    monkeypatch.setattr(
+        _LiveView, "dispatch_wire_message", lambda _self, msg: forwarded.append(msg)
+    )
+
+    notification = _notification(source_kind="system")
+    view.dispatch_wire_message(notification)
+
+    assert forwarded == [notification]
 
 
 def test_cleanup_flushes_notifications_to_terminal_history(monkeypatch):

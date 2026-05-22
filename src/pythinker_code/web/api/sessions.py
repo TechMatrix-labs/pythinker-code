@@ -343,6 +343,11 @@ async def create_session(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Directory does not exist: {request.work_dir}",
                 )
+        # Re-resolve after any creation/existence checks so the session uses the
+        # final real path, and re-apply public-mode containment after potential
+        # filesystem changes.
+        work_dir_path = work_dir_path.resolve()
+        _ensure_session_work_dir_allowed(work_dir_path, http_request)
         if not work_dir_path.is_dir():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

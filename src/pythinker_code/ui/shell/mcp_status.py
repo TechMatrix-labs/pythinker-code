@@ -54,7 +54,8 @@ def render_mcp_prompt(snapshot: MCPStatusSnapshot, *, now: float | None = None) 
 
     fragments: list[tuple[str, str]] = []
     colors = get_mcp_prompt_colors()
-    prefix = "● " if snapshot.loading else ""
+    t = time.monotonic() if now is None else now
+    prefix = f"{'●' if int(t / 0.8) % 2 == 0 else ' '} "
     fragments.append(
         (
             colors.text,

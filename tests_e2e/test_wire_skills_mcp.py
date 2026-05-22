@@ -22,7 +22,7 @@ from tests_e2e.wire_helpers import (
 
 
 def _session_dir(home_dir: Path, work_dir: Path, session_id: str) -> Path:
-    digest = hashlib.md5(str(work_dir).encode("utf-8")).hexdigest()
+    digest = hashlib.md5(str(work_dir).encode("utf-8"), usedforsecurity=False).hexdigest()
     return share_dir(home_dir) / "sessions" / digest / session_id
 
 

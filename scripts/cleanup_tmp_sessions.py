@@ -43,7 +43,7 @@ def is_tmp_path(path: str) -> bool:
 
 
 def work_dir_hash(path: str, host: str = "local") -> str:
-    h = md5(path.encode("utf-8")).hexdigest()
+    h = md5(path.encode("utf-8"), usedforsecurity=False).hexdigest()
     return h if host == "local" else f"{host}_{h}"
 
 

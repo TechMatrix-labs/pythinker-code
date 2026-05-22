@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from rich.console import Console
 
 from pythinker_code.ui.shell import update
 
@@ -54,7 +55,7 @@ async def test_schedule_auto_update_check_notifies_when_update_is_available(monk
 
 @pytest.mark.asyncio
 async def test_do_update_on_windows_spawns_detached_and_exits(monkeypatch, tmp_path):
-    spawned: list[str] = []
+    spawned: list[list[str]] = []
 
     async def fake_get_latest(session):
         return "999.0.0"
@@ -63,7 +64,7 @@ async def test_do_update_on_windows_spawns_detached_and_exits(monkeypatch, tmp_p
     monkeypatch.setattr(update, "_get_latest_version", fake_get_latest)
     monkeypatch.setattr(update, "_is_windows", lambda: True)
 
-    def fake_spawn(cmd: str) -> bool:
+    def fake_spawn(cmd: list[str]) -> bool:
         spawned.append(cmd)
         return True
 
@@ -84,6 +85,26 @@ async def test_do_update_on_windows_spawns_detached_and_exits(monkeypatch, tmp_p
 
     assert excinfo.value.code == 0
     assert spawned and "pythinker-code" in spawned[0]
+
+
+def test_update_banner_uses_codex_style_release_prompt(monkeypatch):
+    rendered = Console(width=100, record=True, color_system=None)
+    monkeypatch.setattr(update, "console", rendered)
+    monkeypatch.setattr(
+        update,
+        "_detect_upgrade_command",
+        lambda: ["uv", "tool", "upgrade", "pythinker-code"],
+    )
+
+    update._render_update_banner("1.2.0", "1.3.0")
+    output = rendered.export_text()
+
+    assert "✨ Update available! 1.2.0 -> 1.3.0" in output
+    assert "Release notes:" in output
+    assert "pythinker update" in output
+    assert "uv tool upgrade pythinker-code" in output
+    assert "Update Available" not in output
+    assert "╭" not in output
 
 
 @pytest.mark.asyncio

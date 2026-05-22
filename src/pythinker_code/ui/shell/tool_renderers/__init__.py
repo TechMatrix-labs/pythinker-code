@@ -42,6 +42,9 @@ class ToolRenderContext:
         has_result: True after the final/partial result payload is attached.
         expanded: True when the user has expanded the card.
         is_error: True when the tool result was an error.
+        elapsed_s: Stable elapsed wall time after the tool finishes, or a live
+            elapsed value while it is still running.
+        width: Approximate terminal width available to the renderer.
         state: Per-renderer scratch dict — renderers can stash transient
             state across redraws here without touching the host component.
     """
@@ -55,6 +58,8 @@ class ToolRenderContext:
     has_result: bool = False
     expanded: bool = False
     is_error: bool = False
+    elapsed_s: float | None = None
+    width: int = 100
     state: dict[str, Any] = field(default_factory=dict[str, Any])
 
 

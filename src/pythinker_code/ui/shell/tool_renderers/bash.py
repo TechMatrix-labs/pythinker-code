@@ -95,7 +95,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
         expanded=ctx.expanded,
         header_suffix="".join(suffix_parts),
     )
-    return render_bash_execution(bash_state)
+    return render_bash_execution(bash_state, width=ctx.width)
 
 
 SHELL_RENDERER = ToolRenderDefinition(

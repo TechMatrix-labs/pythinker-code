@@ -80,7 +80,7 @@ def get_work_dir_for_hash(hash_dir_name: str) -> str | None:
     from pythinker_host.local import local_host
 
     for wd in metadata.work_dirs:
-        path_md5 = md5(wd.path.encode(encoding="utf-8")).hexdigest()
+        path_md5 = md5(wd.path.encode(encoding="utf-8"), usedforsecurity=False).hexdigest()
         dir_basename = path_md5 if wd.host == local_host.name else f"{wd.host}_{path_md5}"
         if dir_basename == hash_dir_name:
             return wd.path

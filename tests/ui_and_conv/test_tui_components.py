@@ -5,13 +5,16 @@ from __future__ import annotations
 from rich.text import Text
 
 from pythinker_code.ui.shell.components import (
+    BashExecutionState,
     TuiComponent,
     cell_width,
     dim,
     key_hint,
     raw_key_hint,
+    render_bash_execution,
     render_plain,
     sanitize_ansi,
+    truncate_middle_to_visual_lines,
     truncate_to_width,
 )
 
@@ -46,6 +49,35 @@ def test_truncate_to_width_handles_cjk():
     out = truncate_to_width("中文测试", 5)
     # 5 cells minus 1 ellipsis = 4 cells = up to 2 CJK chars + ellipsis = 5.
     assert cell_width(out) <= 5
+
+
+def test_truncate_middle_to_visual_lines_preserves_head_and_tail():
+    result = truncate_middle_to_visual_lines(
+        "\n".join(f"line {i}" for i in range(8)),
+        max_visual_lines=5,
+        width=80,
+    )
+
+    assert result.visual_lines == [
+        "line 0",
+        "line 1",
+        "… +4 lines (Ctrl+E expand)",
+        "line 6",
+        "line 7",
+    ]
+    assert result.skipped_count == 4
+
+
+def test_truncate_middle_to_visual_lines_counts_wrapped_lines():
+    result = truncate_middle_to_visual_lines(
+        "abcdefghijklmnopqrstuvwxyz1234",
+        max_visual_lines=2,
+        width=10,
+        hint="",
+    )
+
+    assert result.visual_lines == ["… +2 lines", "uvwxyz1234"]
+    assert result.skipped_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -172,3 +204,104 @@ def test_tui_component_protocol_rejects_missing_methods():
             return Text("nope")
 
     assert not isinstance(_Bad(), TuiComponent)
+
+
+# ---------------------------------------------------------------------------
+# Bash execution cell
+# ---------------------------------------------------------------------------
+
+
+def test_bash_execution_uses_codex_style_compact_layout():
+    out = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="printf hello",
+                output="hello\nworld",
+                status="complete",
+            )
+        ),
+        width=80,
+    )
+
+    assert "✔ Ran $ printf hello" in out
+    assert "⎿ hello" in out
+    assert "  world" in out
+    assert "─" not in out
+
+
+def test_bash_execution_error_shows_exit_without_border():
+    out = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="false",
+                output="nope",
+                status="error",
+                exit_code=2,
+            )
+        ),
+        width=80,
+    )
+
+    assert "✘ Ran $ false" in out
+    assert "exit 2" in out
+    assert "─" not in out
+
+
+def test_bash_execution_truncates_long_output_with_head_tail_preview():
+    out = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="pytest",
+                output="\n".join(f"line {i}" for i in range(8)),
+                status="error",
+                exit_code=1,
+            ),
+            width=80,
+        ),
+        width=80,
+    )
+
+    assert "⎿ line 0" in out
+    assert "line 1" in out
+    assert "… +4 lines (Ctrl+E expand)" in out
+    assert "line 6" in out
+    assert "line 7" in out
+    assert "line 3" not in out
+
+
+def test_bash_execution_truncates_wrapped_output_to_terminal_width():
+    out = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="printf",
+                output="abcdefghijklmnopqrstuvwx",
+                status="complete",
+            ),
+            width=8,
+        ),
+        width=40,
+    )
+
+    assert "… +" in out
+    assert "ijkl" not in out
+
+
+def test_bash_execution_running_marker_pulses(monkeypatch):
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.components.bash_execution.time.monotonic", lambda: 0.0
+    )
+    first = render_plain(
+        render_bash_execution(BashExecutionState(command="sleep 1", status="running")),
+        width=80,
+    )
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.components.bash_execution.time.monotonic", lambda: 0.9
+    )
+    second = render_plain(
+        render_bash_execution(BashExecutionState(command="sleep 1", status="running")),
+        width=80,
+    )
+
+    assert first != second
+    assert "● Running $ sleep 1" in first
+    assert "Running $ sleep 1" in second

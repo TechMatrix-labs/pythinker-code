@@ -19,6 +19,8 @@ from pythinker_code.ui.shell.prompt import (
     BgTaskCounts,
     CustomPromptSession,
     PromptMode,
+    SlashCommandCompleter,
+    SlashCommandMenuControl,
     UserInput,
     _build_toolbar_tips,
     _display_width,
@@ -33,6 +35,7 @@ from pythinker_code.ui.shell.prompt import (
     _truncate_right,
     toast,
 )
+from pythinker_code.utils.slashcmd import SlashCommand
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -299,6 +302,36 @@ def test_rotating_tips_rotation_and_wrap(index: int, expected_two: str, expected
     assert session._get_one_rotating_tip() == expected_one
 
 
+def test_footer_hint_fragments_emphasize_keys_without_changing_text() -> None:
+    fragments: list[tuple[str, str]] = []
+
+    shell_prompt._append_footer_hint_fragments(
+        fragments,
+        "ctrl-x: toggle mode | /theme: switch dark/light",
+        tip_style="tip",
+        key_style="key",
+    )
+
+    assert (
+        "".join(text for _, text in fragments) == "ctrl-x: toggle mode | /theme: switch dark/light"
+    )
+    assert fragments == [
+        ("key", "ctrl-x"),
+        ("tip", ": toggle mode"),
+        ("tip", " | "),
+        ("key", "/theme"),
+        ("tip", ": switch dark/light"),
+    ]
+
+
+def test_background_task_summary_uses_single_task_command() -> None:
+    assert shell_prompt._background_task_summary(BgTaskCounts()) is None
+    assert (
+        shell_prompt._background_task_summary(BgTaskCounts(bash=2, agent=1))
+        == "3 background tasks running (2 bash, 1 agent) · /task to view"
+    )
+
+
 # ── Toolbar overflow invariants ───────────────────────────────────────────────
 
 
@@ -370,6 +403,45 @@ def test_bottom_toolbar_shows_agent_badge_alone_when_no_bash(monkeypatch: Any) -
 
     assert "◇ bash" not in lines[1], f"bash badge must not appear when count is 0: {lines[1]!r}"
     assert "◇ agent: 2" in lines[1], f"agent badge missing: {lines[1]!r}"
+
+
+def test_background_working_status_uses_pulsing_circle(monkeypatch: Any) -> None:
+    prompt_session = _make_toolbar_session()
+    prompt_session._background_task_count_provider = lambda: BgTaskCounts(bash=0, agent=1)
+
+    monkeypatch.setattr(shell_prompt.time, "monotonic", lambda: 0.0)
+    first = "".join(text for _, text, *_ in prompt_session._render_background_working_status(80))
+    monkeypatch.setattr(shell_prompt.time, "monotonic", lambda: 0.9)
+    second = "".join(text for _, text, *_ in prompt_session._render_background_working_status(80))
+
+    assert first != second
+    assert first.startswith("● ")
+    assert "background agent" in first
+    assert "background agent" in second
+
+
+def test_card_toolbar_shows_codex_style_background_task_summary(monkeypatch: Any) -> None:
+    prompt_session = _make_toolbar_session(model_name="fast-model", tips=[])
+    prompt_session._background_task_count_provider = lambda: BgTaskCounts(bash=2, agent=1)
+
+    class _DummyOutput:
+        @staticmethod
+        def get_size() -> Any:
+            return SimpleNamespace(columns=120)
+
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "card")
+    monkeypatch.setattr(
+        shell_prompt, "get_app_or_none", lambda: SimpleNamespace(output=_DummyOutput())
+    )
+    monkeypatch.setattr(shell_prompt, "_get_git_branch", lambda: None)
+    monkeypatch.setattr(shell_prompt, "_shorten_cwd", lambda _: "~/proj")
+    monkeypatch.setattr("pythinker_code.extensions.footer_statuses", lambda: {})
+
+    rendered = prompt_session._render_bottom_toolbar()
+    plain = "".join(fragment[1] for fragment in rendered)
+
+    assert "3 background tasks running (2 bash, 1 agent) · /task to view" in plain
+    assert "/task list" not in plain
 
 
 def test_bottom_toolbar_drops_agent_badge_before_bash_when_narrow(monkeypatch: Any) -> None:
@@ -576,10 +648,10 @@ def test_git_status_not_called_when_branch_is_none(monkeypatch: Any) -> None:
     assert status_call_count == 0, "_get_git_status must not be called when branch is None"
 
 
-# ── Prompt layout (separator, running/idle message) ───────────────────────────
+# ── Prompt layout (Codex-style lower text area, running/idle message) ─────────
 
 
-def test_running_prompt_uses_shared_toolbar_and_separator_layout(monkeypatch: Any) -> None:
+def test_running_prompt_uses_shared_toolbar_and_codex_input_layout(monkeypatch: Any) -> None:
     width = 72
     prompt_session = object.__new__(CustomPromptSession)
     prompt_session._mode = PromptMode.AGENT
@@ -607,8 +679,8 @@ def test_running_prompt_uses_shared_toolbar_and_separator_layout(monkeypatch: An
 
     rendered_message = prompt_session._render_agent_prompt_message()
     plain_message = "".join(fragment[1] for fragment in rendered_message)
-    assert plain_message.startswith(f"live view ({width})\n\n")
-    assert plain_message.endswith(f"{'─' * width}\n› ")
+    assert plain_message == f"live view ({width})\n\n› "
+    assert "─" not in plain_message
     assert "input" not in plain_message
 
     _toast_queues["left"].clear()
@@ -649,9 +721,53 @@ def test_running_prompt_preamble_is_clipped_on_short_terminals(monkeypatch: Any)
     plain_message = "".join(fragment[1] for fragment in rendered_message)
 
     assert "output clipped to fit terminal" in plain_message
-    assert "Ctrl+E expand" in plain_message
+    assert "Ctrl+E expand" not in plain_message
     assert len(plain_message.splitlines()) <= rows - 3
-    assert plain_message.endswith(f"{'─' * width}\n› ")
+    assert plain_message.endswith("\n› ")
+    assert "─" not in plain_message
+
+
+def test_clipped_agent_status_preserves_thinking_indicator(monkeypatch: Any) -> None:
+    width = 80
+    rows = 12
+    prompt_session = object.__new__(CustomPromptSession)
+    prompt_session._mode = PromptMode.AGENT
+    prompt_session._model_name = None
+    prompt_session._status_provider = lambda: StatusSnapshot(context_usage=0.0)
+    prompt_session._background_task_count_provider = None
+    prompt_session._thinking = False
+
+    class _TallAgentStatus(_DummyRunningPrompt):
+        def render_agent_status(self, columns: int) -> str:
+            del columns
+            tool_output = "\n".join(f"tool output line {i}" for i in range(20))
+            return f"{tool_output}\n⠋ Prestigitating…"
+
+        def render_running_prompt_body(self, columns: int) -> str:
+            del columns
+            return ""
+
+    prompt_session._running_prompt_delegate = _TallAgentStatus()
+    prompt_session._modal_delegates = []
+
+    class _DummyOutput:
+        @staticmethod
+        def get_size() -> Any:
+            return SimpleNamespace(columns=width, rows=rows)
+
+    monkeypatch.setattr(
+        shell_prompt, "get_app_or_none", lambda: SimpleNamespace(output=_DummyOutput())
+    )
+
+    rendered_message = prompt_session._render_agent_prompt_message()
+    plain_message = "".join(fragment[1] for fragment in rendered_message)
+
+    assert "output clipped to fit terminal" in plain_message
+    assert "Prestigitating…" in plain_message
+    assert plain_message.index("output clipped to fit terminal") < plain_message.index(
+        "Prestigitating…"
+    )
+    assert len(plain_message.splitlines()) <= rows - 3
 
 
 def test_modal_prompt_hides_normal_separator_and_prompt_label(monkeypatch) -> None:
@@ -807,6 +923,87 @@ def test_slash_menu_layout_sits_below_compact_agent_input() -> None:
     assert slash_index == input_index + 1
 
 
+def _dummy_slash_func(*_args: Any, **_kwargs: Any) -> None:
+    return None
+
+
+def test_slash_completer_uses_codex_prefix_order_and_canonical_insertions() -> None:
+    completer = SlashCommandCompleter(
+        [
+            SlashCommand(
+                name="compact",
+                description="Compact the conversation",
+                func=_dummy_slash_func,
+                aliases=[],
+            ),
+            SlashCommand(
+                name="model",
+                description="Choose model",
+                func=_dummy_slash_func,
+                aliases=["mo"],
+            ),
+            SlashCommand(
+                name="memories",
+                description="Manage memories",
+                func=_dummy_slash_func,
+                aliases=[],
+            ),
+            SlashCommand(
+                name="action",
+                description="Run an action",
+                func=_dummy_slash_func,
+                aliases=[],
+            ),
+        ]
+    )
+
+    mo = list(
+        completer.get_completions(
+            shell_prompt.Document(text="/mo", cursor_position=3),
+            cast(Any, None),
+        )
+    )
+    assert [completion.text for completion in mo] == ["/model"]
+
+    ac = list(
+        completer.get_completions(
+            shell_prompt.Document(text="/ac", cursor_position=3),
+            cast(Any, None),
+        )
+    )
+    assert [completion.text for completion in ac] == ["/action"]
+
+
+def test_slash_menu_highlights_typed_command_prefix(monkeypatch: Any) -> None:
+    completions = [
+        Completion(
+            text="/model",
+            start_position=-3,
+            display="/model",
+            display_meta="Choose what model and reasoning effort to use",
+        )
+    ]
+    current_buffer = SimpleNamespace(
+        document=shell_prompt.Document(text="/mo", cursor_position=3),
+        complete_state=SimpleNamespace(completions=completions, complete_index=None),
+    )
+    monkeypatch.setattr(
+        shell_prompt,
+        "get_app_or_none",
+        lambda: SimpleNamespace(current_buffer=current_buffer),
+    )
+
+    content = SlashCommandMenuControl(left_padding=lambda: 0).create_content(width=60, height=5)
+    line = content.get_line(0)
+
+    assert "".join(text for _, text, *_ in line).lstrip().startswith("› /model")
+    highlighted = [(style, text) for style, text, *_ in line if "command.match" in style]
+    assert highlighted[:2] == [
+        ("class:slash-completion-menu.command.match.current", "m"),
+        ("class:slash-completion-menu.command.match.current", "o"),
+    ]
+
+
 def test_bottom_toolbar_hides_status_while_slash_menu_is_active(monkeypatch: Any) -> None:
     completions = [
         Completion(
@@ -874,7 +1071,7 @@ def test_modal_prompt_suspends_and_restores_existing_draft_when_input_is_hidden(
     assert prompt_session._suspended_buffer_document is None
 
 
-def test_idle_agent_prompt_uses_same_separator_layout(monkeypatch: Any) -> None:
+def test_idle_agent_prompt_uses_same_codex_input_layout(monkeypatch: Any) -> None:
     width = 64
     prompt_session = object.__new__(CustomPromptSession)
     prompt_session._running_prompt_delegate = None
@@ -892,7 +1089,8 @@ def test_idle_agent_prompt_uses_same_separator_layout(monkeypatch: Any) -> None:
 
     rendered_message = prompt_session._render_agent_prompt_message()
     plain_message = "".join(fragment[1] for fragment in rendered_message)
-    assert plain_message == f"\n{'─' * width}\n› "
+    assert plain_message == "\n› "
+    assert "─" not in plain_message
     assert "input" not in plain_message
 
 

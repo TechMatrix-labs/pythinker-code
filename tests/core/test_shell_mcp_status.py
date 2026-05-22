@@ -38,6 +38,9 @@ def test_render_mcp_servers_shows_live_loading_summary() -> None:
     assert "chrome-devtools (pending)" in output
 
     prompt_text = "".join(fragment[1] for fragment in render_mcp_prompt(snapshot, now=0.0))
+    prompt_text_off = "".join(fragment[1] for fragment in render_mcp_prompt(snapshot, now=0.9))
+    assert prompt_text != prompt_text_off
+    assert prompt_text.startswith("● ")
     assert "MCP Servers: 0/2 connected, 1 tools" in prompt_text
     assert "context7 (connecting, 1 tool)" in prompt_text
     assert "chrome-devtools (pending)" in prompt_text

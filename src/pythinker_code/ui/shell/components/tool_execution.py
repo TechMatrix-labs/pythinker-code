@@ -19,6 +19,7 @@ component renders an empty string (the ``hidden-component`` behavior).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -80,6 +81,8 @@ class ToolExecutionComponent:
     ) -> None:
         self._definition = definition
         self._state = _CallState(tool_name=tool_name, tool_call_id=tool_call_id, cwd=cwd)
+        self._started_at = time.monotonic()
+        self._finished_elapsed_s: float | None = None
         self._renderer_state: dict[str, Any] = {"__tool_name__": tool_name}
         self._status = ToolExecutionStatus.PENDING
 
@@ -107,6 +110,8 @@ class ToolExecutionComponent:
         if is_partial:
             self._status = ToolExecutionStatus.RUNNING
         else:
+            if self._finished_elapsed_s is None:
+                self._finished_elapsed_s = max(0.0, time.monotonic() - self._started_at)
             self._status = (
                 ToolExecutionStatus.ERROR if result.is_error else ToolExecutionStatus.SUCCESS
             )
@@ -141,7 +146,14 @@ class ToolExecutionComponent:
         *width* is accepted for protocol compatibility; Rich console width
         is the source of truth at print time.
         """
-        ctx = self._build_context()
+        if width <= 0:
+            try:
+                from pythinker_code.ui.shell.console import console
+
+                width = console.size.width
+            except Exception:  # noqa: BLE001 - rendering must not fail on width lookup
+                width = 100
+        ctx = self._build_context(width=width)
         children: list[RenderableType] = []
 
         if self._definition.render_call is not None:
@@ -196,7 +208,7 @@ class ToolExecutionComponent:
 
     # -- Internals -----------------------------------------------------------
 
-    def _build_context(self) -> ToolRenderContext:
+    def _build_context(self, *, width: int = 0) -> ToolRenderContext:
         return ToolRenderContext(
             args=self._state.args or {},
             tool_call_id=self._state.tool_call_id,
@@ -207,8 +219,17 @@ class ToolExecutionComponent:
             has_result=self._state.result is not None,
             expanded=self._state.expanded,
             is_error=self._state.result.is_error if self._state.result else False,
+            elapsed_s=self._elapsed_s(),
+            width=width if width > 0 else 100,
             state=self._renderer_state,
         )
+
+    def _elapsed_s(self) -> float | None:
+        if self._finished_elapsed_s is not None:
+            return self._finished_elapsed_s
+        if self._state.execution_started:
+            return max(0.0, time.monotonic() - self._started_at)
+        return None
 
     def _background_style(self) -> Style | None:
         if self._status == ToolExecutionStatus.SUCCESS:

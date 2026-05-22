@@ -43,6 +43,7 @@ from pythinker_code.ui.shell.components.render_utils import (
     render_message_response,
     render_plain,
     sanitize_ansi,
+    truncate_middle_to_visual_lines,
     truncate_to_visual_lines,
     truncate_to_width,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "render_skill_invocation",
     "render_user_message",
     "sanitize_ansi",
+    "truncate_middle_to_visual_lines",
     "truncate_to_visual_lines",
     "truncate_to_width",
 ]

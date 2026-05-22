@@ -1,8 +1,9 @@
 # Telemetry & error reporting
 
-Pythinker Code emits anonymous telemetry to help us spot crashes, regressions
-and silent failures. This page documents exactly what's collected, where it's
-sent, and how to opt out.
+Pythinker Code can emit anonymous telemetry to help us spot crashes,
+regressions, and silent failures. Telemetry is off by default; this page
+documents exactly what's collected, where it's sent, and how to opt in or force
+it off.
 
 ## Backends
 
@@ -168,17 +169,25 @@ When the user runs `/report-error`:
 If submission is unavailable or fails, the slash falls back to opening the
 GitHub issue tracker in a browser.
 
-## Opting out
+## Opting in or forcing off
 
-Set either of the following before launching `pythinker`:
+Telemetry is off by default. Set this before launching `pythinker` to enable
+Sentry and OTel emission for the process:
+
+- `PYTHINKER_ENABLE_TELEMETRY=1`
+
+Set either of the following before launching `pythinker` to force telemetry off:
 
 - `PYTHINKER_DISABLE_TELEMETRY=1` — kills both Sentry and OTel emission for
   the process. The `/feedback` slash command is **not** affected (it only
   fires on explicit user invocation).
+- `config.telemetry = false` in your config file (TOML) — same effect.
+
+Explicit feedback settings are independent of automatic telemetry:
+
 - `PYTHINKER_FEEDBACK_URL` — overrides where explicit `/feedback` and
   `/report-error` submissions are sent.
 - `PYTHINKER_FEEDBACK_API_KEY` — optional bearer token for that feedback endpoint.
-- `config.telemetry = false` in your config file (TOML) — same effect.
 
 Override individual endpoints when running your own collectors:
 

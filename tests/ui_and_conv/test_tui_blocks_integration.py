@@ -177,6 +177,27 @@ def test_card_style_running_subagent_uses_solid_circle(_force_card_style, monkey
     assert not any(frame in finished for frame in spinner_frames)
 
 
+def test_card_style_finished_subagent_shows_elapsed_time(_force_card_style, monkeypatch):
+    from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
+
+    register_builtin_renderers()
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.components.tool_execution.time.monotonic", lambda: 0.0
+    )
+    block = _ToolCallBlock(
+        _make_tool_call(name="Agent", args='{"description":"Audit UI","prompt":"check"}')
+    )
+
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.components.tool_execution.time.monotonic", lambda: 36.6
+    )
+    block.finish(_ok_result("done"))
+    rendered = render_plain(block.compose(), width=80)
+
+    assert "subagent finished" in rendered
+    assert "Crunched for 36s" in rendered
+
+
 def test_card_style_running_task_output_uses_solid_circle(_force_card_style, monkeypatch):
     from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
 
@@ -199,7 +220,7 @@ def test_card_style_running_task_output_uses_solid_circle(_force_card_style, mon
     assert not any(frame in rendered for frame in spinner_frames)
 
 
-def test_card_style_running_subagent_marker_is_stable(_force_card_style, monkeypatch):
+def test_card_style_running_subagent_marker_pulses(_force_card_style, monkeypatch):
     from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
 
     register_builtin_renderers()
@@ -207,14 +228,19 @@ def test_card_style_running_subagent_marker_is_stable(_force_card_style, monkeyp
         _make_tool_call(name="Agent", args='{"description":"Audit UI","prompt":"check"}')
     )
 
-    monkeypatch.setattr("pythinker_code.ui.shell.spinner_words.time.monotonic", lambda: 0.0)
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.tool_renderers._render_utils.time.monotonic", lambda: 0.0
+    )
     first = render_plain(block.compose(), width=80)
-    monkeypatch.setattr("pythinker_code.ui.shell.spinner_words.time.monotonic", lambda: 0.09)
+    monkeypatch.setattr(
+        "pythinker_code.ui.shell.tool_renderers._render_utils.time.monotonic", lambda: 0.9
+    )
     second = render_plain(block.compose(), width=80)
 
-    assert first == second
+    assert first != second
     assert "subagent" in first
     assert "●" in first
+    assert "subagent" in second
 
 
 def test_card_style_background_subagent_result_keeps_solid_circle(_force_card_style, monkeypatch):
@@ -249,7 +275,7 @@ def test_card_style_background_subagent_result_keeps_solid_circle(_force_card_st
     assert not any(frame in rendered for frame in spinner_frames)
 
 
-def test_card_style_background_subagent_marker_is_stable(_force_card_style, monkeypatch):
+def test_card_style_background_subagent_marker_pulses(_force_card_style, monkeypatch):
     from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
 
     register_builtin_renderers()
@@ -278,9 +304,10 @@ def test_card_style_background_subagent_marker_is_stable(_force_card_style, monk
     )
     second = render_plain(block.compose(), width=80)
 
-    assert first == second
+    assert first != second
     assert "background subagent working" in first
     assert "●" in first
+    assert "background subagent working" in second
 
 
 def test_card_style_lifecycle_marks_execution_started(_force_card_style):

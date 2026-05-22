@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shlex
 import subprocess
 import sys
 import time
@@ -10,6 +9,7 @@ from enum import Enum, auto
 from shutil import which
 
 import aiohttp
+from rich.text import Text
 
 from pythinker_code.share import get_share_dir
 from pythinker_code.ui.shell.console import console
@@ -21,7 +21,7 @@ CHANGELOG_URL_EN = "https://github.com/mohamed-elkholy95/Pythinker-Code/blob/mai
 
 # Default upgrade command. `_detect_upgrade_command()` overrides this when the
 # install method is recognizable from `sys.executable`.
-UPGRADE_COMMAND = "uv tool upgrade pythinker-code"
+UPGRADE_COMMAND = ["uv", "tool", "upgrade", "pythinker-code"]
 
 LATEST_VERSION_FILE = get_share_dir() / "latest_version.txt"
 SKIPPED_VERSION_FILE = get_share_dir() / "skipped_version.txt"
@@ -52,21 +52,35 @@ def semver_tuple(version: str) -> tuple[int, int, int]:
     return (major, minor, patch)
 
 
-def _detect_upgrade_command() -> str:
-    """Pick the right upgrade command based on how this interpreter was installed."""
+def _detect_upgrade_command() -> list[str]:
+    """Pick the right upgrade argv based on how this interpreter was installed."""
     exe = sys.executable.replace("\\", "/").lower()
     if "/uv/tools/" in exe:
-        return "uv tool upgrade pythinker-code"
+        return ["uv", "tool", "upgrade", "pythinker-code"]
     if "/pipx/venvs/" in exe:
-        return "pipx upgrade pythinker-code"
-    return f"{sys.executable} -m pip install --upgrade pythinker-code"
+        return ["pipx", "upgrade", "pythinker-code"]
+    return [sys.executable, "-m", "pip", "install", "--upgrade", "pythinker-code"]
+
+
+def _format_upgrade_command(command: list[str]) -> str:
+    if _is_windows():
+        return subprocess.list2cmdline(command)
+    return " ".join(shlex_quote(part) for part in command)
+
+
+def shlex_quote(value: str) -> str:
+    if not value:
+        return "''"
+    if re.fullmatch(r"[A-Za-z0-9_@%+=:,./-]+", value):
+        return value
+    return "'" + value.replace("'", "'\\''") + "'"
 
 
 def _is_windows() -> bool:
     return sys.platform == "win32"
 
 
-def _spawn_detached_windows_upgrade(upgrade_command: str) -> bool:
+def _spawn_detached_windows_upgrade(upgrade_command: list[str]) -> bool:
     """Launch the upgrade in a new console window that survives this process exit.
 
     Returns True if the helper was spawned. The new console sleeps a few seconds
@@ -82,10 +96,11 @@ def _spawn_detached_windows_upgrade(upgrade_command: str) -> bool:
     CREATE_NEW_PROCESS_GROUP = 0x00000200
     # `start "" cmd /k <inner>` opens a new console; `timeout` gives the parent
     # time to exit so the exe lock releases before the upgrade runs.
+    formatted_command = _format_upgrade_command(upgrade_command)
     inner = (
         "echo Waiting for Pythinker to exit... "
         "& timeout /t 3 /nobreak >nul "
-        f"& {upgrade_command} "
+        f"& {formatted_command} "
         "& echo. "
         "& echo Upgrade finished. Press any key to close this window. "
         "& pause >nul"
@@ -203,33 +218,29 @@ def print_update_banner() -> None:
     _render_update_banner(current_version, latest_version)
 
 
-def _render_update_banner(current_version: str, latest_version: str) -> None:
-    from rich.panel import Panel
-    from rich.text import Text
-
+def _update_banner_text(current_version: str, latest_version: str) -> Text:
     upgrade_command = _detect_upgrade_command()
-    body = Text.assemble(
-        ("New version ", ""),
-        (latest_version, "bold green"),
-        (" is available", ""),
-        (f" (current: {current_version}).", "grey50"),
-        ("\nRun ", ""),
+    upgrade_command_text = _format_upgrade_command(upgrade_command)
+    return Text.assemble(
+        ("  ✨ ", "bold cyan"),
+        ("Update available!", "bold"),
+        (f" {current_version} -> {latest_version}", "grey50"),
+        ("\n\n  Release notes: ", "grey50"),
+        (CHANGELOG_URL_EN, "grey50 underline"),
+        ("\n\n  ", ""),
+        ("1", "bold cyan"),
+        (". Run ", ""),
         ("pythinker update", "bold cyan"),
-        (" or: ", ""),
-        (upgrade_command, "bold"),
-        ("\nChangelog: ", "grey50"),
-        (CHANGELOG_URL_EN, "dodger_blue1"),
+        ("\n  ", ""),
+        ("2", "bold cyan"),
+        (". Or run ", ""),
+        (upgrade_command_text, "bold"),
     )
+
+
+def _render_update_banner(current_version: str, latest_version: str) -> None:
     console.print()
-    console.print(
-        Panel(
-            body,
-            title="[bold yellow]Update Available[/bold yellow]",
-            border_style="yellow",
-            expand=False,
-            padding=(0, 2),
-        )
-    )
+    console.print(_update_banner_text(current_version, latest_version))
 
 
 async def do_update(*, print: bool = True, check_only: bool = False) -> UpdateResult:
@@ -274,14 +285,15 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         return UpdateResult.UPDATE_AVAILABLE
 
     upgrade_command = _detect_upgrade_command()
+    upgrade_command_text = _format_upgrade_command(upgrade_command)
     logger.info(
         "Updating from {current_version} to {latest_version} via: {cmd}",
         current_version=current_version,
         latest_version=latest_version,
-        cmd=upgrade_command,
+        cmd=upgrade_command_text,
     )
     _print(f"Updating pythinker-code {current_version} → {latest_version}...")
-    _print(f"[grey50]Running: {upgrade_command}[/grey50]")
+    _print(f"[grey50]Running: {upgrade_command_text}[/grey50]")
 
     # On Windows, the running pythinker.exe holds an exclusive lock on its own
     # binary. Any in-process `uv tool upgrade` / `pip install --upgrade` fails
@@ -297,11 +309,11 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         sys.exit(0)
 
     try:
-        result = subprocess.run(shlex.split(upgrade_command))
+        result = subprocess.run(upgrade_command)
     except OSError as e:
         logger.exception("Upgrade failed:")
         _print(f"[red]Upgrade failed:[/red] {e}")
-        _print(f"Please run manually: {upgrade_command}")
+        _print(f"Please run manually: {upgrade_command_text}")
         return UpdateResult.FAILED
 
     if result.returncode == 0:
@@ -309,5 +321,5 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         _print("[yellow]Restart Pythinker CLI to use the new version.[/yellow]")
         return UpdateResult.UPDATED
     _print("[red]Upgrade failed. Please try running manually:[/red]")
-    _print(f"  {upgrade_command}")
+    _print(f"  {upgrade_command_text}")
     return UpdateResult.FAILED

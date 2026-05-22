@@ -14,6 +14,18 @@ def test_clean_env_does_not_set_git_vars():
     assert "GIT_SSH_COMMAND" not in env
 
 
+def test_clean_env_removes_internal_session_tokens():
+    env = get_clean_env(
+        base_env={
+            "PATH": "/usr/bin",
+            "PYTHINKER_WEB_SESSION_TOKEN": "web-secret",
+            "PYTHINKER_VIS_SESSION_TOKEN": "vis-secret",
+        }
+    )
+    assert "PYTHINKER_WEB_SESSION_TOKEN" not in env
+    assert "PYTHINKER_VIS_SESSION_TOKEN" not in env
+
+
 # --- get_noninteractive_env ---
 
 

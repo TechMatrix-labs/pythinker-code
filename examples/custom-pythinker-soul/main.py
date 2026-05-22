@@ -74,9 +74,17 @@ class MyBashTool(CallableTool2):
     params: type[MyBashParams] = MyBashParams
 
     async def __call__(self, params: MyBashParams) -> ToolReturnValue:
+        import shlex
         import subprocess
 
-        result = subprocess.run(params.command, shell=True, capture_output=True, text=True)
+        try:
+            argv = shlex.split(params.command)
+        except ValueError as exc:
+            return ToolError(output="", message=f"Invalid command: {exc}", brief="Invalid command")
+        if not argv:
+            return ToolError(output="", message="Command is empty", brief="Invalid command")
+
+        result = subprocess.run(argv, capture_output=True, text=True)
         if result.returncode != 0:
             return ToolError(
                 output=result.stdout,

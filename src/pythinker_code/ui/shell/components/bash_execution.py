@@ -2,23 +2,26 @@
 
 
 
-Render bash as a self-contained card with a dynamic top/bottom border,
-a ``$ <command>`` header, streaming output, and a footer with status.
+Render bash as a compact Codex-style execution cell: a lifecycle bullet,
+a ``$ <command>`` header, indented output, and small status/footer hints.
 We model the same shape as a stateless Rich renderable factory so callers
 (the bash tool renderer or future ``Shell`` history) can drive it.
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Literal
 
 from rich.console import Group, RenderableType
-from rich.rule import Rule
 from rich.style import Style as RichStyle
 from rich.text import Text
 
-from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
+from pythinker_code.ui.shell.components.render_utils import (
+    sanitize_ansi,
+    truncate_middle_to_visual_lines,
+)
 from pythinker_code.ui.theme import tui_rich_style
 
 __all__ = [
@@ -26,7 +29,7 @@ __all__ = [
     "render_bash_execution",
 ]
 
-PREVIEW_LINES = 20
+PREVIEW_LINES = 5
 
 BashStatus = Literal["pending", "running", "complete", "error", "cancelled"]
 
@@ -76,63 +79,86 @@ def _output_lines(output: str) -> list[str]:
     return cleaned.split("\n")
 
 
-def render_bash_execution(state: BashExecutionState) -> RenderableType:
-    """Build the bash card renderable for *state*."""
+def _pulsing_marker() -> Text:
+    glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+    return Text(f"{glyph} ", style=tui_rich_style("muted"))
+
+
+def _status_header(state: BashExecutionState) -> Text:
     accent = _accent_style(state)
-    header = Text(f"$ {state.command}", style=accent + RichStyle(bold=True))
+    if state.status in ("pending", "running"):
+        header = _pulsing_marker()
+        header.append("Running", style=tui_rich_style("muted") + RichStyle(bold=True))
+    elif state.status == "error":
+        header = Text("✘ ", style=tui_rich_style("error"))
+        header.append("Ran", style=tui_rich_style("error") + RichStyle(bold=True))
+    elif state.status == "cancelled":
+        header = Text("● ", style=tui_rich_style("warning"))
+        header.append("Cancelled", style=tui_rich_style("warning") + RichStyle(bold=True))
+    else:
+        header = Text("✔ ", style=tui_rich_style("success"))
+        header.append("Ran", style=tui_rich_style("success") + RichStyle(bold=True))
+
+    header.append(" ")
+    header.append("$ ", style=accent + RichStyle(bold=True))
+    header.append(state.command, style=accent + RichStyle(bold=True))
     if state.header_suffix:
         header.append(state.header_suffix, style=tui_rich_style("muted"))
+    return header
 
+
+def _display_output_lines(state: BashExecutionState, *, width: int) -> tuple[list[str], int]:
     lines = _output_lines(state.output)
-    if state.expanded or len(lines) <= PREVIEW_LINES:
-        display = lines
-        hidden = 0
-    else:
-        display = lines[-PREVIEW_LINES:]
-        hidden = len(lines) - len(display)
+    if state.expanded:
+        return lines, 0
+    visual_width = max(1, width - 4)
+    result = truncate_middle_to_visual_lines(
+        "\n".join(lines),
+        max_visual_lines=PREVIEW_LINES,
+        width=visual_width,
+        hint="Ctrl+E expand",
+    )
+    return result.visual_lines, result.skipped_count
 
-    output_block: RenderableType | None = None
-    if display:
-        muted = tui_rich_style("muted")
-        body = Text("\n".join(display))
-        body.stylize(muted)
-        output_block = body
+
+def _output_block(display: list[str]) -> Text | None:
+    if not display:
+        return None
+    body = Text(style=tui_rich_style("muted"))
+    for index, line in enumerate(display):
+        if index:
+            body.append("\n")
+        body.append("  ⎿ " if index == 0 else "    ")
+        body.append(line)
+    return body
+
+
+def render_bash_execution(state: BashExecutionState, *, width: int = 100) -> RenderableType:
+    """Build the bash card renderable for *state*."""
+    display, hidden = _display_output_lines(state, width=width)
 
     footer_lines: list[Text] = []
-    if hidden > 0:
-        if state.expanded:
-            footer_lines.append(
-                Text(
-                    "(ctrl+e to collapse)",
-                    style=tui_rich_style("muted"),
-                )
-            )
-        else:
-            footer_lines.append(
-                Text(
-                    f"... {hidden} more lines (ctrl+e to expand)",
-                    style=tui_rich_style("muted"),
-                )
-            )
+    if hidden > 0 and state.expanded:
+        footer_lines.append(Text("  ctrl+e to collapse", style=tui_rich_style("muted")))
     if state.status == "cancelled":
-        footer_lines.append(Text("(cancelled)", style=tui_rich_style("warning")))
+        footer_lines.append(Text("  cancelled", style=tui_rich_style("warning")))
     elif state.status == "error":
         code = state.exit_code if state.exit_code is not None else "?"
-        footer_lines.append(Text(f"(exit {code})", style=tui_rich_style("error")))
+        footer_lines.append(Text(f"  exit {code}", style=tui_rich_style("error")))
     elif state.status in ("pending", "running"):
-        footer_lines.append(Text("Running... (esc to cancel)", style=tui_rich_style("muted")))
+        footer_lines.append(Text("  esc to cancel", style=tui_rich_style("muted")))
 
     if state.truncated and state.full_output_path:
         footer_lines.append(
             Text(
-                f"Output truncated. Full output: {state.full_output_path}",
+                f"  output truncated · full output: {state.full_output_path}",
                 style=tui_rich_style("warning"),
             )
         )
 
-    children: list[RenderableType] = [Rule(style=accent), header]
-    if output_block is not None:
-        children.append(output_block)
+    children: list[RenderableType] = [_status_header(state)]
+    output = _output_block(display)
+    if output is not None:
+        children.append(output)
     children.extend(footer_lines)
-    children.append(Rule(style=accent))
     return Group(*children)

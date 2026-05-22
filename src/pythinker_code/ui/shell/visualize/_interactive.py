@@ -40,6 +40,7 @@ from pythinker_code.wire.types import (
     BtwBegin,
     BtwEnd,
     ContentPart,
+    Notification,
     StatusUpdate,
     SteerInput,
     StepInterrupted,
@@ -358,6 +359,13 @@ class _PromptLiveView(_LiveView):
         # Suppress parent's BtwBegin/BtwEnd spinner — btw is handled via modal
         if isinstance(msg, (BtwBegin, BtwEnd)):
             self._btw_spinner = None
+            return
+        if isinstance(msg, Notification) and msg.source_kind == "background_task":
+            # Interactive shell users already see background task completions as
+            # bottom-toolbar toasts from the shell notification watcher. Do not
+            # also inject them into the chat transcript/status area above the
+            # prompt, where they can look like part of the previous assistant
+            # answer.
             return
         super().dispatch_wire_message(msg)
 

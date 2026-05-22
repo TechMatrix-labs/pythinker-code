@@ -80,10 +80,10 @@ def run_shell_command(command: str, *, cwd: Path, timeout_s: float = 600.0) -> C
     """
     started = time.monotonic()
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S602 - trusted, user-configured command string
             command,
             cwd=cwd,
-            shell=True,  # noqa: S602 - trusted, user-configured
+            shell=True,
             check=False,
             capture_output=True,
             text=True,

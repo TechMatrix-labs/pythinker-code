@@ -117,8 +117,10 @@ _PROMPT_STYLE_DARK = {
     "slash-completion-menu.marker": "fg:#4a5568",
     "slash-completion-menu.marker.current": "fg:#8abeb7 bold",
     "slash-completion-menu.command": "fg:#a6adba",
+    "slash-completion-menu.command.match": "fg:#8abeb7 bold",
     "slash-completion-menu.meta": "fg:#7c8594",
     "slash-completion-menu.command.current": "bg:#3a3a4a fg:#8abeb7 bold",
+    "slash-completion-menu.command.match.current": "bg:#3a3a4a fg:#8abeb7 bold",
     "slash-completion-menu.meta.current": "bg:#3a3a4a fg:#a6adba",
     "slash-completion-menu.row.current": "bg:#3a3a4a",
 }
@@ -135,8 +137,10 @@ _PROMPT_STYLE_LIGHT = {
     "slash-completion-menu.marker": "fg:#9ca3af",
     "slash-completion-menu.marker.current": "fg:#5a8080 bold",
     "slash-completion-menu.command": "fg:#4b5563",
+    "slash-completion-menu.command.match": "fg:#5a8080 bold",
     "slash-completion-menu.meta": "fg:#6b7280",
     "slash-completion-menu.command.current": "bg:#d0d0e0 fg:#5a8080 bold",
+    "slash-completion-menu.command.match.current": "bg:#d0d0e0 fg:#5a8080 bold",
     "slash-completion-menu.meta.current": "bg:#d0d0e0 fg:#4b5563",
     "slash-completion-menu.row.current": "bg:#d0d0e0",
 }
@@ -157,6 +161,7 @@ class ToolbarColors:
     cwd: str
     bg_tasks: str
     tip: str
+    tip_key: str
 
 
 _TOOLBAR_DARK = ToolbarColors(
@@ -168,6 +173,7 @@ _TOOLBAR_DARK = ToolbarColors(
     cwd="fg:#666666",
     bg_tasks="fg:#888888",
     tip="fg:#555555",
+    tip_key="fg:#777777 bold",
 )
 
 _TOOLBAR_LIGHT = ToolbarColors(
@@ -179,6 +185,7 @@ _TOOLBAR_LIGHT = ToolbarColors(
     cwd="fg:#6b7280",
     bg_tasks="fg:#4b5563",
     tip="fg:#9ca3af",
+    tip_key="fg:#6b7280 bold",
 )
 
 

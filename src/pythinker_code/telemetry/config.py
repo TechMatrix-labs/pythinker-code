@@ -6,8 +6,9 @@ following the same industry convention used by Datadog RUM and PostHog public
 keys, mitigated server-side by rate limiting and PII scrubbing at the edge
 collector.
 
-Override any value at runtime with the matching environment variable. Disable
-telemetry entirely with ``PYTHINKER_DISABLE_TELEMETRY=1``.
+Override any value at runtime with the matching environment variable. Telemetry
+is off by default; enable it with ``PYTHINKER_ENABLE_TELEMETRY=1``. Disable
+telemetry explicitly with ``PYTHINKER_DISABLE_TELEMETRY=1``.
 """
 
 from __future__ import annotations
@@ -70,11 +71,17 @@ def is_test_environment() -> bool:
 def is_disabled() -> bool:
     """Master kill switch for external Sentry/OTel emission.
 
-    ``PYTHINKER_DISABLE_TELEMETRY=1`` disables telemetry explicitly. Pytest is
-    treated as disabled by default so test suites cannot leak deliberate test
-    failures to production telemetry backends.
+    Telemetry is opt-in: ``PYTHINKER_ENABLE_TELEMETRY=1`` must be set before
+    any external Sentry/OTel emission is attempted. ``PYTHINKER_DISABLE_TELEMETRY=1``
+    remains an explicit kill switch, and pytest is treated as disabled by default
+    so test suites cannot leak deliberate test failures to production telemetry
+    backends.
     """
-    return _env_truthy("PYTHINKER_DISABLE_TELEMETRY") or is_test_environment()
+    if _env_truthy("PYTHINKER_DISABLE_TELEMETRY"):
+        return True
+    if is_test_environment():
+        return True
+    return not _env_truthy("PYTHINKER_ENABLE_TELEMETRY")
 
 
 # ---------------------------------------------------------------------------

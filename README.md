@@ -574,10 +574,10 @@ Pythinker is the **agent framework**, not the LLM. You bring your own API key
 model's responses go directly between your terminal and the model provider you
 configured. Pythinker never sees, stores, or forwards them.
 
-To improve the framework itself we collect a small amount of **diagnostic
-telemetry** about how the agent runs. It's strictly anonymous, never includes
-your prompts, model output, file contents, file paths, or any user-identifying
-data. Two channels:
+If you opt in, Pythinker can collect a small amount of **diagnostic
+telemetry** about how the agent runs to improve the framework itself. It's
+strictly anonymous, never includes your prompts, model output, file contents,
+file paths, or any user-identifying data. Two channels:
 
 | Channel | What lands there | Endpoint |
 |---|---|---|
@@ -600,9 +600,16 @@ data. Two channels:
 - Your real name, email, IP address, hostname (host name field is dropped at the edge collector)
 - Tool arguments (e.g. what file you read, what command you ran)
 
-### Opting out
+### Opting in or forcing off
 
-Pick whichever fits your workflow — all three are equivalent:
+Telemetry is off by default. To enable it for a process:
+
+```sh
+export PYTHINKER_ENABLE_TELEMETRY=1
+pythinker
+```
+
+To force telemetry off even if another setting enabled it:
 
 ```sh
 # 1. Per-invocation CLI flag
@@ -617,9 +624,9 @@ pythinker
 telemetry = false
 ```
 
-Setting any of these at startup short-circuits Sentry initialization, OTel
-exporter creation, and the in-process event sink. No network requests are made
-to the telemetry endpoints.
+When telemetry is disabled, Pythinker short-circuits Sentry initialization,
+OTel exporter creation, and the in-process event sink. No network requests are
+made to the telemetry endpoints.
 
 ### Pointing telemetry at your own infrastructure
 
@@ -632,8 +639,8 @@ export PYTHINKER_OTEL_ENDPOINT="https://your-otel-collector.example.com"
 export PYTHINKER_OTEL_TOKEN="<your bearer token>"
 ```
 
-The defaults point at infrastructure operated by the pythinker maintainers; you
-don't need to set anything to use them.
+The defaults point at infrastructure operated by the pythinker maintainers;
+set `PYTHINKER_ENABLE_TELEMETRY=1` to use them.
 
 ---
 
