@@ -27,3 +27,18 @@ The implementation is complete only after the visual smoke command runs:
 ```bash
 uv run pythinker --yolo --prompt "scan code base "
 ```
+
+## Prompt And Agent Ideas Adapted
+
+| Blackbox source | Pythinker destination | Decision |
+| --- | --- | --- |
+| `constants/systemPromptSections.ts` | Pythinker agent spec prompts | Adapt only reusable terminal-behavior wording that improves tool/result summaries |
+| `tools/AgentTool/builtInAgents.ts` | `src/pythinker_code/agents/` | Adapt taxonomy ideas only when they match existing Pythinker subagent roles |
+| `services/toolUseSummary/` | UI-only tool summary labels | Use concise label style without adding another LLM call |
+| `skills/bundled/` | Pythinker skill system | Adopt only local, safe workflow ideas that fit existing skill loading |
+
+## Rejected Product-Specific Areas
+
+- Hosted account flows, Slack/GitHub app install surfaces, and remote-only services are not ported.
+- Analytics-specific prompt or metadata code is not ported.
+- Product names, proprietary service endpoints, and unrelated commands are not ported.
