@@ -50,22 +50,14 @@ It speaks the [**Agent Client Protocol (ACP)**](https://github.com/agentclientpr
 
 ---
 
-## 🆕 What's New in 0.11.0
+## 🆕 What's New in 0.12.0
 
-- **Fixed PyPI install conflict (was failing on Windows and every other platform).** The published `pythinker-core 1.1.0` capped `mcp<1.17` while `fastmcp==3.2.0` required `mcp>=1.24.0`, so `pip install pythinker-code==0.10.0` could not resolve. 0.11.0 pins the republished `pythinker-core 1.1.1` whose `mcp>=1.23,<2` constraint is compatible with `fastmcp`.
-- **Blackbox-style TUI port — phase 1.** New shell design primitives, compact transcript activity rows, motion status, standardized dialogs, aligned footer styling, and a restyled tool-result surface. The TUI now shares one visual language across rows, dialogs, and motion.
-- **Refreshed accent palette.** Dark/light TUI accent retuned to sky-blue (`#7dd3fc` / `#0284c7`) for better contrast on the new surfaces.
-- **Report + markdown polish.** Improved spacing and consistent code-block rendering in report output.
-- **Live stream + thinking indicators.** Rotating thinking-word indicator restored, with a leading space before the live stream status.
-- **Tool failure recovery improvements.** The agent loop now handles malformed or empty tool-call responses more gracefully and can continue the session instead of leaving the UI stuck after a bad provider turn.
-- **Safer file edits.** File write and replace tools now create restore points before mutating files, giving sessions a clearer recovery path after risky changes.
-- **Session UX state tracking.** Runtime session state now records additional UX metadata so shell surfaces can provide better continuity across long-running work.
-- **Shell command enhancements.** New shell slash-command plumbing improves discoverability and keeps interactive workflows smoother.
-- **TUI renderer polish.** Tool cards now share more consistent status glyphs, truncation behavior, and result summaries across bash, read, write, edit, grep, find, web, subagent, background, ask-user, and think renderers.
-- **Clipboard handling hardening.** Clipboard helpers now degrade more cleanly when platform clipboard access is unavailable.
-- **Release and TUI specs.** The repository now includes the blackbox TUI port design and a visual smoke-test criterion for future terminal UI work.
+- **Native Windows installer.** A `PythinkerSetup-0.12.0.exe` is now attached to every GitHub Release. One double-click installs Pythinker per-user with no UAC prompt, no Python / Node / uv prerequisite, and registers `pythinker` on your PATH automatically. Uninstall via Apps & Features reverses every change. See the new *Windows — native installer* section in Quick Start for details.
+- **In-app updates for the native build.** `pythinker update` from inside the native installer detects the build, fetches the latest installer from GitHub Releases, verifies its SHA-256, and re-runs it silently. The existing `PYTHINKER_CLI_NO_AUTO_UPDATE` env var now gates both the PyPI and native update flows — one opt-out, both paths.
+- **Tag-triggered Windows CI.** A new `.github/workflows/windows-installer.yml` runs on every `pythinker-code-v*` tag, freezes `pythinker` via PyInstaller (`--onedir`), compiles the Inno Setup script, signs the result when the Authenticode cert is available, and uploads the `.exe` + SHA-256 to the Release.
+- **Shell terminal rhythm refinements.** Tone tokens, motion timing, and the sky-blue accent palette (`#7dd3fc` / `#93c5fd`) were retuned so transcript rows, motion status, and dialog surfaces breathe consistently. UI snapshot tests updated to lock the new rhythm in place.
 
-Upgrade with `pythinker update` or `pip install --upgrade pythinker-code==0.11.0`.
+Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.12.0`, or — on Windows — download `PythinkerSetup-0.12.0.exe` from the [Releases page](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest).
 
 
 ---
