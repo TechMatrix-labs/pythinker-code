@@ -188,6 +188,33 @@ install_uv_quietly() {
 
 print_logo
 
+# ---------------------------------------------------------------------------
+# DEPRECATION NOTICE
+#
+# This uv-based shell installer is now a legacy install path. Pythinker
+# ships native installers for every supported OS; new tooling and support
+# docs target those installers exclusively.
+#
+# Recommended replacement:
+#   - macOS:    brew install mohamed-elkholy95/pythinker/pythinker-code
+#   - Linux:    sudo dpkg -i pythinker-code_*.deb  (or  sudo rpm -i ...)
+#   - macOS / Linux without a package manager:
+#       curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install-native.sh | bash
+#
+# This script continues to work for existing automation. Set
+# PYTHINKER_INSTALL_QUIET_DEPRECATION=1 to suppress this banner.
+# ---------------------------------------------------------------------------
+if [ -z "${PYTHINKER_INSTALL_QUIET_DEPRECATION:-}" ]; then
+  printf '\n  %s[DEPRECATED]%s This uv-based installer is now a legacy path.\n' \
+    "$BOLD$CORAL" "$RESET"
+  printf '  Prefer the native installer for your OS:\n'
+  printf '    %smacOS:%s   brew install mohamed-elkholy95/pythinker/pythinker-code\n' "$IRIS" "$RESET"
+  printf '    %sLinux:%s   sudo dpkg -i pythinker-code_*.deb   # or   sudo rpm -i ...\n' "$IRIS" "$RESET"
+  printf '    %sCross-OS:%s curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install-native.sh | bash\n' "$IRIS" "$RESET"
+  printf '  Continuing with the legacy uv install in 3s... (Ctrl-C to abort)\n\n'
+  sleep 3
+fi
+
 if command -v uv >/dev/null 2>&1; then
   ok "uv already installed ($(uv --version 2>/dev/null | awk '{print $2}'))"
 else

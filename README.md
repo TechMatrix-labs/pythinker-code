@@ -142,85 +142,131 @@ Swap providers and models per-session: `--model openai/gpt-5.5`, hosted Pythinke
 
 ## ⚡ Quick Start
 
-### 🪟 Windows — native installer (recommended)
+Pythinker ships **native installers for every platform**. Pick the row that
+matches your OS — no Python, Node, or `uv` prerequisite.
 
-`PythinkerSetup-x.y.z.exe` is attached to every GitHub Release. It bundles
-Pythinker as a self-contained executable — **you do not need Python, Node, or
-uv installed**, and there is no UAC / admin prompt.
+| Platform | One-line install | Artifact |
+|---|---|---|
+| **🪟 Windows** | Download + double-click `PythinkerSetup-x.y.z.exe` | [Releases](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest) |
+| **🍎 macOS (Apple Silicon + Intel)** | `brew install mohamed-elkholy95/pythinker/pythinker-code` | Homebrew tap |
+| **🐧 Linux (Debian / Ubuntu)** | `sudo dpkg -i pythinker-code_x.y.z_amd64.deb` | [Releases](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest) |
+| **🐧 Linux (Fedora / RHEL / openSUSE)** | `sudo rpm -i pythinker-code-x.y.z.x86_64.rpm` | [Releases](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest) |
+| **🌐 macOS / Linux — curl-bash** | `curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install-native.sh \| bash` | tarball |
 
-**Install in three steps:**
+> **Updates** — Once installed, `pythinker update` checks the GitHub Releases
+> API, verifies the new artifact's SHA-256, and re-runs the installer for you.
+> Set `PYTHINKER_CLI_NO_AUTO_UPDATE=1` to disable the startup update check.
 
-1. Download `PythinkerSetup-x.y.z.exe` and its `.sha256` companion from the
-   [latest Release](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest).
-2. (Optional, recommended) Verify the SHA-256:
-   ```powershell
-   Get-FileHash .\PythinkerSetup-x.y.z.exe -Algorithm SHA256
-   Get-Content  .\PythinkerSetup-x.y.z.exe.sha256
-   ```
-   The hash from `Get-FileHash` must match the one in the `.sha256` file.
-3. Double-click the installer. It writes to `%LOCALAPPDATA%\Programs\Pythinker`,
-   registers `pythinker` on your user PATH (`HKCU\Environment`), and broadcasts
-   `WM_SETTINGCHANGE` so any new shell window picks it up.
+> **Verifying downloads** — Every artifact ships with a matching `.sha256`
+> file. Verify before installing with `sha256sum`, `shasum -a 256`, or
+> PowerShell's `Get-FileHash` (see platform sections below).
 
-Open a fresh PowerShell and run `pythinker --version` to confirm.
+### 🪟 Windows native installer — details
 
-> 🛡 **First-launch SmartScreen warning** — until the Authenticode signing
-> cert is wired into the CI pipeline (see [build.ps1](./packages/windows-installer/build.ps1)
-> and the `WINDOWS_CERT_PFX_BASE64` / `WINDOWS_CERT_PASSWORD` secrets), the
-> installer ships unsigned and Windows SmartScreen will show *"Windows
-> protected your PC."* Click **More info → Run anyway**. The published
-> `.sha256` is your integrity check in the meantime.
-
-**Built-in auto-update:** running `pythinker update` from inside the native
-build queries the GitHub Releases API, downloads the newest installer,
-verifies its SHA-256, and re-runs it silently (`/VERYSILENT /SUPPRESSMSGBOXES
-/NORESTART`). Set `PYTHINKER_CLI_NO_AUTO_UPDATE=1` to disable the proactive
-update check on shell startup (this is the same opt-out the PyPI/uv install
-path uses — one knob, both flows).
-
-**Uninstall:** Apps & Features → *Pythinker Code* → Uninstall. The uninstaller
-removes the install directory and reverts the user-PATH edit. A new shell will
-no longer find `pythinker`.
-
-**Per-machine install** (multi-user / IT-managed boxes): pass `/ALLUSERS` to
-the installer from an admin console:
+`PythinkerSetup-x.y.z.exe` installs per-user to `%LOCALAPPDATA%\Programs\Pythinker`
+and adds `pythinker` to your user PATH (`HKCU\Environment`). No UAC prompt.
 
 ```powershell
-.\PythinkerSetup-x.y.z.exe /ALLUSERS
+# 1. Verify the download
+Get-FileHash .\PythinkerSetup-x.y.z.exe -Algorithm SHA256
+Get-Content  .\PythinkerSetup-x.y.z.exe.sha256
+
+# 2. Run the installer (double-click also works)
+.\PythinkerSetup-x.y.z.exe
+
+# 3. Open a fresh PowerShell
+pythinker --version
 ```
 
-This installs to `%ProgramFiles%\Pythinker` and registers PATH at the HKLM
-scope. The default (no flag) remains per-user.
+**Per-machine install** (IT-managed boxes): `.\PythinkerSetup-x.y.z.exe /ALLUSERS`
+installs to `%ProgramFiles%\Pythinker` and writes to HKLM.
 
-### ✨ Recommended install (clean, with logo)
+**Uninstall:** Apps & Features → *Pythinker Code* → Uninstall reverts both the
+files and the PATH edit.
+
+> 🛡 **First-launch SmartScreen warning** — until the Authenticode cert is in
+> CI, the installer ships unsigned and SmartScreen shows *"Windows protected
+> your PC."* Click **More info → Run anyway**. Use the published SHA-256 as
+> your integrity check.
+
+### 🍎 macOS — Homebrew
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install.sh | bash
+brew install mohamed-elkholy95/pythinker/pythinker-code
+brew upgrade pythinker-code   # manual updates; brew packages don't auto-update
 ```
 
-Windows PowerShell:
+Drops `pythinker` at `$(brew --prefix)/bin/pythinker`. Works on Apple Silicon
+and Intel; brew picks the right Python build for you.
 
-```powershell
+### 🐧 Linux — system packages
+
+Native packages are attached to every GitHub Release. Both `.deb` and `.rpm`
+are built for `x86_64` and `aarch64`:
+
+```sh
+# Debian / Ubuntu
+sudo dpkg -i pythinker-code_x.y.z_amd64.deb
+# If apt complains about missing deps:
+sudo apt-get install -f
+
+# Fedora / RHEL / openSUSE
+sudo rpm -i pythinker-code-x.y.z.x86_64.rpm
+# or:
+sudo dnf install ./pythinker-code-x.y.z.x86_64.rpm
+```
+
+Both packages drop `/usr/bin/pythinker` (a small launcher that execs the real
+binary under `/usr/lib/pythinker/`).
+
+### 🌐 macOS / Linux — curl-bash native installer
+
+For machines without a package manager (containers, fresh VMs), the
+[install-native.sh](./scripts/install-native.sh) helper downloads the right
+tarball for your OS + arch, verifies SHA-256, and installs to `~/.local/`.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install-native.sh | bash
+
+# Pin a specific version:
+curl -fsSL ...install-native.sh | bash -s -- --version 0.13.0
+```
+
+The script lands the binary at `~/.local/share/pythinker/` and symlinks
+`~/.local/bin/pythinker`. It prints PATH guidance if `~/.local/bin` isn't on
+your `$PATH`.
+
+### 🛠 Power-user / legacy install paths
+
+> 🚧 **Deprecated.** These paths still work, but the per-OS native installers
+> above are the canonical install method for **all new releases**. The legacy
+> options below remain for existing automation; new tooling, examples, and
+> support docs target the native installers exclusively.
+
+<details>
+<summary>Legacy shell-script wrappers + uv / pipx</summary>
+
+```sh
+# Legacy: uv-based shell-script wrappers (prints a deprecation banner on run)
+curl -fsSL https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install.sh | bash
+# Windows PowerShell wrapper:
 $installer = Join-Path $env:TEMP "pythinker-install.ps1"
 iwr -UseBasicParsing https://raw.githubusercontent.com/mohamed-elkholy95/Pythinker-Code/main/scripts/install.ps1 -OutFile $installer
 & $installer
 Remove-Item $installer
-```
 
-The installer fetches `uv` if missing, installs `pythinker-code` quietly, and prints a single-line confirmation instead of the full dependency wall. Windows downloads the script to a file (instead of `irm ... | iex`) so PowerShell antivirus scanning is less likely to block it, but it is invoked with `&` in the current session so PATH updates from `uv` are immediately visible — `pythinker` works without opening a new shell.
-
-### 🚀 One-off run with `uvx`
-
-```sh
+# Legacy: one-off run via uvx
 uvx pythinker-code
-```
 
-### 📦 Install as a uv tool
-
-```sh
+# Legacy: install as a uv tool
 uv tool install pythinker-code
-pythinker
+
+# Legacy: PyPI directly (universal fallback)
+pip install pythinker-code
+pipx install pythinker-code
 ```
+
+</details>
 
 ### 🔐 Authenticate (optional)
 

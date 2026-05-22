@@ -236,6 +236,27 @@ function Install-Uv {
 
 Print-Logo
 
+# ---------------------------------------------------------------------------
+# DEPRECATION NOTICE
+#
+# This uv-based PowerShell installer is now a legacy install path. The
+# canonical Windows install is the native PythinkerSetup-x.y.z.exe wizard
+# from the GitHub Releases page (no Python/uv prereq, no UAC prompt, real
+# uninstall via Apps & Features).
+#
+# Set PYTHINKER_INSTALL_QUIET_DEPRECATION=1 to suppress this banner.
+# ---------------------------------------------------------------------------
+if (-not $env:PYTHINKER_INSTALL_QUIET_DEPRECATION) {
+  Write-Host ""
+  Write-Host "  $BOLD$CORAL[DEPRECATED]$RESET This uv-based installer is now a legacy path."
+  Write-Host "  Prefer the native installer:"
+  Write-Host "    $IRIS Download:$RESET https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest"
+  Write-Host "    $IRIS Artifact:$RESET PythinkerSetup-x.y.z.exe (per-user, no UAC, signed once cert lands)"
+  Write-Host "  Continuing with the legacy uv install in 3s... (Ctrl-C to abort)"
+  Write-Host ""
+  Start-Sleep -Seconds 3
+}
+
 # Make sure ~/.local/bin (uv's tool-shim directory) is permanently on the
 # User PATH so the `pythinker` shim is found in any future shell. Idempotent.
 $pythinkerToolDir = Join-Path $env:USERPROFILE ".local\bin"
