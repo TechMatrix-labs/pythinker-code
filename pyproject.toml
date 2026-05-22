@@ -158,3 +158,9 @@ seeked = "seeked"
 iterm = "iterm"
 # Verbatim pyright CLI output ("0 informations") quoted in docs.
 informations = "informations"
+# Project/domain-specific names and generated IDs.
+reviewr = "reviewr"
+fnd = "fnd"
+edn = "edn"
+Encrypter = "Encrypter"
+uest = "uest"

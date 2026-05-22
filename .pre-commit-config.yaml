@@ -27,19 +27,19 @@ repos:
       # target the CI workflow runs (ruff check + ruff format --check +
       # pyright). Passing this hook means `check` will pass on the PR.
       - id: pre-push-ruff-format
-        name: pre-push: ruff format (auto-fix, blocks push if modified)
+        name: "pre-push: ruff format (auto-fix, blocks push if modified)"
         entry: make format-pythinker-code
         language: system
         stages: [pre-push]
         pass_filenames: false
       - id: pre-push-ruff-check-fix
-        name: pre-push: ruff check --fix (auto-fix lints)
+        name: "pre-push: ruff check --fix (auto-fix lints)"
         entry: bash -c "uv run ruff check --fix --exit-non-zero-on-fix"
         language: system
         stages: [pre-push]
         pass_filenames: false
       - id: pre-push-ci-check
-        name: pre-push: make check-pythinker-code (CI-equivalent gate)
+        name: "pre-push: make check-pythinker-code (CI-equivalent gate)"
         entry: make check-pythinker-code
         language: system
         stages: [pre-push]
