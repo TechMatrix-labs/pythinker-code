@@ -360,6 +360,7 @@ Run the smallest relevant gates during implementation, then before completion:
 
 - focused pytest targets for changed renderers
 - `make check-pythinker-code`
+- visual smoke test with `uv run pythinker --yolo --prompt "scan code base "`
 - targeted CLI smoke tests using `uv run pythinker --yolo --prompt ...` where practical
 
 If broader command surfaces are changed, add command-level parsing/rendering tests.
@@ -385,6 +386,9 @@ If broader command surfaces are changed, add command-level parsing/rendering tes
   introduced by the restyle.
 - Existing CLI flags, wire events, persisted sessions, approvals, and provider-aware behavior remain
   compatible.
+- `uv run pythinker --yolo --prompt "scan code base "` runs successfully enough to exercise the
+  live scan workflow, and the resulting TUI is visually evaluated for readable thinking status,
+  compact subagent/tool activity, stable footer/context display, and non-overlapping layout.
 - Focused UI tests and `make check-pythinker-code` pass before the implementation is called done.
 
 ---
