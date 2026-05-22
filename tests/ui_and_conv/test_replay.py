@@ -97,7 +97,7 @@ async def test_replay_recent_history_excludes_notifications(
 
     await replay_recent_history(history)
 
-    assert printed == ["✨ Real input", "✨ Second input"]
+    assert printed == ["› Real input", "› Second input"]
     assert not any("<notification" in p for p in printed)
 
 
@@ -180,7 +180,7 @@ async def test_replay_recent_history_falls_back_to_history_when_wire_misses_stee
 
     await replay_recent_history(history, wire_file=wire_file)
 
-    assert printed == ["✨ Original question", "✨ A steer follow-up"]
+    assert printed == ["› Original question", "› A steer follow-up"]
 
 
 @pytest.mark.asyncio
@@ -250,4 +250,4 @@ async def test_replay_recent_history_falls_back_to_history_when_duplicate_text_s
 
     await replay_recent_history(history, wire_file=wire_file)
 
-    assert printed == ["✨ hi", "✨ hi"]
+    assert printed == ["› hi", "› hi"]

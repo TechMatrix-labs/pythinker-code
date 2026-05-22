@@ -865,7 +865,7 @@ async def test_compose_agent_output_includes_spinners_and_tool_calls() -> None:
     view._active_turn_depth = 1  # working fallback requires active turn
 
     blocks = view.compose_agent_output()
-    assert any(isinstance(b, Text) and "esc to interrupt" in b.plain for b in blocks), (
+    assert any(isinstance(b, Text) and "…" in b.plain and "(" in b.plain for b in blocks), (
         "Should include activity indicator"
     )
     assert not any(isinstance(b, Text) and "Working" in b.plain for b in blocks)

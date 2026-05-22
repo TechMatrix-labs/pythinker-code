@@ -21,14 +21,18 @@ def test_reduced_motion_uses_static_glyph():
 
 def test_activity_status_line_contains_label_elapsed_tokens_and_interrupt_hint():
     line = activity_status_line(
-        ActivitySnapshot(label="Thinking", elapsed_s=12.0, tokens=2400, token_rate=42)
+        ActivitySnapshot(
+            label="Thinking",
+            elapsed_s=12.0,
+            tokens=2400,
+            token_rate=42,
+            interrupt_hint="esc to interrupt",
+        )
     )
     output = _plain(line)
-    assert "Thinking" in output
-    assert "12s" in output
-    assert "2.4k tokens" in output
-    assert "42 tok/s" in output
-    assert "esc to interrupt" in output
+    assert "Thinking…" in output
+    assert "(12s · ↓ 2.4k tokens · 42 t/s · esc)" in output
+    assert "esc to interrupt" not in output
 
 
 def test_activity_status_line_hides_secondary_parts_at_narrow_width():
@@ -38,4 +42,12 @@ def test_activity_status_line_hides_secondary_parts_at_narrow_width():
     )
     output = _plain(line)
     assert "Thinking" in output
-    assert "42 tok/s" not in output
+    assert "42 t/s" not in output
+
+
+def test_activity_status_line_uses_parenthesized_metadata():
+    line = activity_status_line(ActivitySnapshot(label="Pythinking", elapsed_s=30.0, tokens=1300))
+
+    output = _plain(line).strip()
+
+    assert "Pythinking… (30s · ↓ 1.3k tokens)" in output

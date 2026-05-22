@@ -221,14 +221,15 @@ def test_composing_live_label_uses_professional_activity_wording():
     assert "tokens" in output
 
 
-def test_thinking_status_line_shows_interrupt_hint():
+def test_thinking_status_line_uses_compact_activity_metadata():
     block = _ContentBlock(is_think=True)
     block.append("reasoning")
     console = Console(record=True, width=120, color_system=None)
     console.print(block.compose())
     output = console.export_text()
-    assert "Thinking" in output
-    assert "esc to interrupt" in output
+    assert "Thinking…" in output
+    assert "(" in output
+    assert "esc to interrupt" not in output
 
 
 class TestContentBlockCommitment:

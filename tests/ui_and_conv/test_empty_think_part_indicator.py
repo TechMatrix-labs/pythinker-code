@@ -166,7 +166,8 @@ def test_working_indicator_stays_visible_when_content_block_visible():
     assert agent_blocks[0].plain.strip() == ""
     rendered = _render(agent_blocks[-1])
     assert "Working" not in rendered
-    assert "esc to interrupt" in rendered
+    assert "…" in rendered
+    assert "(<1s)" in rendered
 
 
 def test_action_spacer_between_content_and_spinner_in_all_tui_styles(monkeypatch):
@@ -185,7 +186,8 @@ def test_action_spacer_between_content_and_spinner_in_all_tui_styles(monkeypatch
     assert isinstance(agent_blocks[-2], Text)
     assert agent_blocks[-2].plain.strip() == ""
     rendered = _render(agent_blocks[-1])
-    assert "esc to interrupt" in rendered
+    assert "…" in rendered
+    assert "(<1s)" in rendered
 
 
 def test_moon_fallback_after_all_tools_flushed(monkeypatch):
@@ -238,7 +240,8 @@ def test_working_indicator_stays_visible_while_parallel_tool_still_running(monke
     assert len(agent_blocks) >= 2
     rendered = _render(agent_blocks[-1])
     assert "Working" not in rendered
-    assert "esc to interrupt" in rendered
+    assert "…" in rendered
+    assert "(<1s)" in rendered
 
 
 def test_action_spacer_between_parallel_tools_in_all_tui_styles(monkeypatch):

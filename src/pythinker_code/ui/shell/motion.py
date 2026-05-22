@@ -23,7 +23,7 @@ class ActivitySnapshot:
     tokens: int = 0
     token_rate: int | None = None
     stalled: bool = False
-    interrupt_hint: str = "esc to interrupt"
+    interrupt_hint: str = ""
     reduced_motion: bool = False
 
 
@@ -46,12 +46,20 @@ def spinner_frame_at(elapsed_s: float, *, reduced_motion: bool = False) -> str:
 def _candidate_parts(snapshot: ActivitySnapshot) -> list[str]:
     parts = [format_elapsed(snapshot.elapsed_s)]
     if snapshot.tokens:
-        parts.append(f"{format_token_count(snapshot.tokens)} tokens")
+        parts.append(f"↓ {format_token_count(snapshot.tokens)} tokens")
     if snapshot.token_rate:
-        parts.append(f"{snapshot.token_rate} tok/s")
+        parts.append(f"{snapshot.token_rate} t/s")
     if snapshot.interrupt_hint:
-        parts.append(snapshot.interrupt_hint)
+        hint = "esc" if snapshot.interrupt_hint == "esc to interrupt" else snapshot.interrupt_hint
+        parts.append(hint)
     return parts
+
+
+def _activity_label(label: str) -> str:
+    stripped = label.rstrip()
+    if stripped.endswith(("…", "...")):
+        return stripped
+    return f"{stripped}…"
 
 
 def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None) -> Text:
@@ -62,7 +70,10 @@ def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None
         style=shell_style(glyph_style),
     )
     text.append(" ")
-    text.append(snapshot.label, style="italic" if snapshot.label.lower() == "thinking" else "")
+    text.append(
+        _activity_label(snapshot.label),
+        style="italic" if snapshot.label.lower() == "thinking" else "",
+    )
 
     parts = _candidate_parts(snapshot)
     if width is not None:
@@ -70,10 +81,10 @@ def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None
         kept: list[str] = []
         for part in parts:
             candidate = " · ".join([*kept, part])
-            if base_width + 2 + cell_width(candidate) <= width:
+            if base_width + 3 + cell_width(candidate) <= width:
                 kept.append(part)
         parts = kept
     if parts:
         text.append(" ")
-        text.append(" · ".join(parts), style=shell_style(ShellTone.MUTED))
+        text.append(f"({' · '.join(parts)})", style=shell_style(ShellTone.MUTED))
     return text

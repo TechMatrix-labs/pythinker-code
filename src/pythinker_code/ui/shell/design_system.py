@@ -37,11 +37,11 @@ StatusName = Literal[
 _TONE_STYLES: dict[ShellTone, Style] = {
     ShellTone.NORMAL: Style(color="default"),
     ShellTone.MUTED: Style(color="grey50"),
-    ShellTone.ACCENT: Style(color="cyan"),
+    ShellTone.ACCENT: Style(color="#7dd3fc"),
     ShellTone.SUCCESS: Style(color="green"),
     ShellTone.WARNING: Style(color="yellow"),
     ShellTone.ERROR: Style(color="red"),
-    ShellTone.INFO: Style(color="blue"),
+    ShellTone.INFO: Style(color="#93c5fd"),
 }
 
 _STATUS: dict[StatusName, tuple[str, ShellTone]] = {

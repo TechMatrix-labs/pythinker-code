@@ -10,7 +10,9 @@ from rich.style import Style as RichStyle
 from pythinker_code.ui.theme import (
     TuiTokens,
     get_active_theme,
+    get_markdown_colors,
     get_tui_tokens,
+    markdown_rich_style,
     set_active_theme,
     tui_rich_style,
 )
@@ -95,3 +97,11 @@ def test_tui_rich_style_empty_token_produces_empty_style():
 def test_tui_rich_style_unknown_token_raises():
     with pytest.raises(AttributeError):
         tui_rich_style("not_a_real_token")
+
+
+def test_dark_markdown_uses_lighter_blue_accents():
+    colors = get_markdown_colors("dark")
+
+    assert colors.link == "#93c5fd"
+    assert colors.spinner_active == "#7dd3fc"
+    assert markdown_rich_style("link", theme="dark").color is not None

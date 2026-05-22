@@ -219,7 +219,7 @@ def test_live_view_renders_steer_input_as_user_echo(monkeypatch) -> None:
     view.dispatch_wire_message(SteerInput(user_input=[TextPart(text="A steer follow-up")]))
 
     assert cleaned == [False]
-    assert printed == ["✨ A steer follow-up"]
+    assert printed == ["› A steer follow-up"]
 
 
 def test_live_view_flushes_current_output_before_printing_steer_input(monkeypatch) -> None:
@@ -238,7 +238,7 @@ def test_live_view_flushes_current_output_before_printing_steer_input(monkeypatc
     view.dispatch_wire_message(SteerInput(user_input=[TextPart(text="A steer follow-up")]))
 
     assert order[:2] == ["flush_content", "flush_tools"]
-    assert order[-1] == ("print", "✨ A steer follow-up")
+    assert order[-1] == ("print", "› A steer follow-up")
 
 
 @pytest.mark.asyncio
