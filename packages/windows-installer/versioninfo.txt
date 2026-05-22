@@ -1,0 +1,24 @@
+# Template consumed by PyInstaller via --version-file.
+# build.ps1 substitutes ${VERSION} with the tag (e.g. 0.11.0).
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(${VERSION_TUPLE}),
+    prodvers=(${VERSION_TUPLE}),
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'Pythinker'),
+         StringStruct(u'FileDescription', u'Pythinker Code CLI'),
+         StringStruct(u'FileVersion', u'${VERSION}'),
+         StringStruct(u'InternalName', u'pythinker'),
+         StringStruct(u'LegalCopyright', u'Copyright (c) Pythinker contributors'),
+         StringStruct(u'OriginalFilename', u'pythinker.exe'),
+         StringStruct(u'ProductName', u'Pythinker Code'),
+         StringStruct(u'ProductVersion', u'${VERSION}')])
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)
