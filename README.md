@@ -50,14 +50,15 @@ It speaks the [**Agent Client Protocol (ACP)**](https://github.com/agentclientpr
 
 ---
 
-## 🆕 What's New in 0.12.0
+## 🆕 What's New in 0.13.0
 
-- **Native Windows installer.** A `PythinkerSetup-0.12.0.exe` is now attached to every GitHub Release. One double-click installs Pythinker per-user with no UAC prompt, no Python / Node / uv prerequisite, and registers `pythinker` on your PATH automatically. Uninstall via Apps & Features reverses every change. See the new *Windows — native installer* section in Quick Start for details.
-- **In-app updates for the native build.** `pythinker update` from inside the native installer detects the build, fetches the latest installer from GitHub Releases, verifies its SHA-256, and re-runs it silently. The existing `PYTHINKER_CLI_NO_AUTO_UPDATE` env var now gates both the PyPI and native update flows — one opt-out, both paths.
-- **Tag-triggered Windows CI.** A new `.github/workflows/windows-installer.yml` runs on every `pythinker-code-v*` tag, freezes `pythinker` via PyInstaller (`--onedir`), compiles the Inno Setup script, signs the result when the Authenticode cert is available, and uploads the `.exe` + SHA-256 to the Release.
-- **Shell terminal rhythm refinements.** Tone tokens, motion timing, and the sky-blue accent palette (`#7dd3fc` / `#93c5fd`) were retuned so transcript rows, motion status, and dialog surfaces breathe consistently. UI snapshot tests updated to lock the new rhythm in place.
+- **Native installers for macOS and Linux.** `brew install mohamed-elkholy95/pythinker/pythinker-code` works on both macOS (Intel + Apple Silicon) and Linux brew installs. Debian/Ubuntu users get `pythinker-code_0.13.0_<arch>.deb`, Fedora/RHEL/openSUSE users get `pythinker-code-0.13.0.<arch>.rpm`, both built for `x86_64` and `aarch64`. Together with the Windows `PythinkerSetup-0.13.0.exe` shipped in 0.12.0, Pythinker now has a real native installer on every supported platform.
+- **Cross-OS `install-native.sh`.** `curl -fsSL .../install-native.sh | bash` auto-detects your OS + arch, verifies SHA-256, and lands `pythinker` at `~/.local/bin/`. The script is the no-package-manager fallback for containers and fresh VMs.
+- **Homebrew tap auto-publishes on every release.** A new tag-triggered workflow regenerates `Formula/pythinker-code.rb` (132 transitive deps enumerated automatically) and pushes it to [mohamed-elkholy95/homebrew-pythinker](https://github.com/mohamed-elkholy95/homebrew-pythinker). `brew upgrade pythinker-code` picks up new versions; no hand-curation per release.
+- **Frozen-binary fix for 0.12.0's installer.** The PyInstaller specs now bundle every `.md` / `.yaml` package data file (`prompts/`, `agents/`, `tools/*/description.md`, `skills/*/SKILL.md`). 0.12.0's Windows installer crashed on first prompt load — **upgrade to 0.13.0** to fix it.
+- **Legacy install paths deprecated.** The helper shell scripts (`install.sh`, `install.ps1`), `uvx`, `uv tool install`, `pipx install`, and bare `pip install` keep working but are now flagged as legacy. README Quick Start leads with the per-OS native installer table. Set `PYTHINKER_INSTALL_QUIET_DEPRECATION=1` to silence the deprecation banner in the helper scripts.
 
-Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.12.0`, or — on Windows — download `PythinkerSetup-0.12.0.exe` from the [Releases page](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest).
+Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.13.0`, or use the native installer for your platform from the [Releases page](https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest).
 
 
 ---
