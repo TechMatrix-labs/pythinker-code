@@ -43,7 +43,7 @@ SPINNER_VERBS: tuple[str, ...] = (
     "Channelling",
     "Choreographing",
     "Churning",
-    "Clauding",
+    "Pythinking",
     "Coalescing",
     "Cogitating",
     "Combobulating",

@@ -12,6 +12,8 @@ def test_spinner_verbs_match_blackbox_word_bank() -> None:
     """The shell spinner carries the full Blackbox loading-word bank."""
     assert len(SPINNER_VERBS) == 187
     assert SPINNER_VERBS[:3] == ("Accomplishing", "Actioning", "Actualizing")
+    assert "Pythinking" in SPINNER_VERBS
+    assert "Clauding" not in SPINNER_VERBS
     assert "Fiddle-faddling" in SPINNER_VERBS
     assert "Flibbertigibbeting" in SPINNER_VERBS
     assert "Whatchamacalliting" in SPINNER_VERBS
