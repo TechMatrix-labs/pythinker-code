@@ -404,7 +404,7 @@ class TuiTokens:
 
 
 _TUI_TOKENS_DARK = TuiTokens(
-    accent="#8abeb7",
+    accent="#7dd3fc",
     border="#5f87ff",
     border_accent="#00d7ff",
     border_muted="#505050",
@@ -434,7 +434,7 @@ _TUI_TOKENS_DARK = TuiTokens(
 
 
 _TUI_TOKENS_LIGHT = TuiTokens(
-    accent="#5a8080",
+    accent="#0284c7",
     border="#547da7",
     border_accent="#5a8080",
     border_muted="#b0b0b0",

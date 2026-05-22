@@ -54,6 +54,7 @@ It speaks the [**Agent Client Protocol (ACP)**](https://github.com/agentclientpr
 
 - **Fixed PyPI install conflict (was failing on Windows and every other platform).** The published `pythinker-core 1.1.0` capped `mcp<1.17` while `fastmcp==3.2.0` required `mcp>=1.24.0`, so `pip install pythinker-code==0.10.0` could not resolve. 0.11.0 pins the republished `pythinker-core 1.1.1` whose `mcp>=1.23,<2` constraint is compatible with `fastmcp`.
 - **Blackbox-style TUI port — phase 1.** New shell design primitives, compact transcript activity rows, motion status, standardized dialogs, aligned footer styling, and a restyled tool-result surface. The TUI now shares one visual language across rows, dialogs, and motion.
+- **Refreshed accent palette.** Dark/light TUI accent retuned to sky-blue (`#7dd3fc` / `#0284c7`) for better contrast on the new surfaces.
 - **Report + markdown polish.** Improved spacing and consistent code-block rendering in report output.
 - **Live stream + thinking indicators.** Rotating thinking-word indicator restored, with a leading space before the live stream status.
 - **Tool failure recovery improvements.** The agent loop now handles malformed or empty tool-call responses more gracefully and can continue the session instead of leaving the UI stuck after a bad provider turn.

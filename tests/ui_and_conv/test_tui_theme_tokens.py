@@ -33,7 +33,7 @@ def test_dark_tokens_have_pi_reference_values():
     assert t.tool_pending_bg == "#282832"
     assert t.tool_success_bg == "#283228"
     assert t.tool_error_bg == "#3c2828"
-    assert t.accent == "#8abeb7"
+    assert t.accent == "#7dd3fc"
 
 
 def test_light_tokens_have_pi_reference_values():
@@ -42,7 +42,7 @@ def test_light_tokens_have_pi_reference_values():
     assert t.tool_pending_bg == "#e8e8f0"
     assert t.tool_success_bg == "#e8f0e8"
     assert t.tool_error_bg == "#f0e8e8"
-    assert t.accent == "#5a8080"
+    assert t.accent == "#0284c7"
 
 
 def test_get_tui_tokens_with_explicit_theme_arg():
