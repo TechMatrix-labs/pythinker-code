@@ -84,10 +84,14 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     )
     if not body.plain:
         return None
+
+    line_count = result.text.count("\n") + (0 if result.text.endswith("\n") else 1)
+    noun = "line" if line_count == 1 else "lines"
+    summary = fg("muted", f"Read {line_count} {noun}")
     if remaining > 0:
         more = fg("muted", f"... ({remaining} more lines, ctrl+e to expand)")
-        return Group(body, more)
-    return body
+        return Group(summary, body, more)
+    return Group(summary, body)
 
 
 READ_RENDERER = ToolRenderDefinition(

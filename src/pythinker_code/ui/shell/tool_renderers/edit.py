@@ -97,6 +97,13 @@ def _change_summary(added: int, removed: int) -> Text:
     return fg("tool_output", summary)
 
 
+def _diff_frame(diff_renderable: RenderableType, *, width: int) -> Group:
+    """Blackbox-style diff frame: dashed horizontal rails, no side border."""
+    rule_width = max(8, min(width, 100))
+    rule = Text("-" * rule_width, style="dim")
+    return Group(rule, diff_renderable, rule)
+
+
 def _render_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     raw_path = as_str(args.get("path"))
@@ -133,7 +140,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
     if not diff_text:
         return head
     added, removed = _diff_counts(diff_text)
-    diff_renderable = render_diff(diff_text)
+    diff_renderable = _diff_frame(render_diff(diff_text), width=ctx.width or 80)
     return Group(head, _change_summary(added, removed), Text(""), diff_renderable)
 
 

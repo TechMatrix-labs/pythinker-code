@@ -19,7 +19,8 @@ from rich.text import Text
 from pythinker_code.ui.shell.components.bash_execution import (
     BashExecutionState,
     BashStatus,
-    render_bash_execution,
+    format_bash_command_for_header,
+    render_bash_result_output,
 )
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
@@ -38,17 +39,9 @@ _TOOL_NAME = "Shell"
 
 
 def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
-    """Header for the call.
-
-    When the result is already in hand we suppress the header — the
-    bordered :func:`render_bash_execution` block produced by
-    :func:`_render_result` already contains the ``$ <command>`` line and
-    a free-floating header above it would look like a duplicate.
-    """
+    """Render the stable shell tool header before any output rows."""
     args = ctx.args or {}
     command = as_str(args.get("command"))
-    if ctx.has_result and command:
-        return None
     timeout = args.get("timeout")
     run_in_background = bool(args.get("run_in_background"))
 
@@ -60,7 +53,10 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
         else:
             line.append_text(fg("tool_output", "..."))
     else:
-        line.append(command, style=bash_mode + RichStyle(bold=True))
+        line.append(
+            format_bash_command_for_header(command, expanded=ctx.expanded),
+            style=bash_mode + RichStyle(bold=True),
+        )
 
     if isinstance(timeout, int) and timeout != 60:
         line.append_text(fg("muted", f" (timeout {timeout}s)"))
@@ -72,7 +68,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
-    """Render a Pythinker bordered shell card with output, status, exit code."""
+    """Render shell output/status under the shared response gutter."""
     args = ctx.args or {}
     command = as_str(args.get("command")) or ""
     if not command:
@@ -95,7 +91,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
         expanded=ctx.expanded,
         header_suffix="".join(suffix_parts),
     )
-    return render_bash_execution(bash_state, width=ctx.width)
+    return render_bash_result_output(bash_state, width=ctx.width)
 
 
 SHELL_RENDERER = ToolRenderDefinition(

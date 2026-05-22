@@ -496,11 +496,18 @@ class Anthropic:
             if tool_call.function.arguments:
                 try:
                     parsed_arguments = json.loads(tool_call.function.arguments, strict=False)
-                except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
-                    raise ChatProviderError("Tool call arguments must be valid JSON.") from exc
-                if not isinstance(parsed_arguments, dict):
-                    raise ChatProviderError("Tool call arguments must be a JSON object.")
-                tool_input = cast(dict[str, object], parsed_arguments)
+                except json.JSONDecodeError:
+                    # A prior streamed response can be interrupted after a tool_use
+                    # starts but before Anthropic finishes emitting its input JSON.
+                    # The tool layer records that as a ToolParseError so the model
+                    # can recover on the next turn; do not crash while replaying
+                    # that historical assistant message back to Anthropic.
+                    tool_input = {}
+                else:
+                    if isinstance(parsed_arguments, dict):
+                        tool_input = cast(dict[str, object], parsed_arguments)
+                    else:
+                        tool_input = {}
             else:
                 tool_input = {}
             blocks.append(

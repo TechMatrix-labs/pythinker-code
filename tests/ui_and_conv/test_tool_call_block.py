@@ -106,6 +106,19 @@ def test_tool_call_block_renders_failed_worklog_entry():
     assert "exit code 1" in output
 
 
+def test_card_result_text_includes_error_message_before_output():
+    result = ToolError(
+        message="Pattern `**/*.py` starts with '**' which is not allowed.",
+        output="src/\npackages/",
+        brief="Unsafe pattern",
+    )
+
+    text = _ToolCallBlock._card_result_text(result)
+
+    assert text.startswith("Pattern `**/*.py` starts")
+    assert "src/" in text
+
+
 def test_tool_call_block_truncates_long_shell_command_target():
     command = "python - <<'PY'\n" + "print('x')\n" * 20 + "PY"
     block = _ToolCallBlock(_tool_call("Bash", json.dumps({"command": command})))

@@ -67,11 +67,13 @@ def test_read_renders_path_and_range():
     assert "read" in rendered
     assert "src/foo.py" in rendered
     assert ":10-39" in rendered
+    assert "Read 2 lines" in rendered
 
 
 def test_read_collapses_long_output_with_hint():
     body = "\n".join(f"line {i}" for i in range(20))
     rendered = _render("ReadFile", {"path": "/repo/x.py"}, output=body)
+    assert "Read 20 lines" in rendered
     assert "line 0" in rendered
     assert "more lines" in rendered  # collapse hint
 
@@ -118,6 +120,7 @@ def test_edit_renders_inline_diff():
     assert "Added 1 line" in rendered
     assert "return 1" in rendered
     assert "return 2" in rendered
+    assert "---" in rendered
 
 
 def test_edit_multi_count_in_header():
@@ -175,6 +178,23 @@ def test_shell_renders_command_and_output():
     rendered = _render("Shell", {"command": "ls -la", "timeout": 60}, output="total 0")
     assert "$ ls -la" in rendered
     assert "total 0" in rendered
+
+
+def test_shell_collapses_long_command_and_reports_output_lines():
+    command = "\n".join(["echo first", "echo second", "echo third"])
+    output = "\n".join(f"line {i}" for i in range(8))
+    rendered = _render("Shell", {"command": command, "timeout": 60}, output=output)
+    assert "echo first" in rendered
+    assert "echo second" in rendered
+    assert "echo third" not in rendered
+    assert "8 lines · ctrl+e expand" in rendered
+
+
+def test_shell_uses_comment_label_for_long_script():
+    command = "# build assets\n" + "\n".join(f"echo {i}" for i in range(5))
+    rendered = _render("Shell", {"command": command, "timeout": 60}, output="ok")
+    assert "$ build assets" in rendered
+    assert "echo 0" not in rendered
 
 
 def test_shell_shows_timeout_only_when_nondefault():
@@ -288,9 +308,28 @@ def test_todo_renders_status_icons_and_counts():
     )
     assert "todos" in rendered
     assert "1/3 done" in rendered
+    assert "1 active" in rendered
+    assert "1 pending" in rendered
+    assert "├─" in rendered
+    assert "└─" in rendered
     assert "Write spec" in rendered
     assert "Implement" in rendered
     assert "Test" in rendered
+
+
+def test_todo_infers_nested_items_from_leading_spaces():
+    rendered = _render(
+        "SetTodoList",
+        {
+            "todos": [
+                {"title": "Parent", "status": "in_progress"},
+                {"title": "  Child", "status": "pending"},
+            ]
+        },
+    )
+    assert "├─" in rendered
+    assert "  └─" in rendered
+    assert "Child" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -383,19 +422,16 @@ def test_card_renders_compact_without_outer_padding():
     assert lines[-1] == "⎿  foo.py"
 
 
-def test_card_has_blank_line_between_header_and_result():
-    """A blank line must appear between the command title and the result body."""
+def test_card_places_result_immediately_under_response_gutter():
+    """Tool output should follow the header immediately under the response gutter."""
     rendered = _render("Glob", {"pattern": "*.py", "directory": "/repo"}, output="foo.py\nbar.py")
     lines = [line.strip() for line in rendered.splitlines()]
-    # locate the header line (contains "find" and the pattern)
     header_idx = next(
         (i for i, line in enumerate(lines) if "find" in line and "*.py" in line), None
     )
     assert header_idx is not None, "header line not found in rendered output"
-    # the line immediately after the header must be blank
-    assert lines[header_idx + 1] == "", (
-        f"expected blank spacer after header at index {header_idx}, got {lines[header_idx + 1]!r}"
+    assert lines[header_idx + 1].startswith("⎿  foo.py"), (
+        f"expected response gutter after header at index {header_idx}, "
+        f"got {lines[header_idx + 1]!r}"
     )
-    # the result must appear after the spacer
-    result_lines = lines[header_idx + 2 :]
-    assert any("foo.py" in line for line in result_lines), "result not found after spacer"
+    assert any("bar.py" in line for line in lines[header_idx + 2 :])

@@ -40,6 +40,16 @@ from pythinker_code.utils.slashcmd import SlashCommand
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
 
+def test_shortcut_help_popup_fits_narrow_columns() -> None:
+    prompt_session = object.__new__(CustomPromptSession)
+
+    fragments = prompt_session._render_shortcut_help(columns=20)
+    plain = "".join(fragment[1] for fragment in fragments)
+
+    assert "Shortcuts" in plain
+    assert all(len(line) <= 20 for line in plain.splitlines())
+
+
 def test_prompt_toolkit_keyprocessor_shutdown_noise_is_filtered() -> None:
     unraisable = SimpleNamespace(
         exc_value=KeyError("__import__"),
@@ -56,6 +66,22 @@ def test_other_unraisable_exceptions_are_not_filtered() -> None:
     )
 
     assert not shell_prompt._is_prompt_toolkit_keyprocessor_shutdown_noise(unraisable)
+
+
+def test_prompt_toolkit_empty_exception_context_is_filtered() -> None:
+    assert shell_prompt._is_prompt_toolkit_empty_exception_context({"exception": None})
+    assert shell_prompt._is_prompt_toolkit_empty_exception_context(
+        {"exception": None, "message": "Task was destroyed but it is pending!"}
+    )
+
+
+def test_prompt_toolkit_real_exception_context_is_not_filtered() -> None:
+    assert not shell_prompt._is_prompt_toolkit_empty_exception_context(
+        {"exception": RuntimeError("boom")}
+    )
+    assert not shell_prompt._is_prompt_toolkit_empty_exception_context(
+        {"exception": None, "message": "unexpected loop failure"}
+    )
 
 
 class _DummyRunningPrompt:
@@ -723,8 +749,7 @@ def test_running_prompt_preamble_is_clipped_on_short_terminals(monkeypatch: Any)
     assert "output clipped to fit terminal" in plain_message
     assert "Ctrl+E expand" not in plain_message
     assert len(plain_message.splitlines()) <= rows - 3
-    assert plain_message.endswith("\n› ")
-    assert "─" not in plain_message
+    assert plain_message.endswith(f"\n{'─' * width}\n  › ")
 
 
 def test_clipped_agent_status_preserves_thinking_indicator(monkeypatch: Any) -> None:
@@ -768,6 +793,7 @@ def test_clipped_agent_status_preserves_thinking_indicator(monkeypatch: Any) -> 
         "Prestigitating…"
     )
     assert len(plain_message.splitlines()) <= rows - 3
+    assert plain_message.endswith(f"\n{'─' * width}\n  › ")
 
 
 def test_modal_prompt_hides_normal_separator_and_prompt_label(monkeypatch) -> None:
@@ -794,6 +820,47 @@ def test_modal_prompt_hides_normal_separator_and_prompt_label(monkeypatch) -> No
     assert plain_message == f"live view ({width})\n"
     assert f"\n{'─' * width}\n" not in plain_message
     assert not plain_message.endswith(f"{PROMPT_SYMBOL} ")
+
+
+def test_modal_prompt_preserves_modal_body_when_agent_status_is_tall(monkeypatch) -> None:
+    width = 72
+    rows = 12
+    prompt_session = object.__new__(CustomPromptSession)
+    prompt_session._mode = PromptMode.AGENT
+    prompt_session._model_name = None
+    prompt_session._status_provider = lambda: StatusSnapshot(context_usage=0.0)
+    prompt_session._background_task_count_provider = None
+    prompt_session._thinking = False
+
+    class _TallStatus(_DummyRunningPrompt):
+        def render_agent_status(self, columns: int) -> str:
+            del columns
+            return "\n".join(f"old output {i}" for i in range(20))
+
+    class _Modal(_DummyRunningPrompt):
+        def render_running_prompt_body(self, columns: int) -> str:
+            del columns
+            return "approval body\n[1] Approve\n[2] Reject"
+
+    prompt_session._running_prompt_delegate = _TallStatus()
+    prompt_session._modal_delegates = [_Modal()]
+
+    class _DummyOutput:
+        @staticmethod
+        def get_size():
+            return SimpleNamespace(columns=width, rows=rows)
+
+    dummy_app = SimpleNamespace(output=_DummyOutput())
+    monkeypatch.setattr(shell_prompt, "get_app_or_none", lambda: dummy_app)
+
+    rendered_message = prompt_session._render_agent_prompt_message()
+    plain_message = "".join(fragment[1] for fragment in rendered_message)
+
+    assert "approval body" in plain_message
+    assert "[1] Approve" in plain_message
+    assert "[2] Reject" in plain_message
+    assert "output clipped to fit terminal" in plain_message
+    assert f"\n{'─' * width}\n" not in plain_message
 
 
 def test_modal_prompt_hides_shell_prompt_label(monkeypatch) -> None:
@@ -1089,8 +1156,7 @@ def test_idle_agent_prompt_uses_same_codex_input_layout(monkeypatch: Any) -> Non
 
     rendered_message = prompt_session._render_agent_prompt_message()
     plain_message = "".join(fragment[1] for fragment in rendered_message)
-    assert plain_message == "\n› "
-    assert "─" not in plain_message
+    assert plain_message == f"{'─' * width}\n  › "
     assert "input" not in plain_message
 
 

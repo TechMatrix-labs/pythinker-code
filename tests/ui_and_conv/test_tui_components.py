@@ -229,6 +229,33 @@ def test_bash_execution_uses_codex_style_compact_layout():
     assert "─" not in out
 
 
+def test_bash_execution_ignores_shebang_when_extracting_comment_label():
+    shebang_only = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="#!/usr/bin/env bash",
+                output="",
+                status="complete",
+            )
+        ),
+        width=80,
+    )
+    with_label = render_plain(
+        render_bash_execution(
+            BashExecutionState(
+                command="#!/usr/bin/env bash\n# Build docs\necho ok",
+                output="ok",
+                status="complete",
+            )
+        ),
+        width=80,
+    )
+
+    assert "✔ Ran $ usr/bin/env bash" not in shebang_only
+    assert "✔ Ran $ Build docs" in with_label
+    assert "echo ok" not in with_label
+
+
 def test_bash_execution_error_shows_exit_without_border():
     out = render_plain(
         render_bash_execution(

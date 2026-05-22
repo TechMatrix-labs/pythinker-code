@@ -747,9 +747,9 @@ def test_shell_approval_reject_and_recover(tmp_path: Path) -> None:
         shell.send_key("3")
         # Wait for the tool call to be fully processed (confirmed by failed marker)
         # before looking for the prompt, to avoid matching ✨ from a mid-turn redraw.
-        # Bordered Shell card shows (exit 1) when the rejected tool returns.
+        # Shell card shows exit 1 when the rejected tool returns.
         shell.read_until_contains(
-            "(exit 1)",
+            "exit 1",
             after=reject_mark,
             timeout=15.0,
         )

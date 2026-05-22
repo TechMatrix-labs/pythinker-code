@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from enum import Enum, auto
+from pathlib import Path
 from shutil import which
 
 import aiohttp
@@ -138,8 +139,34 @@ def _auto_update_disabled() -> bool:
     return get_env_bool("PYTHINKER_CLI_NO_AUTO_UPDATE")
 
 
+def _is_running_from_source_checkout() -> bool:
+    """Return true when invoked from this repository via ``uv run``/editable source.
+
+    In that mode PyPI can legitimately have a newer released version than the
+    checkout's local ``pyproject.toml`` version. Showing the normal upgrade
+    banner is noisy and suggests replacing the developer checkout.
+    """
+    try:
+        import pythinker_code
+
+        package_path = Path(pythinker_code.__file__).resolve()
+    except Exception:
+        return False
+
+    for parent in package_path.parents:
+        pyproject = parent / "pyproject.toml"
+        git_dir = parent / ".git"
+        if pyproject.exists() and git_dir.exists():
+            try:
+                text = pyproject.read_text(encoding="utf-8")
+            except OSError:
+                return False
+            return 'name = "pythinker-code"' in text or "name = 'pythinker-code'" in text
+    return False
+
+
 def _should_auto_check_for_updates(now: float | None = None) -> bool:
-    if _auto_update_disabled():
+    if _auto_update_disabled() or _is_running_from_source_checkout():
         return False
     if not sys.stdout.isatty():
         return False
@@ -193,7 +220,7 @@ def print_update_banner() -> None:
     """Print a non-blocking 'Update Available' banner if a newer version is cached."""
     from pythinker_code.constant import VERSION as current_version
 
-    if _auto_update_disabled():
+    if _auto_update_disabled() or _is_running_from_source_checkout():
         return
     if not sys.stdout.isatty():
         return

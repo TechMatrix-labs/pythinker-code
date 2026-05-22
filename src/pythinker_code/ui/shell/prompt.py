@@ -65,6 +65,7 @@ from pythinker_code.ui.shell.placeholders import (
 )
 from pythinker_code.ui.shell.spinner_words import spinner_message
 from pythinker_code.ui.theme import get_prompt_style, get_toolbar_colors
+from pythinker_code.ui.tui_config import is_card_style
 from pythinker_code.utils.clipboard import (
     grab_media_from_clipboard,
     is_clipboard_available,
@@ -83,6 +84,7 @@ PROMPT_SYMBOL_AGENT_INPUT = "›"
 PROMPT_SYMBOL_SHELL = "$"
 PROMPT_SYMBOL_THINKING = "💫"
 PROMPT_SYMBOL_PLAN = "📋"
+_CARD_SIDE_PADDING = 2
 
 
 # prompt_toolkit 3.0.52 can emit these during prompt shutdown on Python 3.14
@@ -130,6 +132,23 @@ def _pythinker_unraisable_hook(unraisable: Any) -> None:
     _ORIGINAL_UNRAISABLE_HOOK(unraisable)
 
 
+def _is_prompt_toolkit_empty_exception_context(context: dict[str, Any]) -> bool:
+    """Return true for prompt_toolkit's unhelpful ``Exception None`` report.
+
+    prompt_toolkit prints ``Unhandled exception in event loop`` and blocks on
+    ``Press ENTER to continue`` even when asyncio only supplied a diagnostic
+    context with no exception object. That message has no traceback or useful
+    recovery action for users, so Pythinker logs it instead of surfacing a modal
+    terminal pause.
+    """
+    if context.get("exception") is not None:
+        return False
+    message = str(context.get("message") or "")
+    if not message:
+        return True
+    return message.startswith(("Task was destroyed but it is pending", "Future exception"))
+
+
 # Python 3.14 can report prompt_toolkit's already-cancelled key-timeout coroutine as an
 # unraisable KeyError("__import__") during interpreter/module teardown. The RuntimeWarning filters
 # above catch the normal warning path; this hook catches the shutdown-only unraisable path while
@@ -166,9 +185,17 @@ class SlashCommandCompleter(Completer):
     - Only activates when the current token starts with '/'
     """
 
-    def __init__(self, available_commands: Sequence[SlashCommand[Any]]) -> None:
+    def __init__(
+        self,
+        available_commands: Sequence[SlashCommand[Any]],
+        *,
+        annotate_meta: bool = False,
+        command_scope: str = "command",
+    ) -> None:
         super().__init__()
         self._available_commands = sorted(available_commands, key=lambda c: c.name)
+        self._annotate_meta = annotate_meta
+        self._command_scope = command_scope
         self._command_lookup: dict[str, list[SlashCommand[Any]]] = {}
 
         for cmd in self._available_commands:
@@ -203,7 +230,7 @@ class SlashCommandCompleter(Completer):
                 text=f"/{cmd.name}",
                 start_position=-len(token),
                 display=f"/{cmd.name}",
-                display_meta=cmd.description,
+                display_meta=self._display_meta(cmd),
             )
 
         if not typed:
@@ -224,6 +251,30 @@ class SlashCommandCompleter(Completer):
             yield from emit(cmd)
         for cmd in prefix:
             yield from emit(cmd)
+
+    def _display_meta(self, cmd: SlashCommand[Any]) -> str:
+        if not self._annotate_meta:
+            return cmd.description
+
+        if cmd.name.startswith("skill:"):
+            kind = "skill"
+        elif cmd.name.startswith("flow:"):
+            kind = "flow"
+        else:
+            kind = self._command_scope
+
+        parts = [f"[{kind}]", cmd.description]
+        if cmd.aliases:
+            parts.append(f"aliases: {', '.join('/' + alias for alias in cmd.aliases)}")
+        return "  ".join(part for part in parts if part)
+
+
+def _card_side_padding() -> int:
+    return _CARD_SIDE_PADDING if is_card_style() else 0
+
+
+def _card_side_indent() -> str:
+    return " " * _card_side_padding()
 
 
 def _truncate_to_width(text: str, width: int) -> str:
@@ -1494,6 +1545,7 @@ class CustomPromptSession:
         self._running_prompt_previous_mode: PromptMode | None = None
         self._running_prompt_delegate: RunningPromptDelegate | None = None
         self._modal_delegates: list[RunningPromptDelegate] = []
+        self._shortcut_help_open = False
         self._prompt_buffer_container: ConditionalContainer | None = None
         self._slash_menu_control: SlashCommandMenuControl | None = None
         self._last_ui_state: PromptUIState = PromptUIState.NORMAL_INPUT
@@ -1515,13 +1567,21 @@ class CustomPromptSession:
         # Build completers
         self._agent_mode_completer = merge_completers(
             [
-                SlashCommandCompleter(agent_mode_slash_commands),
+                SlashCommandCompleter(
+                    agent_mode_slash_commands,
+                    annotate_meta=True,
+                    command_scope="command",
+                ),
                 # TODO(host): we need an async HostFileMentionCompleter
                 LocalFileMentionCompleter(HostPath.cwd().unsafe_to_local_path()),
             ],
             deduplicate=True,
         )
-        self._shell_mode_completer = SlashCommandCompleter(shell_mode_slash_commands)
+        self._shell_mode_completer = SlashCommandCompleter(
+            shell_mode_slash_commands,
+            annotate_meta=True,
+            command_scope="shell",
+        )
 
         # Build key bindings
         _kb = KeyBindings()
@@ -1559,6 +1619,18 @@ class CustomPromptSession:
         def _(event: KeyPressEvent) -> None:
             """Non-slash completion (file mentions, etc.): accept only."""
             _accept_completion(event.current_buffer)
+
+        @_kb.add("?", eager=True)
+        def _(event: KeyPressEvent) -> None:
+            """Toggle a compact shortcuts popup when the input row is empty."""
+            if self._active_prompt_delegate() is not None:
+                event.current_buffer.insert_text("?")
+                return
+            if event.current_buffer.text.strip():
+                event.current_buffer.insert_text("?")
+                return
+            self._shortcut_help_open = not self._shortcut_help_open
+            event.app.invalidate()
 
         @_kb.add("c-x", eager=True)
         def _(event: KeyPressEvent) -> None:
@@ -1709,6 +1781,15 @@ class CustomPromptSession:
             self._handle_running_prompt_key("escape", event)
 
         @_kb.add(
+            "escape",
+            eager=True,
+            filter=Condition(lambda: self._shortcut_help_open),
+        )
+        def _(event: KeyPressEvent) -> None:
+            self._shortcut_help_open = False
+            event.app.invalidate()
+
+        @_kb.add(
             "1",
             eager=True,
             filter=Condition(lambda: self._should_handle_running_prompt_key("1")),
@@ -1803,6 +1884,7 @@ class CustomPromptSession:
                 and not delegate.running_prompt_allows_text_input()
             )
         )
+        self._install_prompt_exception_filter()
         self._install_slash_completion_menu()
         self._install_prompt_buffer_visibility()
         self._apply_mode()
@@ -1835,6 +1917,22 @@ class CustomPromptSession:
             state.complete_index = 0
 
         self._status_refresh_task: asyncio.Task[None] | None = None
+
+    def _install_prompt_exception_filter(self) -> None:
+        """Avoid prompt_toolkit's blocking ``Exception None`` terminal pause."""
+        app = self._session.app
+        original_handler = app._handle_exception  # pyright: ignore[reportPrivateUsage]
+
+        def _handle_exception(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+            if _is_prompt_toolkit_empty_exception_context(context):
+                logger.debug(
+                    "Suppressed prompt_toolkit empty exception context: {context}",
+                    context={k: repr(v) for k, v in context.items()},
+                )
+                return
+            original_handler(loop, context)
+
+        app._handle_exception = _handle_exception  # pyright: ignore[reportPrivateUsage]
 
     def _install_slash_completion_menu(self) -> None:
         float_container = _find_prompt_float_container(self._session.layout.container)
@@ -1899,10 +1997,11 @@ class CustomPromptSession:
         return SlashCommandCompleter.should_complete(document)
 
     def _slash_menu_left_padding(self) -> int:
+        side_padding = _card_side_padding()
         if self._mode == PromptMode.SHELL:
-            return max(1, get_cwidth(f"{PROMPT_SYMBOL_SHELL} ") - 2)
+            return side_padding + max(1, get_cwidth(f"{PROMPT_SYMBOL_SHELL} ") - 2)
         # Agent mode: prompt prefix is "› " inside the compact input block.
-        return 1
+        return side_padding + 1
 
     def _render_message(self) -> FormattedText:
         if self._mode == PromptMode.SHELL:
@@ -1914,6 +2013,11 @@ class CustomPromptSession:
         size = app.output.get_size() if app is not None else None
         columns = size.columns if size is not None else 80
         fragments: FormattedText = FormattedText()
+
+        if getattr(self, "_shortcut_help_open", False):
+            fragments.extend(self._render_shortcut_help(columns))
+            if fragments and not fragments[-1][1].endswith("\n"):
+                fragments.append(("", "\n"))
 
         # Dynamic preamble (agent status + modal/interactive body). Keep it
         # within the visible terminal area so it cannot overlap the input/footer.
@@ -1941,8 +2045,15 @@ class CustomPromptSession:
 
         if self._active_modal_delegate() is not None:
             return fragments
-        if preamble:
+        if is_card_style():
+            if fragments and not fragments[-1][1].endswith("\n"):
+                fragments.append(("", "\n"))
+            tc = get_toolbar_colors()
+            fragments.append((tc.separator, "─" * columns))
             fragments.append(("", "\n"))
+        elif preamble:
+            fragments.append(("", "\n"))
+        fragments.append(("", _card_side_indent()))
         fragments.append(("bold", f"{PROMPT_SYMBOL_SHELL} "))
         return fragments
 
@@ -2076,36 +2187,109 @@ class CustomPromptSession:
 
         # 1–2. Dynamic preamble — agent status is always rendered from the
         # running prompt delegate, and body comes from the active modal/delegate.
-        # Cap the combined preamble to fit short terminals; otherwise large
-        # cards visually overwrite the input line and footer.
-        preamble: FormattedText = FormattedText()
+        # Cap the visible rows so large cards do not overwrite the input/footer.
+        # When a modal is active, preserve the whole modal body and clip older
+        # agent status above it first; approval/question controls must remain usable.
         agent_status = self._render_agent_status(columns)
-        if agent_status:
-            preamble.extend(agent_status)
-            if not agent_status[-1][1].endswith("\n"):
-                preamble.append(("", "\n"))
-
         body = self._render_interactive_body(columns)
-        if body:
-            preamble.extend(body)
-            if not body[-1][1].endswith("\n"):
-                preamble.append(("", "\n"))
+        max_rows = _prompt_preamble_max_rows(getattr(size, "rows", None))
+        modal_active = self._active_modal_delegate() is not None
 
-        if preamble:
-            preamble = _fit_formatted_text_to_rows(
-                preamble,
-                columns,
-                _prompt_preamble_max_rows(getattr(size, "rows", None)),
-                preserve_tail_rows=1,
-            )
-            fragments.extend(preamble)
+        if getattr(self, "_shortcut_help_open", False) and not modal_active:
+            fragments.extend(self._render_shortcut_help(columns))
+            if fragments and not fragments[-1][1].endswith("\n"):
+                fragments.append(("", "\n"))
 
-        # 3. When a modal is active, skip input panel border.
-        if self._active_modal_delegate() is not None:
+        if modal_active and body:
+            body_rows = len(_formatted_text_display_rows(body, columns))
+            status_budget = max(0, max_rows - body_rows)
+            if agent_status and status_budget > 0:
+                clipped_status = _fit_formatted_text_to_rows(
+                    agent_status,
+                    columns,
+                    status_budget,
+                    preserve_tail_rows=1,
+                )
+                fragments.extend(clipped_status)
+                if fragments and not fragments[-1][1].endswith("\n"):
+                    fragments.append(("", "\n"))
+            fragments.extend(body)
+            if body and not body[-1][1].endswith("\n"):
+                fragments.append(("", "\n"))
+        else:
+            preamble: FormattedText = FormattedText()
+            if agent_status:
+                preamble.extend(agent_status)
+                if not agent_status[-1][1].endswith("\n"):
+                    preamble.append(("", "\n"))
+            if body:
+                preamble.extend(body)
+                if not body[-1][1].endswith("\n"):
+                    preamble.append(("", "\n"))
+            if preamble:
+                preamble = _fit_formatted_text_to_rows(
+                    preamble,
+                    columns,
+                    max_rows,
+                    preserve_tail_rows=1,
+                )
+                fragments.extend(preamble)
+
+        # 3. When a modal is active, skip the normal input chrome.
+        if modal_active:
             return fragments
 
-        fragments.append(("", "\n"))
+        if is_card_style():
+            if fragments and not fragments[-1][1].endswith("\n"):
+                fragments.append(("", "\n"))
+            tc = get_toolbar_colors()
+            fragments.append((tc.separator, "─" * columns))
+            fragments.append(("", "\n"))
+            fragments.append(("", _card_side_indent()))
+        else:
+            fragments.append(("", "\n"))
         fragments.append(("class:compact-input.prompt", f"{PROMPT_SYMBOL_AGENT_INPUT} "))
+        return fragments
+
+    def _render_shortcut_help(self, columns: int) -> FormattedText:
+        """Render a small Blackbox-style shortcuts popup above the prompt."""
+        side_padding = min(_card_side_padding(), max(0, (columns - 2) // 2))
+        indent = " " * side_padding
+        available = max(1, columns - side_padding * 2)
+        width = min(88, available)
+        rows = [
+            ("Ctrl-X", "toggle agent/shell"),
+            ("Shift-Tab", "toggle plan mode"),
+            ("Ctrl-O", "open editor"),
+            ("Ctrl-J / Alt-Enter", "newline"),
+            ("Ctrl-V", "paste / images"),
+            ("@path", "mention files"),
+            ("/", "commands"),
+            ("Esc", "close this popup"),
+        ]
+        key_width = min(20, max(get_cwidth(key) for key, _ in rows) + 1)
+        tc = get_toolbar_colors()
+        fragments: FormattedText = FormattedText()
+        border = "─" * max(0, width - 2)
+        fragments.append(("", indent))
+        fragments.append((tc.separator, f"╭{border}╮\n"))
+        title = " Shortcuts "
+        padding = max(0, width - 2 - get_cwidth(title))
+        fragments.append(("", indent))
+        fragments.append((tc.separator, "│"))
+        fragments.append(("class:slash-completion-menu.command.current", title))
+        fragments.append(("class:slash-completion-menu.meta", "".ljust(padding)))
+        fragments.append((tc.separator, "│\n"))
+        for key, desc in rows:
+            line = f"  {key.ljust(key_width)} {desc}"
+            pad = max(0, width - 2 - get_cwidth(line))
+            fragments.append(("", indent))
+            fragments.append((tc.separator, "│"))
+            fragments.append(("class:slash-completion-menu.command", line[: width - 2]))
+            fragments.append(("class:slash-completion-menu", " " * pad))
+            fragments.append((tc.separator, "│\n"))
+        fragments.append(("", indent))
+        fragments.append((tc.separator, f"╰{border}╯"))
         return fragments
 
     def _render_agent_status(self, columns: int) -> FormattedText:

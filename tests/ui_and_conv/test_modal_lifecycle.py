@@ -14,6 +14,10 @@ from typing import Any, cast
 
 import pytest
 
+from pythinker_code.tools.display import DiffDisplayBlock
+from pythinker_code.ui.shell.components import sanitize_ansi
+from pythinker_code.ui.shell.console import render_to_ansi
+from pythinker_code.ui.shell.visualize import ApprovalRequestPanel
 from pythinker_code.wire.types import (
     ApprovalRequest,
     ApprovalResponse,
@@ -53,6 +57,10 @@ def _make_approval_request(request_id: str = "req-1", **kwargs: Any) -> Approval
     return ApprovalRequest(**defaults)
 
 
+def _render_plain(renderable: Any, *, width: int = 80) -> str:
+    return sanitize_ansi(render_to_ansi(renderable, columns=width))
+
+
 def _make_question_request(
     request_id: str = "qreq-1",
     questions: list[dict[str, Any]] | None = None,
@@ -72,6 +80,32 @@ def _make_question_request(
         tool_call_id=f"call-{request_id}",
         questions=questions,
     )
+
+
+# ---------------------------------------------------------------------------
+# ApprovalRequestPanel layout
+# ---------------------------------------------------------------------------
+
+
+def test_approval_panel_truncates_long_diff_preview_rows_to_terminal_width() -> None:
+    long_path = "/home/ai/Projects/pythinker-code-main/blackbox/pythinker-x/very/deep/path/file.py"
+    request = _make_approval_request(
+        action="edit file",
+        display=[
+            DiffDisplayBlock(
+                path=long_path,
+                old_text="old = 'short'",
+                new_text="new = 'this line is intentionally long and should not overflow'",
+            )
+        ],
+    )
+
+    rendered = _render_plain(ApprovalRequestPanel(request).render(width=60), width=60)
+
+    assert "…" in rendered
+    assert long_path not in rendered
+    assert "this line is intentionally long and should not overflow" not in rendered
+    assert all(len(line) <= 60 for line in rendered.splitlines())
 
 
 # ---------------------------------------------------------------------------

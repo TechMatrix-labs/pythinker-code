@@ -26,10 +26,14 @@ from pythinker_code.ui.theme import tui_rich_style
 
 __all__ = [
     "BashExecutionState",
+    "format_bash_command_for_header",
     "render_bash_execution",
+    "render_bash_result_output",
 ]
 
 PREVIEW_LINES = 5
+MAX_COMMAND_DISPLAY_LINES = 2
+MAX_COMMAND_DISPLAY_CHARS = 160
 
 BashStatus = Literal["pending", "running", "complete", "error", "cancelled"]
 
@@ -84,6 +88,39 @@ def _pulsing_marker() -> Text:
     return Text(f"{glyph} ", style=tui_rich_style("muted"))
 
 
+def _extract_comment_label(command: str) -> str | None:
+    for line in command.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#!"):
+            continue
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip() or None
+        return None
+    return None
+
+
+def format_bash_command_for_header(command: str, *, expanded: bool) -> str:
+    if expanded:
+        return command
+
+    label = _extract_comment_label(command)
+    if label:
+        command = label
+
+    lines = command.splitlines()
+    needs_line_truncation = len(lines) > MAX_COMMAND_DISPLAY_LINES
+    needs_char_truncation = len(command) > MAX_COMMAND_DISPLAY_CHARS
+    if not needs_line_truncation and not needs_char_truncation:
+        return command
+
+    truncated = "\n".join(lines[:MAX_COMMAND_DISPLAY_LINES]) if needs_line_truncation else command
+    if len(truncated) > MAX_COMMAND_DISPLAY_CHARS:
+        truncated = truncated[:MAX_COMMAND_DISPLAY_CHARS]
+    return truncated.rstrip() + "…"
+
+
 def _status_header(state: BashExecutionState) -> Text:
     accent = _accent_style(state)
     if state.status in ("pending", "running"):
@@ -101,7 +138,10 @@ def _status_header(state: BashExecutionState) -> Text:
 
     header.append(" ")
     header.append("$ ", style=accent + RichStyle(bold=True))
-    header.append(state.command, style=accent + RichStyle(bold=True))
+    header.append(
+        format_bash_command_for_header(state.command, expanded=state.expanded),
+        style=accent + RichStyle(bold=True),
+    )
     if state.header_suffix:
         header.append(state.header_suffix, style=tui_rich_style("muted"))
     return header
@@ -133,32 +173,77 @@ def _output_block(display: list[str]) -> Text | None:
     return body
 
 
-def render_bash_execution(state: BashExecutionState, *, width: int = 100) -> RenderableType:
-    """Build the bash card renderable for *state*."""
-    display, hidden = _display_output_lines(state, width=width)
+def _result_output_block(display: list[str]) -> Text | None:
+    if not display:
+        return None
+    body = Text(style=tui_rich_style("muted"))
+    for index, line in enumerate(display):
+        if index:
+            body.append("\n")
+        body.append(line)
+    return body
 
+
+def _bash_footer_lines(
+    state: BashExecutionState, *, hidden: int, total_output_lines: int
+) -> list[Text]:
     footer_lines: list[Text] = []
     if hidden > 0 and state.expanded:
-        footer_lines.append(Text("  ctrl+e to collapse", style=tui_rich_style("muted")))
+        footer_lines.append(Text("ctrl+e to collapse", style=tui_rich_style("muted")))
     if state.status == "cancelled":
-        footer_lines.append(Text("  cancelled", style=tui_rich_style("warning")))
+        footer_lines.append(Text("cancelled", style=tui_rich_style("warning")))
     elif state.status == "error":
         code = state.exit_code if state.exit_code is not None else "?"
-        footer_lines.append(Text(f"  exit {code}", style=tui_rich_style("error")))
+        footer_lines.append(Text(f"exit {code}", style=tui_rich_style("error")))
     elif state.status in ("pending", "running"):
-        footer_lines.append(Text("  esc to cancel", style=tui_rich_style("muted")))
+        footer_lines.append(
+            Text("esc to cancel · ctrl+b background", style=tui_rich_style("muted"))
+        )
+    elif total_output_lines > PREVIEW_LINES and not state.expanded:
+        footer_lines.append(
+            Text(f"{total_output_lines} lines · ctrl+e expand", style=tui_rich_style("muted"))
+        )
 
     if state.truncated and state.full_output_path:
         footer_lines.append(
             Text(
-                f"  output truncated · full output: {state.full_output_path}",
+                f"output truncated · full output: {state.full_output_path}",
                 style=tui_rich_style("warning"),
             )
         )
+    return footer_lines
+
+
+def render_bash_result_output(state: BashExecutionState, *, width: int = 100) -> RenderableType:
+    """Render only bash output/status for placement under a response gutter.
+
+    The tool header is rendered by the caller, so this avoids the duplicate
+    ``Ran $ ...`` line and avoids embedding another ``⎿`` gutter inside the
+    shared ``MessageResponse`` gutter.
+    """
+    display, hidden = _display_output_lines(state, width=width)
+    total_output_lines = len(_output_lines(state.output))
+    children: list[RenderableType] = []
+    output = _result_output_block(display)
+    if output is not None:
+        children.append(output)
+    elif state.status not in ("pending", "running"):
+        children.append(Text("(No output)", style=tui_rich_style("muted")))
+    children.extend(_bash_footer_lines(state, hidden=hidden, total_output_lines=total_output_lines))
+    return Group(*children) if len(children) > 1 else children[0]
+
+
+def render_bash_execution(state: BashExecutionState, *, width: int = 100) -> RenderableType:
+    """Build the standalone bash execution renderable for *state*."""
+    display, hidden = _display_output_lines(state, width=width)
+    total_output_lines = len(_output_lines(state.output))
 
     children: list[RenderableType] = [_status_header(state)]
     output = _output_block(display)
     if output is not None:
         children.append(output)
-    children.extend(footer_lines)
+    for line in _bash_footer_lines(state, hidden=hidden, total_output_lines=total_output_lines):
+        indented = Text("  ", style=line.style)
+        indented.append_text(line)
+        children.append(indented)
     return Group(*children)

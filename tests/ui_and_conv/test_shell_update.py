@@ -20,6 +20,7 @@ async def test_schedule_auto_update_check_runs_silent_and_throttles(monkeypatch,
 
     monkeypatch.setattr(update, "LAST_UPDATE_CHECK_FILE", last_check_file)
     monkeypatch.setattr(update.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(update, "_is_running_from_source_checkout", lambda: False)
     monkeypatch.setattr(update, "do_update", fake_do_update)
 
     task = update.schedule_auto_update_check()
@@ -42,6 +43,7 @@ async def test_schedule_auto_update_check_notifies_when_update_is_available(monk
     banners: list[bool] = []
     monkeypatch.setattr(update, "LAST_UPDATE_CHECK_FILE", tmp_path / "last_update_check.txt")
     monkeypatch.setattr(update.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(update, "_is_running_from_source_checkout", lambda: False)
     monkeypatch.setattr(update, "do_update", fake_do_update)
     monkeypatch.setattr(update, "print_update_banner", lambda: banners.append(True))
 
@@ -115,6 +117,20 @@ async def test_schedule_auto_update_check_respects_opt_out(monkeypatch, tmp_path
     monkeypatch.setenv("PYTHINKER_CLI_NO_AUTO_UPDATE", "1")
     monkeypatch.setattr(update, "LAST_UPDATE_CHECK_FILE", tmp_path / "last_update_check.txt")
     monkeypatch.setattr(update.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(update, "_is_running_from_source_checkout", lambda: False)
+    monkeypatch.setattr(update, "do_update", fail_do_update)
+
+    assert update.schedule_auto_update_check() is None
+
+
+@pytest.mark.asyncio
+async def test_schedule_auto_update_check_skips_source_checkout(monkeypatch, tmp_path):
+    async def fail_do_update(*, print: bool, check_only: bool) -> update.UpdateResult:
+        raise AssertionError("source checkout should not run auto update check")
+
+    monkeypatch.setattr(update, "LAST_UPDATE_CHECK_FILE", tmp_path / "last_update_check.txt")
+    monkeypatch.setattr(update.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(update, "_is_running_from_source_checkout", lambda: True)
     monkeypatch.setattr(update, "do_update", fail_do_update)
 
     assert update.schedule_auto_update_check() is None

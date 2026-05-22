@@ -633,6 +633,16 @@ class _ToolCallBlock:
         skipped here; specialized renderers should pull richer detail
         from ``ctx.args``.
         """
+        if result.is_error:
+            parts: list[str] = []
+            if result.message:
+                parts.append(result.message)
+            if isinstance(result.output, str) and result.output:
+                parts.append(result.output)
+            if not parts:
+                brief = getattr(result, "brief", "") or "Tool failed"
+                parts.append(brief)
+            return "\n\n".join(parts)
         if isinstance(result.output, str) and result.output:
             return result.output
         if result.message:

@@ -57,12 +57,18 @@ class CustomMessageInput:
 
 
 def render_user_message(text: str) -> RenderableType:
-    """User message — text with a tinted background block."""
+    """User message — compact tinted prompt block.
+
+    Mirrors the reference ``UserPromptMessage`` shape: the caller owns
+    inter-message spacing, while the message itself gets a subtle background
+    and one cell of right padding. Avoid vertical padding so submitted prompts
+    do not look like standalone panels.
+    """
     md = Markdown(text)
     bg = tui_rich_style("user_message_bg")
     fg = tui_rich_style("user_message_text")
     style = bg + fg if fg else bg
-    return Padding(md, (1, 1), style=style)
+    return Padding(md, (0, 1, 0, 0), style=style)
 
 
 def render_assistant_message(

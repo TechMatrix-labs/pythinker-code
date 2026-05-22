@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -13,6 +14,7 @@ from pythinker_host.path import HostPath
 
 from pythinker_code.cli import Reload
 from pythinker_code.session import Session
+from pythinker_code.subagents.models import AgentTypeDefinition, ToolPolicy
 from pythinker_code.ui.shell.slash import ShellSlashCmdFunc, shell_mode_registry
 from pythinker_code.ui.shell.slash import registry as shell_slash_registry
 from pythinker_code.utils.slashcmd import SlashCommand
@@ -69,6 +71,72 @@ def mock_shell(work_dir: HostPath) -> Mock:
     shell = Mock()
     shell.soul = mock_soul
     return shell
+
+
+# ---------------------------------------------------------------------------
+# /agents — registration/behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestAgentsCommand:
+    def test_registered_in_both_shell_registries(self) -> None:
+        assert shell_slash_registry.find_command("agents") is not None
+        assert shell_mode_registry.find_command("agents") is not None
+
+    async def test_renders_registered_subagent_types(self, mock_shell: Mock, capsys: Any) -> None:
+        mock_shell.soul.runtime.labor_market.builtin_types = {
+            "explore": AgentTypeDefinition(
+                name="explore",
+                description="Map code",
+                agent_file=Path("explore.yaml"),
+                when_to_use="Read-only codebase reconnaissance",
+                tool_policy=ToolPolicy(mode="inherit"),
+            ),
+            "implementer": AgentTypeDefinition(
+                name="implementer",
+                description="Patch code",
+                agent_file=Path("implementer.yaml"),
+                tool_policy=ToolPolicy(mode="allowlist", tools=("Read", "Edit")),
+            ),
+        }
+        cmd = shell_slash_registry.find_command("agents")
+        assert cmd is not None
+
+        await _invoke_slash_command(cmd, mock_shell)
+
+        output = capsys.readouterr().out
+        assert "Agents" in output
+        assert "explore" in output
+        assert "Read-only codebase reconnaissance" in output
+        assert "allow 2" in output
+
+    async def test_handles_missing_labor_market(self, mock_shell: Mock, capsys: Any) -> None:
+        mock_shell.soul.runtime.labor_market = None
+        cmd = shell_slash_registry.find_command("agents")
+        assert cmd is not None
+
+        await _invoke_slash_command(cmd, mock_shell)
+
+        assert "No subagents" in capsys.readouterr().out
+
+    async def test_handles_missing_tool_policy(self, mock_shell: Mock, capsys: Any) -> None:
+        mock_shell.soul.runtime.labor_market.builtin_types = {
+            "legacy": SimpleNamespace(
+                name="legacy",
+                description="Legacy worker",
+                when_to_use="",
+                default_model=None,
+                tool_policy=None,
+            )
+        }
+        cmd = shell_slash_registry.find_command("agents")
+        assert cmd is not None
+
+        await _invoke_slash_command(cmd, mock_shell)
+
+        output = capsys.readouterr().out
+        assert "legacy" in output
+        assert "inherit" in output
 
 
 # ---------------------------------------------------------------------------

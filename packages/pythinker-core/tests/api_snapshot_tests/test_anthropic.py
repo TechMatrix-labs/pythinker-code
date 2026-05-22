@@ -4,14 +4,21 @@ import json
 
 import pytest
 import respx
-from common import B64_PNG, COMMON_CASES, Case, make_anthropic_response, run_test_cases
+from common import (
+    B64_PNG,
+    COMMON_CASES,
+    Case,
+    capture_request,
+    make_anthropic_response,
+    run_test_cases,
+)
 from httpx import Response
 from inline_snapshot import snapshot
 
 pytest.importorskip("anthropic", reason="Optional contrib dependency not installed")
 
 from pythinker_core.contrib.chat_provider.anthropic import Anthropic
-from pythinker_core.message import ImageURLPart, Message, TextPart, ThinkPart
+from pythinker_core.message import ImageURLPart, Message, TextPart, ThinkPart, ToolCall
 
 TEST_CASES: dict[str, Case] = {
     **COMMON_CASES,
@@ -904,3 +911,46 @@ async def test_anthropic_parallel_tool_results_merged_into_single_user_message()
     )
     tool_results = [b for b in messages[-1]["content"] if b["type"] == "tool_result"]
     assert {b["tool_use_id"] for b in tool_results} == {"call_add", "call_mul"}
+
+
+async def test_anthropic_replays_malformed_tool_call_arguments_as_empty_input():
+    """Malformed historical tool args should not crash the next Anthropic step."""
+    with respx.mock(base_url="https://api.anthropic.com") as mock:
+        mock.post("/v1/messages").mock(return_value=Response(200, json=make_anthropic_response()))
+        provider = Anthropic(
+            model="claude-sonnet-4-20250514",
+            api_key="test-key",
+            default_max_tokens=1024,
+            stream=False,
+        )
+
+        body = await capture_request(
+            mock,
+            provider,
+            "",
+            [],
+            [
+                Message(role="user", content="Use a tool"),
+                Message(
+                    role="assistant",
+                    content="I'll call it.",
+                    tool_calls=[
+                        ToolCall(
+                            id="call_bad_json",
+                            function=ToolCall.FunctionBody(name="add", arguments='{"a":'),
+                        )
+                    ],
+                ),
+                Message(
+                    role="tool",
+                    content="ToolParseError: invalid JSON",
+                    tool_call_id="call_bad_json",
+                ),
+                Message(role="user", content="Continue"),
+            ],
+        )
+
+        tool_use = body["messages"][1]["content"][1]
+        assert tool_use["type"] == "tool_use"
+        assert tool_use["id"] == "call_bad_json"
+        assert tool_use["input"] == {}

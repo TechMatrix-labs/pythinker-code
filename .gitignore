@@ -55,3 +55,6 @@ static/
 .claude
 .worktrees/
 blackbox/
+
+# pythinker-review
+.pythinker-review/

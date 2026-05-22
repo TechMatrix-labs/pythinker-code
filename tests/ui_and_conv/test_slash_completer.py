@@ -100,6 +100,31 @@ def test_completion_display_uses_canonical_command_name():
     assert completions[0].display_meta_text == "help command"
 
 
+def test_annotated_completion_meta_includes_kind_and_aliases():
+    completer = SlashCommandCompleter(
+        [_make_command("help", aliases=["h", "?"])],
+        annotate_meta=True,
+        command_scope="shell",
+    )
+
+    completions = _completions(completer, "/h")
+
+    assert len(completions) == 1
+    assert completions[0].display_meta_text == "[shell]  help command  aliases: /h, /?"
+
+
+def test_annotated_skill_completion_uses_skill_kind():
+    completer = SlashCommandCompleter(
+        [_make_command("skill:demo")],
+        annotate_meta=True,
+    )
+
+    completions = _completions(completer, "/skill:de")
+
+    assert len(completions) == 1
+    assert completions[0].display_meta_text.startswith("[skill]")
+
+
 def test_skill_completion_path_still_returns_registered_skill_command():
     completer = SlashCommandCompleter(
         [

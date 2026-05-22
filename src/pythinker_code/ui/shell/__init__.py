@@ -36,6 +36,7 @@ from pythinker_code.soul import (
     run_soul,
 )
 from pythinker_code.soul.pythinkersoul import FLOW_COMMAND_PREFIX, PythinkerSoul
+from pythinker_code.ui.shell.components.render_utils import render_message_response, sanitize_ansi
 from pythinker_code.ui.shell.console import console
 from pythinker_code.ui.shell.echo import render_user_echo_text
 from pythinker_code.ui.shell.mcp_status import render_mcp_prompt
@@ -60,7 +61,7 @@ from pythinker_code.ui.shell.visualize import (
 )
 from pythinker_code.utils.aioqueue import QueueShutDown
 from pythinker_code.utils.envvar import get_env_bool
-from pythinker_code.utils.logging import logger, open_original_stderr
+from pythinker_code.utils.logging import logger
 from pythinker_code.utils.signals import install_sigint_handler
 from pythinker_code.utils.slashcmd import SlashCommand, SlashCommandCall, parse_slash_command_call
 from pythinker_code.utils.subprocess_env import get_clean_env
@@ -88,6 +89,28 @@ _BG_AUTO_TRIGGER_INPUT_GRACE_S = 0.75
 
 _VISIBLE_WORKFLOW_SLASH_PREFIXES = (SKILL_COMMAND_PREFIX, FLOW_COMMAND_PREFIX)
 """Explicit skill/flow prefixes that should remain visible in transcript."""
+
+
+def _format_local_shell_output(
+    *, stdout: str, stderr: str, returncode: int | None
+) -> RenderableType | None:
+    """Render local shell-mode output in the reference response sequence.
+
+    Stdout appears first, then stderr, then a compact exit/no-output status,
+    all under the caller's shared ``⎿`` gutter.
+    """
+    children: list[RenderableType] = []
+    if stdout:
+        children.append(Text(sanitize_ansi(stdout).rstrip("\n"), style="grey70"))
+    if stderr:
+        children.append(Text(sanitize_ansi(stderr).rstrip("\n"), style="red"))
+    if not stdout and not stderr:
+        children.append(Text("(No output)", style="grey50"))
+    if returncode not in (None, 0):
+        children.append(Text(f"exit {returncode}", style="red"))
+    if not children:
+        return None
+    return Group(*children) if len(children) > 1 else children[0]
 
 
 class _BackgroundCompletionWatcher:
@@ -863,6 +886,27 @@ class Shell:
         track("input_bash")
 
         proc: asyncio.subprocess.Process | None = None
+        max_output_bytes = 1_000_000
+
+        async def _read_stream_limited(stream: asyncio.StreamReader | None, limit: int) -> bytes:
+            if stream is None:
+                return b""
+            chunks: list[bytes] = []
+            total = 0
+            truncated = False
+            while True:
+                chunk = await stream.read(65536)
+                if not chunk:
+                    break
+                remaining = limit - total
+                if remaining > 0:
+                    chunks.append(chunk[:remaining])
+                    total += min(len(chunk), remaining)
+                if len(chunk) > remaining:
+                    truncated = True
+            if truncated:
+                chunks.append(b"\n... output truncated ...\n")
+            return b"".join(chunks)
 
         def _handler():
             logger.debug("SIGINT received.")
@@ -874,12 +918,25 @@ class Shell:
         try:
             # TODO: For the sake of simplicity, we now use `create_subprocess_shell`.
             # Later we should consider making this behave like a real shell.
-            with open_original_stderr() as stderr:
-                kwargs: dict[str, Any] = {}
-                if stderr is not None:
-                    kwargs["stderr"] = stderr
-                proc = await asyncio.create_subprocess_shell(command, env=get_clean_env(), **kwargs)
-                await proc.wait()
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                env=get_clean_env(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_task = asyncio.create_task(_read_stream_limited(proc.stdout, max_output_bytes))
+            stderr_task = asyncio.create_task(_read_stream_limited(proc.stderr, max_output_bytes))
+            await proc.wait()
+            stdout_bytes, stderr_bytes = await asyncio.gather(stdout_task, stderr_task)
+            stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+            output = _format_local_shell_output(
+                stdout=stdout,
+                stderr=stderr,
+                returncode=proc.returncode,
+            )
+            if output is not None:
+                console.print(render_message_response(output))
         except Exception as e:
             logger.exception("Failed to run shell command:")
             console.print(f"[red]Failed to run shell command: {e}[/red]")

@@ -34,6 +34,22 @@ from pythinker_code.wire.types import (
 
 # Truncation limits for approval request display
 MAX_PREVIEW_LINES = 4
+_APPROVAL_CHROME_WIDTH = 8
+
+
+def _truncate_text_renderable(renderable: RenderableType, width: int) -> RenderableType:
+    """Keep preview rows inside the prompt width.
+
+    Rich usually wraps prose, but diff preview rows contain line numbers, paths,
+    and code tokens where wrapping produces noisy overflow in the bottom TUI
+    modal. Truncating these compact preview rows keeps the approval panel stable;
+    ctrl-e still opens the full pager.
+    """
+    if width <= 0 or not isinstance(renderable, Text):
+        return renderable
+    text = renderable.copy()
+    text.truncate(max(1, width), overflow="ellipsis")
+    return text
 
 
 class ApprovalContentBlock(NamedTuple):
@@ -165,6 +181,7 @@ class ApprovalRequestPanel:
         *,
         feedback_text: str | None = None,
         feedback_cursor: int | None = None,
+        width: int | None = None,
     ) -> RenderableType:
         """Render the approval menu as a bordered panel."""
         content_lines: list[RenderableType] = [
@@ -177,8 +194,14 @@ class ApprovalRequestPanel:
         content_lines.extend(self._render_source_metadata_lines())
         content_lines.append(Text(""))
 
+        panel_width = width or console.size.width
+        preview_width = max(1, panel_width - _APPROVAL_CHROME_WIDTH)
+
         # Render preview (diff + non-diff in original display order)
-        content_lines.extend(self._preview_renderables)
+        content_lines.extend(
+            _truncate_text_renderable(renderable, preview_width)
+            for renderable in self._preview_renderables
+        )
 
         if self.has_expandable_content and self._non_diff_truncated:
             content_lines.append(Text("... (truncated, ctrl-e to expand)", style="dim italic"))
@@ -223,12 +246,22 @@ class ApprovalRequestPanel:
                 hint += "  ctrl-e expand"
         lines.append(Text(hint, style="dim"))
 
+        content = Group(*lines)
+        if width is None:
+            return Panel(
+                content,
+                border_style="yellow",
+                title="[bold]approval[/bold]",
+                title_align="left",
+                padding=(0, 1),
+            )
         return Panel(
-            Group(*lines),
+            content,
             border_style="yellow",
             title="[bold]approval[/bold]",
             title_align="left",
             padding=(0, 1),
+            width=width,
         )
 
     def _render_block(
@@ -381,6 +414,7 @@ class ApprovalPromptDelegate:
             self._panel.render(
                 feedback_text=feedback_text,
                 feedback_cursor=feedback_cursor,
+                width=columns,
             ),
             columns=columns,
         ).rstrip("\n")

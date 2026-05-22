@@ -188,11 +188,11 @@ class ToolExecutionComponent:
         if len(children) <= 1:
             body: RenderableType = children[0] if children else Text("")
         else:
-            # Insert blank line between call header and Blackbox-style indented
-            # response rows (``⎿`` gutter) for results/hints.
+            # Reference layout: tool header first, then response/progress rows
+            # immediately below under the dim ``⎿`` gutter. No spacer — the
+            # gutter is the visual separation.
             body = Group(
                 children[0],
-                Text(""),
                 *(render_message_response(child) for child in children[1:]),
             )
 

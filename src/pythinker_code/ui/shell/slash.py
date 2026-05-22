@@ -142,6 +142,64 @@ def version(app: Shell, args: str):
 
 
 @registry.command
+@shell_mode_registry.command
+def agents(app: Shell, args: str):
+    """List available subagent types"""
+    from rich import box
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    soul = ensure_pythinker_soul(app)
+    if soul is None:
+        return
+
+    labor_market = getattr(soul.runtime, "labor_market", None)
+    builtin_types = getattr(labor_market, "builtin_types", {}) or {}
+    type_defs = sorted(builtin_types.values(), key=lambda item: item.name)
+    if not type_defs:
+        console.print("[yellow]No subagents are registered for this agent.[/yellow]")
+        return
+
+    table = Table.grid(expand=True)
+    table.add_column(ratio=1, no_wrap=True)
+    table.add_column(ratio=4)
+    table.add_column(ratio=1, no_wrap=True)
+    table.add_column(ratio=2, no_wrap=True)
+    table.add_row(
+        Text("agent", style="bold cyan"),
+        Text("when to use", style="bold"),
+        Text("model", style="bold"),
+        Text("tools", style="bold"),
+    )
+    for type_def in type_defs:
+        tool_policy = getattr(type_def, "tool_policy", None)
+        tool_label = (
+            f"allow {len(tool_policy.tools)}"
+            if tool_policy is not None and tool_policy.mode == "allowlist"
+            else "inherit"
+        )
+        table.add_row(
+            Text(type_def.name, style="cyan"),
+            Text(type_def.when_to_use or type_def.description or "—", style="grey70"),
+            Text(type_def.default_model or "inherit", style="grey58"),
+            Text(tool_label, style="grey58"),
+        )
+
+    footer = Text("Use the Agent tool with subagent_type=<agent>, or ask Pythinker to delegate.")
+    footer.stylize("grey58")
+    console.print(
+        Panel(
+            table,
+            title="[bold cyan]Agents[/bold cyan]",
+            subtitle=footer,
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+
+
+@registry.command
 async def model(app: Shell, args: str):
     """Switch LLM model or thinking mode"""
     from pythinker_code.llm import derive_model_capabilities
