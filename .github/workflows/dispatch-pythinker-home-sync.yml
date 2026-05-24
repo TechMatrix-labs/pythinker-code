@@ -1,0 +1,35 @@
+name: Dispatch pythinker-home sync
+
+on:
+  workflow_dispatch:
+  release:
+    types:
+      - published
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - scripts/install.ps1
+      - .github/workflows/dispatch-pythinker-home-sync.yml
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Trigger pythinker-home sync
+        env:
+          DISPATCH_TOKEN: ${{ secrets.PYTHINKER_HOME_REPO_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$DISPATCH_TOKEN" ]; then
+            echo "Missing secret: PYTHINKER_HOME_REPO_DISPATCH_TOKEN" >&2
+            exit 1
+          fi
+
+          curl --fail-with-body \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $DISPATCH_TOKEN" \
+            https://api.github.com/repos/mohamed-elkholy95/pythinker-home/dispatches \
+            -d '{"event_type":"sync-pythinker-products","client_payload":{"source_repo":"mohamed-elkholy95/Pythinker-Code"}}'
