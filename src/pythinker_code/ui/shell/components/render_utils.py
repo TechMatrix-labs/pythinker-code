@@ -13,6 +13,7 @@ from rich.text import Text
 _ELLIPSIS = "…"
 _ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+_ANSI_ST_RE = re.compile(r"\x1b\\")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
@@ -174,7 +175,8 @@ def sanitize_ansi(text: str) -> str:
     """
     no_csi = _ANSI_CSI_RE.sub("", text)
     no_osc = _ANSI_OSC_RE.sub("", no_csi)
-    return _CONTROL_RE.sub("", no_osc)
+    no_st = _ANSI_ST_RE.sub("", no_osc)
+    return _CONTROL_RE.sub("", no_st)
 
 
 def render_plain(renderable: RenderableType, *, width: int = 80) -> str:

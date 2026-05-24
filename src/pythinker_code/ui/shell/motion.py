@@ -27,6 +27,7 @@ class ActivitySnapshot:
     stalled: bool = False
     interrupt_hint: str = ""
     reduced_motion: bool = False
+    label_style: Style | None = None
 
 
 def reduced_motion_enabled() -> bool:
@@ -67,7 +68,7 @@ def _activity_label(label: str) -> str:
 def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None) -> Text:
     reduced = snapshot.reduced_motion or reduced_motion_enabled()
     glyph_style = shell_style(ShellTone.WARNING) if snapshot.stalled else _VERB_SPINNER_STYLE
-    label_style = _VERB_SPINNER_STYLE
+    label_style = snapshot.label_style if snapshot.label_style is not None else _VERB_SPINNER_STYLE
     if snapshot.label.lower() == "thinking":
         label_style += Style(italic=True)
     text = Text(

@@ -562,11 +562,33 @@ def _build_plugin_zip(plugin_name: str = "my-plugin") -> bytes:
     return buf.getvalue()
 
 
+def _patch_public_plugin_dns(
+    monkeypatch: pytest.MonkeyPatch, host_ips: dict[str, str] | None = None
+) -> None:
+    """Make plugin download DNS checks deterministic in URL download tests."""
+    import socket
+
+    host_ips = host_ips or {}
+
+    def _fake_getaddrinfo(host: str, *args, **kwargs):
+        ip = host_ips.get(host, "93.184.216.34")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
+
+
 def _patch_httpx_stream(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> None:
     """Replace httpx.stream so it yields ``payload`` from a fake response."""
     import httpx
 
+    _patch_public_plugin_dns(monkeypatch)
+
     class _FakeResponse:
+        def __init__(self):
+            self.status_code = 200
+            self.headers: dict[str, str] = {}
+            self.url = "https://example.com/plugin.zip"
+
         def raise_for_status(self) -> None:
             return None
 
@@ -607,6 +629,120 @@ def test_resolve_source_zip_url_with_query_string(tmp_path: Path, monkeypatch: p
     assert source.name == "plug"
 
 
+def test_resolve_source_zip_url_rejects_private_redirect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Redirects to localhost/private IPs are blocked before the second request."""
+    import httpx
+
+    monkeypatch.setattr("tempfile.mkdtemp", lambda **kw: str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+
+    _patch_public_plugin_dns(monkeypatch)
+
+    class _RedirectResponse:
+        def __init__(self):
+            self.status_code = 302
+            self.headers = {"location": "http://127.0.0.1/plugin.zip"}
+            self.url = "https://example.com/plugin.zip"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            return iter(())
+
+    class _FakeStream:
+        def __enter__(self):
+            return _RedirectResponse()
+
+        def __exit__(self, *exc_info):
+            return False
+
+    stream = MagicMock(return_value=_FakeStream())
+    monkeypatch.setattr(httpx, "stream", stream)
+
+    with pytest.raises(typer.Exit):
+        _resolve_source("https://example.com/plugin.zip")
+    assert stream.call_count == 1
+    assert not (tmp_path / "tmp").exists()
+
+
+def test_resolve_source_zip_url_rejects_private_dns_redirect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Redirects to hostnames that resolve private are blocked before the second request."""
+    import httpx
+
+    monkeypatch.setattr("tempfile.mkdtemp", lambda **kw: str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    _patch_public_plugin_dns(monkeypatch, {"private.example": "127.0.0.1"})
+
+    class _RedirectResponse:
+        def __init__(self):
+            self.status_code = 302
+            self.headers = {"location": "https://private.example/plugin.zip"}
+            self.url = "https://example.com/plugin.zip"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            return iter(())
+
+    class _FakeStream:
+        def __enter__(self):
+            return _RedirectResponse()
+
+        def __exit__(self, *exc_info):
+            return False
+
+    stream = MagicMock(return_value=_FakeStream())
+    monkeypatch.setattr(httpx, "stream", stream)
+
+    with pytest.raises(typer.Exit):
+        _resolve_source("https://example.com/plugin.zip")
+    assert stream.call_count == 1
+    assert not (tmp_path / "tmp").exists()
+
+
+def test_resolve_source_zip_url_rejects_oversized_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Downloads larger than the plugin zip size cap are rejected and cleaned up."""
+    import httpx
+
+    monkeypatch.setattr("tempfile.mkdtemp", lambda **kw: str(tmp_path / "tmp"))
+    monkeypatch.setattr("pythinker_code.cli.plugin._MAX_PLUGIN_ZIP_SIZE", 4)
+    (tmp_path / "tmp").mkdir()
+    _patch_public_plugin_dns(monkeypatch)
+
+    class _LargeResponse:
+        def __init__(self):
+            self.status_code = 200
+            self.headers: dict[str, str] = {}
+            self.url = "https://example.com/plugin.zip"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield b"12345"
+
+    class _FakeStream:
+        def __enter__(self):
+            return _LargeResponse()
+
+        def __exit__(self, *exc_info):
+            return False
+
+    monkeypatch.setattr(httpx, "stream", lambda *a, **kw: _FakeStream())
+
+    with pytest.raises(typer.Exit):
+        _resolve_source("https://example.com/plugin.zip")
+    assert not (tmp_path / "tmp").exists()
+
+
 def test_resolve_source_github_archive_zip_takes_zip_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -627,6 +763,8 @@ def test_resolve_source_zip_url_download_failure(tmp_path: Path, monkeypatch: py
 
     monkeypatch.setattr("tempfile.mkdtemp", lambda **kw: str(tmp_path / "tmp"))
     (tmp_path / "tmp").mkdir()
+
+    _patch_public_plugin_dns(monkeypatch)
 
     class _FailingStream:
         def __enter__(self):

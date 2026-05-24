@@ -18,6 +18,11 @@ from rich.table import Table
 from rich.text import Text
 
 from pythinker_code.tools.display import DiffDisplayBlock
+from pythinker_code.ui.shell.render_constants import (
+    DIFF_CONTEXT_LINES,
+    DIFF_LINE_NUMBER_MIN_WIDTH,
+    expand_hint,
+)
 from pythinker_code.ui.theme import get_diff_colors
 from pythinker_code.utils.rich.syntax import PythinkerSyntax
 
@@ -57,7 +62,7 @@ def _build_diff_lines(
     new_text: str,
     old_start: int,
     new_start: int,
-    n_context: int = 3,
+    n_context: int = DIFF_CONTEXT_LINES,
 ) -> list[list[DiffLine]]:
     """Build grouped DiffLine hunks directly from old/new text.
 
@@ -320,7 +325,7 @@ def render_diff_panel(
     for hunk in hunks:
         for dl in hunk:
             max_ln = max(max_ln, dl.old_num, dl.new_num)
-    num_width = max(len(str(max_ln)), 2)
+    num_width = max(len(str(max_ln)), DIFF_LINE_NUMBER_MIN_WIDTH)
 
     table = Table(
         show_header=False,
@@ -408,7 +413,7 @@ def render_diff_preview(
         (dl.old_num if dl.kind == DiffLineKind.DELETE else dl.new_num for dl in shown),
         default=0,
     )
-    num_width = max(len(str(max_ln)), 2)
+    num_width = max(len(str(max_ln)), DIFF_LINE_NUMBER_MIN_WIDTH)
 
     result: list[RenderableType] = [_build_diff_header(path, added, removed)]
 
@@ -424,7 +429,7 @@ def render_diff_preview(
         result.append(line)
 
     if remaining > 0:
-        result.append(Text(f"... {remaining} more lines (ctrl-e to expand)", style="dim italic"))
+        result.append(Text(expand_hint(remaining), style="dim italic"))
 
     return result, remaining
 

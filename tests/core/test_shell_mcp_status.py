@@ -47,6 +47,30 @@ def test_render_mcp_servers_shows_live_loading_summary() -> None:
     assert "resolve-library-id" not in prompt_text
 
 
+def test_render_mcp_console_treats_server_and_tool_names_as_literal_text() -> None:
+    snapshot = MCPStatusSnapshot(
+        loading=False,
+        connected=1,
+        total=1,
+        tools=1,
+        servers=(
+            MCPServerSnapshot(
+                name="[red]evil[/red]",
+                status="connected",
+                tools=("[bold]tool[/bold]\x1b[31m",),
+            ),
+        ),
+    )
+
+    console = Console(record=True, force_terminal=False, width=120)
+    console.print(render_mcp_console(snapshot))
+    output = console.export_text()
+
+    assert "[red]evil[/red]" in output
+    assert "[bold]tool[/bold]" in output
+    assert "\x1b" not in output
+
+
 def test_render_mcp_servers_shows_final_statuses() -> None:
     snapshot = MCPStatusSnapshot(
         loading=False,

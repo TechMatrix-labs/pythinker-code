@@ -7,9 +7,15 @@ from rich.console import Group, RenderableType
 from rich.style import Style
 from rich.text import Text
 
+from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
 from pythinker_code.ui.theme import get_mcp_prompt_colors
 from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.wire.types import MCPServerSnapshot, MCPStatusSnapshot
+
+
+def _safe_text(text: str) -> str:
+    return sanitize_ansi(text).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
 
 
 def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
@@ -18,7 +24,7 @@ def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
         f"{snapshot.connected}/{snapshot.total} connected, {snapshot.tools} tools",
     )
     if snapshot.loading:
-        glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+        glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
         header = Text(f"{glyph} ", style=Style(color="grey50"))
         header.append_text(header_text)
     else:
@@ -27,19 +33,22 @@ def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
     renderables: list[RenderableType] = [BulletColumns(header)]
     for server in snapshot.servers:
         color = _status_color(server.status)
-        server_text = f"[{color}]{server.name}[/{color}]"
+        server_name = _safe_text(server.name)
+        server_status = _safe_text(server.status)
+        server_line = Text(server_name, style=color)
         if server.status == "unauthorized":
-            server_text += (
-                f" [grey50](unauthorized - run: pythinker mcp auth {server.name})[/grey50]"
+            server_line.append(
+                f" (unauthorized - run: pythinker mcp auth {server_name})",
+                style="grey50",
             )
         elif server.status != "connected":
-            server_text += f" [grey50]({server.status})[/grey50]"
+            server_line.append(f" ({server_status})", style="grey50")
 
-        lines: list[RenderableType] = [Text.from_markup(server_text)]
+        lines: list[RenderableType] = [server_line]
         for tool_name in server.tools:
             lines.append(
                 BulletColumns(
-                    Text.from_markup(f"[grey50]{tool_name}[/grey50]"),
+                    Text(_safe_text(tool_name), style="grey50"),
                     bullet_style="grey50",
                 )
             )
@@ -68,7 +77,7 @@ def render_mcp_prompt(snapshot: MCPStatusSnapshot, *, now: float | None = None) 
     fragments.append(("", "\n"))
 
     for server in snapshot.servers:
-        fragments.append((_prompt_status_style(server.status), f"• {server.name}"))
+        fragments.append((_prompt_status_style(server.status), f"• {_safe_text(server.name)}"))
         detail = _prompt_server_detail(server)
         if detail:
             fragments.append((colors.detail, detail))
@@ -100,11 +109,11 @@ def _prompt_status_style(status: str) -> str:
 
 def _prompt_server_detail(server: MCPServerSnapshot) -> str:
     if server.status == "unauthorized":
-        return f" (unauthorized - run: pythinker mcp auth {server.name})"
+        return f" (unauthorized - run: pythinker mcp auth {_safe_text(server.name)})"
 
     parts: list[str] = []
     if server.status != "connected":
-        parts.append(server.status)
+        parts.append(_safe_text(server.status))
     if server.tools:
         label = "tool" if len(server.tools) == 1 else "tools"
         parts.append(f"{len(server.tools)} {label}")

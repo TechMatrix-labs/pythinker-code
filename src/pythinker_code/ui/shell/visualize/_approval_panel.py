@@ -13,8 +13,11 @@ from rich.markup import escape
 from rich.padding import Padding
 from rich.text import Text
 
+from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
 from pythinker_code.ui.shell.console import console, render_to_ansi
 from pythinker_code.ui.shell.keyboard import KeyEvent
+from pythinker_code.ui.shell.keymap import key_text
+from pythinker_code.ui.shell.spacing import blank_row
 from pythinker_code.ui.shell.visualize._dialog_shell import DialogOption, render_dialog
 from pythinker_code.utils.rich.diff_render import (
     collect_diff_hunks,
@@ -43,7 +46,7 @@ def _truncate_text_renderable(renderable: RenderableType, width: int) -> Rendera
     Rich usually wraps prose, but diff preview rows contain line numbers, paths,
     and code tokens where wrapping produces noisy overflow in the bottom TUI
     modal. Truncating these compact preview rows keeps the approval panel stable;
-    ctrl-e still opens the full pager.
+    the registered expand shortcut still opens the full pager.
     """
     if width <= 0 or not isinstance(renderable, Text):
         return renderable
@@ -61,14 +64,26 @@ class ApprovalContentBlock(NamedTuple):
     lexer: str = ""
 
 
+def _safe_display_text(text: str) -> str:
+    """Strip terminal control sequences before rendering untrusted approval text."""
+    return sanitize_ansi(text).replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+
+
+def _safe_markup_text(text: str) -> str:
+    return escape(_safe_display_text(text))
+
+
 def _render_feedback_with_cursor(text: str, cursor: int | None) -> Text:
-    if cursor is None or cursor >= len(text):
-        return Text(text + "\u2588")
+    safe_text = sanitize_ansi(text)
+    if safe_text != text:
+        cursor = None
+    if cursor is None or cursor >= len(safe_text):
+        return Text(safe_text + "\u2588")
     cursor = max(cursor, 0)
     return Text.assemble(
-        Text(text[:cursor]),
-        Text(text[cursor], style="reverse"),
-        Text(text[cursor + 1 :]),
+        Text(safe_text[:cursor]),
+        Text(safe_text[cursor], style="reverse"),
+        Text(safe_text[cursor + 1 :]),
     )
 
 
@@ -99,7 +114,7 @@ class ApprovalRequestPanel:
 
         # Handle description (only if no display blocks)
         if request.description and not request.display:
-            text = request.description.rstrip("\n")
+            text = _safe_display_text(request.description)
             line_count = text.count("\n") + 1
             self._content_blocks.append(ApprovalContentBlock(text=text, lines=line_count))
             preview_text = text
@@ -138,7 +153,7 @@ class ApprovalRequestPanel:
                         )
                         self._preview_renderables.extend(renderables)
             elif isinstance(block, ShellDisplayBlock):
-                text = block.command.rstrip("\n")
+                text = _safe_display_text(block.command)
                 line_count = text.count("\n") + 1
                 self._content_blocks.append(
                     ApprovalContentBlock(text=text, lines=line_count, lexer=block.language)
@@ -154,7 +169,7 @@ class ApprovalRequestPanel:
                     self._non_diff_truncated = True
                 idx += 1
             elif isinstance(block, BriefDisplayBlock) and block.text:
-                text = block.text.rstrip("\n")
+                text = _safe_display_text(block.text)
                 line_count = text.count("\n") + 1
                 self._content_blocks.append(
                     ApprovalContentBlock(text=text, lines=line_count, style="grey50")
@@ -187,12 +202,12 @@ class ApprovalRequestPanel:
         content_lines: list[RenderableType] = [
             Text.from_markup(
                 "[yellow]"
-                f"{escape(self.request.sender)} is requesting approval to "
-                f"{escape(self.request.action)}:[/yellow]"
+                f"{_safe_markup_text(self.request.sender)} is requesting approval to "
+                f"{_safe_markup_text(self.request.action)}:[/yellow]"
             )
         ]
         content_lines.extend(self._render_source_metadata_lines())
-        content_lines.append(Text(""))
+        content_lines.append(blank_row())
 
         panel_width = width or console.size.width
         preview_width = max(1, panel_width - _APPROVAL_CHROME_WIDTH)
@@ -203,8 +218,11 @@ class ApprovalRequestPanel:
             for renderable in self._preview_renderables
         )
 
+        expand_key = key_text("app.tools.expand") or "ctrl+o"
         if self.has_expandable_content and self._non_diff_truncated:
-            content_lines.append(Text("... (truncated, ctrl-e to expand)", style="dim italic"))
+            content_lines.append(
+                Text(f"... (truncated, {expand_key} to expand)", style="dim italic")
+            )
 
         lines: list[RenderableType] = []
         if content_lines:
@@ -215,7 +233,7 @@ class ApprovalRequestPanel:
 
         if show_inline_feedback:
             if lines:
-                lines.append(Text(""))
+                lines.append(blank_row())
             for i, (option_text, _) in enumerate(self.options):
                 num = i + 1
                 is_feedback_option = i == self.FEEDBACK_OPTION_INDEX
@@ -235,7 +253,10 @@ class ApprovalRequestPanel:
                 else:
                     lines.append(Text(f"  [{num}] {option_text}", style="grey50"))
             dialog_options: list[DialogOption] = []
-            footer = Text("Type your feedback, then press Enter to submit.", style="dim")
+            footer = Text(
+                "Type your feedback, then press Enter to reject; Esc rejects without feedback.",
+                style="dim",
+            )
         else:
             dialog_options = [
                 DialogOption(
@@ -245,11 +266,14 @@ class ApprovalRequestPanel:
                 )
                 for i, (option_text, _) in enumerate(self.options)
             ]
-            footer = Text("\u2191/\u2193 select  \u21b5 submit  ctrl-e expand", style="dim")
+            footer_parts = ["\u2191/\u2193 select", "\u21b5 submit", "esc reject"]
+            if self.has_expandable_content:
+                footer_parts.append(f"{expand_key} expand")
+            footer = Text("  ".join(footer_parts), style="dim")
 
         return render_dialog(
             kind="approval",
-            title=f"{self.request.sender} approval",
+            title=f"{_safe_markup_text(self.request.sender)} approval",
             body=lines,
             options=dialog_options,
             footer=footer,
@@ -283,9 +307,11 @@ class ApprovalRequestPanel:
             else:
                 assert self.request.agent_id is not None
                 subagent_text = self.request.agent_id
-            lines.append(Text(f"Subagent: {subagent_text}", style="grey50"))
+            lines.append(Text(f"Subagent: {_safe_display_text(subagent_text)}", style="grey50"))
         if self.request.source_description:
-            lines.append(Text(f"Task: {self.request.source_description}", style="grey50"))
+            lines.append(
+                Text(f"Task: {_safe_display_text(self.request.source_description)}", style="grey50")
+            )
         return lines
 
     def move_up(self):
@@ -311,8 +337,8 @@ def show_approval_in_pager(panel: ApprovalRequestPanel) -> None:
         console.print(
             Text.from_markup(
                 "[yellow]⚠ "
-                f"{escape(panel.request.sender)} is requesting approval to "
-                f"{escape(panel.request.action)}:[/yellow]"
+                f"{_safe_markup_text(panel.request.sender)} is requesting approval to "
+                f"{_safe_markup_text(panel.request.action)}:[/yellow]"
             )
         )
         console.print()
@@ -341,11 +367,11 @@ def show_approval_in_pager(panel: ApprovalRequestPanel) -> None:
                         console.print(render_diff_panel(path, hunks, added, removed))
                         rendered_any = True
             elif isinstance(block, ShellDisplayBlock):
-                console.print(PythinkerSyntax(block.command.rstrip("\n"), block.language))
+                console.print(PythinkerSyntax(_safe_display_text(block.command), block.language))
                 rendered_any = True
                 idx += 1
             elif isinstance(block, BriefDisplayBlock) and block.text:
-                console.print(Text(block.text.rstrip("\n"), style="grey50"))
+                console.print(Text(_safe_display_text(block.text), style="grey50"))
                 rendered_any = True
                 idx += 1
             else:
@@ -426,7 +452,7 @@ class ApprovalPromptDelegate:
         return False
 
     def should_handle_running_prompt_key(self, key: str) -> bool:
-        if key == "c-e":
+        if key in {"c-o", "c-e"}:
             return self._panel.has_expandable_content
         if self._is_inline_feedback_active():
             return key in {"enter", "escape", "c-c", "c-d", "up", "down"}
@@ -445,7 +471,7 @@ class ApprovalPromptDelegate:
         }
 
     def handle_running_prompt_key(self, key: str, event: KeyPressEvent) -> None:
-        if key == "c-e":
+        if key in {"c-o", "c-e"}:
             event.app.create_background_task(self._show_panel_in_pager())
             return
 

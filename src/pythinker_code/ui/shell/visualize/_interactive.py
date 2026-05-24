@@ -426,7 +426,7 @@ class _PromptLiveView(_LiveView):
     # -- Key handling --------------------------------------------------------
 
     def should_handle_running_prompt_key(self, key: str) -> bool:
-        if key == "c-e":
+        if key in {"c-o", "c-e"}:
             return self.has_expandable_panel()
         if self._current_approval_request_panel is not None:
             return key in {"up", "down", "enter", "1", "2", "3", "4"}
@@ -444,8 +444,11 @@ class _PromptLiveView(_LiveView):
         return key == "c-s"
 
     def handle_running_prompt_key(self, key: str, event: KeyPressEvent) -> None:
-        if key == "c-e":
-            event.app.create_background_task(self._show_panel_in_pager())
+        if key in {"c-o", "c-e"}:
+            if self._has_expandable_modal_panel():
+                event.app.create_background_task(self._show_panel_in_pager())
+            elif self._toggle_latest_tool_card():
+                self._flush_prompt_refresh()
             return
 
         # ↑ on empty buffer: pop last queued message back to input for editing.

@@ -114,7 +114,6 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
     return Group(
         head,
         change_summary_text(added, removed),
-        Text(""),
         diff_frame(diff_text, width=ctx.width or 80),
     )
 

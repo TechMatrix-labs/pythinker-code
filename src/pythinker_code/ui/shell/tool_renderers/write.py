@@ -11,6 +11,7 @@ from __future__ import annotations
 from rich.console import Group, RenderableType
 from rich.text import Text
 
+from pythinker_code.ui.shell.render_constants import expand_hint
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
     ToolRenderDefinition,
@@ -96,12 +97,7 @@ def _render_created_or_appended(
         children.append(body)
     if remaining > 0:
         ctx.state["__suppress_generic_expand_hint__"] = True
-        children.append(
-            fg(
-                "muted",
-                f"… +{remaining} {'line' if remaining == 1 else 'lines'} (ctrl+o to expand)",
-            )
-        )
+        children.append(fg("muted", expand_hint(remaining)))
     return Group(*children)
 
 

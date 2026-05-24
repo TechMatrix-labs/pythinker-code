@@ -383,6 +383,7 @@ class TuiTokens:
     dim: str
     text: str
     thinking_text: str
+    activity_label: str
     # Backgrounds
     selected_bg: str
     user_message_bg: str
@@ -418,6 +419,7 @@ _TUI_TOKENS_DARK = TuiTokens(
     dim="#6f748a",
     text="",
     thinking_text="#8b90a8",
+    activity_label="#f8f8f2",
     selected_bg="#323449",
     user_message_bg="#2d3042",
     user_message_text="",
@@ -448,6 +450,7 @@ _TUI_TOKENS_LIGHT = TuiTokens(
     dim="#767676",
     text="",
     thinking_text="#6c6c6c",
+    activity_label="#333333",
     selected_bg="#d0d0e0",
     user_message_bg="#e8e8e8",
     user_message_text="",

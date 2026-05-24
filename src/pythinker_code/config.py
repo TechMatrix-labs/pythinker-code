@@ -232,6 +232,13 @@ class TUIConfig(BaseModel):
             "PYTHINKER_TUI_STYLE=pythinker."
         ),
     )
+    prompt_history_enabled: bool = Field(
+        default=True,
+        description=(
+            "Persist shell prompt history under the Pythinker share directory. "
+            "Set false or export PYTHINKER_DISABLE_PROMPT_HISTORY=1 for sensitive sessions."
+        ),
+    )
 
 
 class MCPConfig(BaseModel):

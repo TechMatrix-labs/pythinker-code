@@ -14,6 +14,8 @@ from rich.table import Table
 from rich.text import Text
 
 from pythinker_code.ui.shell.components import sanitize_ansi
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
+from pythinker_code.ui.shell.render_constants import LISTING_LINE_NUMBER_MIN_WIDTH
 from pythinker_code.ui.theme import tui_rich_style
 
 __all__ = [
@@ -105,7 +107,7 @@ def loading_marker(
     """
     if done:
         return Text("✓ ", style=tui_rich_style("success"))
-    if not pulse:
+    if not pulse or reduced_motion_enabled():
         return Text("● ", style=tui_rich_style(style_token))
     t = time.monotonic() if now is None else now
     glyph = "●" if int(t / 0.8) % 2 == 0 else "•"
@@ -256,7 +258,9 @@ def format_numbered_lines_block(
     max_lines = total_lines if expanded else max(0, collapsed_max_lines)
     shown = lines[:max_lines] if max_lines else []
     remaining = max(0, total_lines - len(shown))
-    number_width = max(4, len(str(start_line + max(0, total_lines - 1))))
+    number_width = max(
+        LISTING_LINE_NUMBER_MIN_WIDTH, len(str(start_line + max(0, total_lines - 1)))
+    )
     body = Text()
     number_style = tui_rich_style("muted")
     content_style = tui_rich_style(style_token)

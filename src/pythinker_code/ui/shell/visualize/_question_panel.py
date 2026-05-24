@@ -13,12 +13,24 @@ from rich.markup import escape
 from rich.text import Text
 
 from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Markdown
+from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
 from pythinker_code.ui.shell.console import console, render_to_ansi
 from pythinker_code.ui.shell.keyboard import KeyEvent
+from pythinker_code.ui.shell.keymap import key_text
+from pythinker_code.ui.shell.spacing import blank_row
 from pythinker_code.ui.shell.visualize._dialog_shell import DialogOption, render_dialog
 from pythinker_code.wire.types import QuestionRequest
 
 OTHER_OPTION_LABEL = "Other"
+
+
+def _safe_display_text(text: str) -> str:
+    """Strip terminal control sequences before rendering untrusted question text."""
+    return sanitize_ansi(text).replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+
+
+def _safe_markup_text(text: str) -> str:
+    return escape(_safe_display_text(text))
 
 
 class QuestionRequestPanel:
@@ -38,9 +50,11 @@ class QuestionRequestPanel:
 
     def _setup_current_question(self) -> None:
         q = self._current_question
-        self._options = [(o.label, o.description) for o in q.options]
-        other_label = q.other_label or OTHER_OPTION_LABEL
-        other_desc = q.other_description or ""
+        self._options = [
+            (_safe_display_text(o.label), _safe_display_text(o.description)) for o in q.options
+        ]
+        other_label = _safe_display_text(q.other_label) or OTHER_OPTION_LABEL
+        other_desc = _safe_display_text(q.other_description) if q.other_description else ""
         self._options.append((other_label, other_desc))
         idx = self._current_question_index
         if idx in self._saved_selections:
@@ -74,7 +88,7 @@ class QuestionRequestPanel:
 
     def _recompute_body(self) -> None:
         body = self._current_question.body
-        self._body_text = body.rstrip("\n") if body else ""
+        self._body_text = _safe_display_text(body) if body else ""
         self.has_expandable_content = bool(self._body_text)
 
     @property
@@ -91,7 +105,7 @@ class QuestionRequestPanel:
 
     @property
     def current_question_text(self) -> str:
-        return self._current_question.question
+        return _safe_display_text(self._current_question.question)
 
     def should_prompt_other_input(self) -> bool:
         if not self.is_multi_select:
@@ -112,7 +126,7 @@ class QuestionRequestPanel:
         if len(self.request.questions) > 1:
             tab_parts: list[str] = []
             for i, qi in enumerate(self.request.questions):
-                label = escape(qi.header or f"Q{i + 1}")
+                label = _safe_markup_text(qi.header or f"Q{i + 1}")
                 if i == self._current_question_index:
                     icon, style = "\u25cf", "bold cyan"
                 elif qi.question in self._answers:
@@ -121,20 +135,21 @@ class QuestionRequestPanel:
                     icon, style = "\u25cb", "grey50"
                 tab_parts.append(f"[{style}]({icon}) {label}[/{style}]")
             lines.append(Text.from_markup("  ".join(tab_parts)))
-            lines.append(Text(""))
+            lines.append(blank_row())
 
-        lines.append(Text.from_markup(f"[yellow]? {escape(q.question)}[/yellow]"))
+        lines.append(Text.from_markup(f"[yellow]? {_safe_markup_text(q.question)}[/yellow]"))
         if q.multi_select:
             lines.append(Text("  (SPACE to toggle, ENTER to submit)", style="dim italic"))
-        lines.append(Text(""))
+        lines.append(blank_row())
 
+        expand_key = key_text("app.tools.expand") or "ctrl+o"
         if self._body_text:
             lines.append(
                 Text.from_markup(
-                    "[bold cyan]  \u25b6 Press ctrl-e to view full content[/bold cyan]"
+                    f"[bold cyan]  \u25b6 Press {expand_key} to view full content[/bold cyan]"
                 )
             )
-            lines.append(Text(""))
+            lines.append(blank_row())
 
         show_inline_input = other_input_text is not None and self.is_other_selected
 
@@ -286,14 +301,16 @@ class QuestionRequestPanel:
 
 def show_question_body_in_pager(panel: QuestionRequestPanel) -> None:
     with console.screen(), console.pager(styles=True):
-        console.print(Text.from_markup(f"[yellow]? {escape(panel.current_question_text)}[/yellow]"))
+        console.print(
+            Text.from_markup(f"[yellow]? {_safe_markup_text(panel.current_question_text)}[/yellow]")
+        )
         console.print()
         for renderable in panel.render_full_body():
             console.print(renderable)
 
 
 async def prompt_other_input(question_text: str) -> str:
-    console.print(Text.from_markup(f"\n[yellow]? {escape(question_text)}[/yellow]"))
+    console.print(Text.from_markup(f"\n[yellow]? {_safe_markup_text(question_text)}[/yellow]"))
     console.print(Text("  Enter your answer:", style="dim"))
     try:
         session: PromptSession[str] = PromptSession()
@@ -384,7 +401,7 @@ class QuestionPromptDelegate:
     def should_handle_running_prompt_key(self, key: str) -> bool:
         if self._panel is None:
             return False
-        if key == "c-e":
+        if key in {"c-o", "c-e"}:
             return self._panel.has_expandable_content
         if self._awaiting_other_input:
             return key in {"enter", "escape", "c-c", "c-d"}
@@ -410,7 +427,7 @@ class QuestionPromptDelegate:
         }
 
     def handle_running_prompt_key(self, key: str, event: KeyPressEvent) -> None:
-        if key == "c-e":
+        if key in {"c-o", "c-e"}:
             event.app.create_background_task(self._show_panel_in_pager())
             return
         if self._awaiting_other_input:

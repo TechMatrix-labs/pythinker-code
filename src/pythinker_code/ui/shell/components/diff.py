@@ -22,6 +22,10 @@ from dataclasses import dataclass
 from rich.style import Style as RichStyle
 from rich.text import Text
 
+from pythinker_code.ui.shell.render_constants import (
+    DIFF_CONTEXT_LINES,
+    DIFF_LINE_NUMBER_MIN_WIDTH,
+)
 from pythinker_code.ui.theme import get_diff_colors, tui_rich_style
 
 __all__ = [
@@ -30,7 +34,7 @@ __all__ = [
     "render_diff",
 ]
 
-_DEFAULT_CONTEXT_LINES = 3
+_DEFAULT_CONTEXT_LINES = DIFF_CONTEXT_LINES
 _TAB_REPLACEMENT = "   "
 _DIFF_LINE_RE = re.compile(r"^([+\-\s])(\s*\d*)\s(.*)$")
 
@@ -77,7 +81,7 @@ def compute_edit_diff_string(
     new_lines = new_text.split("\n")
     last_old = old_start + max(0, len(old_lines) - 1)
     last_new = new_start + max(0, len(new_lines) - 1)
-    line_num_width = max(2, len(str(max(last_old, last_new))))
+    line_num_width = max(DIFF_LINE_NUMBER_MIN_WIDTH, len(str(max(last_old, last_new))))
 
     matcher = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
     output: list[str] = []

@@ -23,6 +23,8 @@ from rich.style import Style
 from rich.text import Text
 
 from pythinker_code.ui.shell.console import render_to_ansi
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
+from pythinker_code.ui.shell.spacing import DIALOG_PANEL_PADDING, blank_row
 from pythinker_code.ui.shell.visualize._blocks import Markdown
 from pythinker_code.utils.datetime import format_elapsed
 
@@ -97,7 +99,7 @@ class _BtwModalDelegate:
     # -- Title ---------------------------------------------------------------
 
     def _loading_marker(self) -> Text:
-        glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+        glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
         return Text(glyph, style=Style(color="grey50"))
 
     def _build_title(self) -> str:
@@ -128,23 +130,23 @@ class _BtwModalDelegate:
         if self._is_loading:
             if self._streaming_text:
                 parts.append(Markdown(self._streaming_text))
-                parts.append(Text(""))
+                parts.append(blank_row())
                 parts.append(self._loading_marker())
             else:
                 parts.append(self._loading_marker())
         elif self._error:
             parts.append(Text(self._error, style="red"))
-            parts.append(Text(""))
+            parts.append(blank_row())
             parts.append(Text("Escape to dismiss", style="dim"))
         elif self._response:
             parts.append(Markdown(self._response))
             # Hint is added here (inside Panel) for no-scroll case.
             # Scroll mode replaces it with scroll indicators below.
-            parts.append(Text(""))
+            parts.append(blank_row())
             parts.append(Text("↑/↓ scroll · Escape dismiss", style="dim"))
         else:
             parts.append(Text("No response received.", style="dim"))
-            parts.append(Text(""))
+            parts.append(blank_row())
             parts.append(Text("Escape to dismiss", style="dim"))
 
         panel = Panel(
@@ -152,7 +154,7 @@ class _BtwModalDelegate:
             title=self._build_title(),
             title_align="left",
             border_style="grey50",
-            padding=(0, 1),
+            padding=DIALOG_PANEL_PADDING,
         )
 
         full = render_to_ansi(panel, columns=columns).rstrip("\n")

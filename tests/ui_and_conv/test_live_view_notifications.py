@@ -150,3 +150,41 @@ def test_cleanup_flushes_all_notifications_even_when_live_view_shows_only_latest
     rendered = "\n".join(_render(item) for item in printed)
     for index in range(1, 6):
         assert f"Background task completed: build project {index}" in rendered
+
+
+def test_compose_inserts_gap_under_agent_output_before_nonempty_status():
+    """Non-interactive compose() puts one blank row under the spinner verb
+    before a non-empty status line (the under-gap), and the status line stays last."""
+    from rich.console import Group
+    from rich.text import Text
+
+    view = _LiveView(StatusUpdate())
+    view.dispatch_wire_message(TurnBegin(user_input="scan"))
+    view._status_block.update(
+        StatusUpdate(context_usage=0.5, context_tokens=1000, max_context_tokens=2000)
+    )
+    assert view._status_block.text.plain.strip()  # status line has content
+
+    group = view.compose()
+    assert isinstance(group, Group)
+    renderables = list(group.renderables)
+    assert renderables[-1] is view._status_block.text
+    assert isinstance(renderables[-2], Text)
+    assert renderables[-2].plain == ""  # blank row separating spinner verb from status
+
+
+def test_compose_no_double_gap_when_status_empty():
+    """When the status line is empty (renders as its own blank row) compose() does
+    not insert an extra spacer, avoiding a double blank under the spinner verb."""
+    from rich.console import Group
+
+    view = _LiveView(StatusUpdate())
+    view.dispatch_wire_message(TurnBegin(user_input="scan"))
+    assert view._status_block.text.plain == ""  # empty status
+
+    group = view.compose()
+    assert isinstance(group, Group)
+    renderables = list(group.renderables)
+    # status (empty Text) is last; the row before it is the agent output tail,
+    # not an inserted blank spacer pair.
+    assert renderables[-1] is view._status_block.text

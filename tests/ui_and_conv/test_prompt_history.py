@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 
 from PIL import Image
 
@@ -14,6 +15,7 @@ def _make_prompt_session(
     prompt_session = object.__new__(shell_prompt.CustomPromptSession)
     prompt_session._history_file = tmp_path / "history.jsonl"
     prompt_session._last_history_content = None
+    prompt_session._history_enabled = True
     prompt_session._placeholder_manager = manager
     prompt_session._attachment_cache = manager.attachment_cache
     return prompt_session
@@ -70,3 +72,69 @@ def test_append_history_entry_writes_sanitized_surrogate_text(tmp_path) -> None:
     assert "\ud83d" not in lines[0]["content"]
     assert "\ufffd" in lines[0]["content"]
     assert lines[0]["content"].startswith("A" * 1000)
+
+
+def test_append_history_entry_redacts_common_secret_patterns(tmp_path) -> None:
+    manager = PromptPlaceholderManager()
+    prompt_session = _make_prompt_session(tmp_path, manager)
+
+    prompt_session._append_history_entry(
+        "Authorization: Bearer abcdefghijklmnopqrstuvwxyz "
+        "api_key=sk-abcdefghijklmnop "
+        '{"api_key": "quotedsecretvalue123"} '
+        'token="quotedtokenvalue123"'
+    )
+
+    content = _read_history_lines(prompt_session._history_file)[0]["content"]
+    assert "abcdefghijklmnopqrstuvwxyz" not in content
+    assert "sk-abcdefghijklmnop" not in content
+    assert "quotedsecretvalue123" not in content
+    assert "quotedtokenvalue123" not in content
+    assert content.count("[REDACTED]") == 4
+
+
+def test_append_history_entry_redacts_oauth_and_vendor_tokens(tmp_path) -> None:
+    manager = PromptPlaceholderManager()
+    prompt_session = _make_prompt_session(tmp_path, manager)
+
+    prompt_session._append_history_entry(
+        "Authorization: Basic dXNlcjpwYXNzd29yZA== "
+        "https://example.test/cb?access_token=access-token-secret&refresh_token=refresh-secret "
+        "id_token=header.payload.signature "
+        "ghp_abcdefghijklmnopqrstuvwxyz123456 "
+        "github_pat_11ABCDEFG0abcdefghijklmnopqrstuvwxyz1234567890 "
+        "AIzaSyabcdefghijklmnopqrstuvwxyz1234567"
+    )
+
+    content = _read_history_lines(prompt_session._history_file)[0]["content"]
+    for secret in (
+        "dXNlcjpwYXNzd29yZA==",
+        "access-token-secret",
+        "refresh-secret",
+        "header.payload.signature",
+        "ghp_abcdefghijklmnopqrstuvwxyz123456",
+        "github_pat_11ABCDEFG0abcdefghijklmnopqrstuvwxyz1234567890",
+        "AIzaSyabcdefghijklmnopqrstuvwxyz1234567",
+    ):
+        assert secret not in content
+    assert content.count("[REDACTED]") == 7
+
+
+def test_append_history_entry_can_be_disabled(tmp_path) -> None:
+    manager = PromptPlaceholderManager()
+    prompt_session = _make_prompt_session(tmp_path, manager)
+    prompt_session._history_enabled = False
+
+    prompt_session._append_history_entry("do not persist")
+
+    assert not prompt_session._history_file.exists()
+
+
+def test_append_history_entry_restricts_file_permissions(tmp_path) -> None:
+    manager = PromptPlaceholderManager()
+    prompt_session = _make_prompt_session(tmp_path, manager)
+
+    prompt_session._append_history_entry("hello")
+
+    mode = stat.S_IMODE(prompt_session._history_file.stat().st_mode)
+    assert mode == 0o600

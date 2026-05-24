@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 from rich.console import Console
+from rich.style import Style
+from rich.text import Text
 
 from pythinker_code.ui.shell.visualize import (
     _ContentBlock,
@@ -13,6 +15,7 @@ from pythinker_code.ui.shell.visualize import (
     _tail_lines,
     _truncate_to_display_width,
 )
+from pythinker_code.ui.theme import tui_rich_style
 
 # ---------------------------------------------------------------------------
 # _estimate_tokens
@@ -230,6 +233,30 @@ def test_thinking_status_line_uses_compact_activity_metadata():
     assert "Thinking…" in output
     assert "·" in output
     assert "esc to interrupt" not in output
+
+
+def _style_for(renderable: Text, text: str) -> Style:
+    start = renderable.plain.index(text)
+    end = start + len(text)
+    span = next(span for span in renderable.spans if span.start <= start and span.end >= end)
+    return Style.parse(span.style) if isinstance(span.style, str) else span.style
+
+
+def test_composing_and_thinking_labels_use_activity_label_token():
+    composing = _ContentBlock(is_think=False)
+    composing.append("hello")
+    composing_renderable = composing.compose()
+    assert isinstance(composing_renderable, Text)
+    expected = tui_rich_style("activity_label")
+    assert _style_for(composing_renderable, "Composing").color == expected.color
+
+    thinking = _ContentBlock(is_think=True)
+    thinking.append("reasoning")
+    thinking_renderable = thinking.compose()
+    assert isinstance(thinking_renderable, Text)
+    thinking_style = _style_for(thinking_renderable, "Thinking")
+    assert thinking_style.color == expected.color
+    assert thinking_style.italic
 
 
 class TestContentBlockCommitment:

@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from pythinker_code.ui.shell.design_system import dialog_title
+from pythinker_code.ui.shell.spacing import DIALOG_PANEL_PADDING, blank_row
 
 DialogKind = Literal["approval", "question", "warning", "info"]
 
@@ -45,16 +46,16 @@ def render_dialog(
     lines: list[RenderableType] = []
     lines.extend(body)
     if body and options:
-        lines.append(Text(""))
+        lines.append(blank_row())
     lines.extend(_render_option(option) for option in options)
     if footer is not None:
-        lines.append(Text(""))
+        lines.append(blank_row())
         lines.append(footer)
     return Panel(
         Group(*lines),
         title=dialog_title("approval" if kind == "approval" else "question", title),
         title_align="left",
         border_style=border_style,
-        padding=(0, 1),
+        padding=DIALOG_PANEL_PADDING,
         width=width,
     )

@@ -17,6 +17,7 @@ from rich.rule import Rule
 from rich.text import Text
 
 from pythinker_code.ui.shell.keymap import key_text
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
 from pythinker_code.ui.theme import tui_rich_style
 
 __all__ = [
@@ -47,7 +48,7 @@ def render_bordered_loader(state: BorderedLoaderState) -> RenderableType:
     accent = tui_rich_style(state.accent_token)
     muted = tui_rich_style("muted")
 
-    glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+    glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
     loading = Text(f"{glyph} ", style=muted)
     loading.append(state.message, style=muted)
 

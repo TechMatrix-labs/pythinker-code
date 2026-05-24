@@ -17,6 +17,8 @@ from pythinker_code.tools.display import (
 )
 from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Markdown
 from pythinker_code.ui.shell.design_system import ShellTone, StatusName, shell_style, status_icon
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
+from pythinker_code.ui.shell.spacing import WORKLOG_PANEL_PADDING
 from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.utils.rich.diff_render import (
     collect_diff_hunks,
@@ -82,7 +84,11 @@ _STATE_ICON: dict[WorkLogState, StatusName] = {
 
 def _state_icon(state: WorkLogState) -> Text:
     icon = status_icon(_STATE_ICON[state])
-    if state == WorkLogState.RUNNING and int(time.monotonic() / 0.8) % 2 != 0:
+    if (
+        state == WorkLogState.RUNNING
+        and not reduced_motion_enabled()
+        and int(time.monotonic() / 0.8) % 2 != 0
+    ):
         return Text(" ", style=icon.style)
     return icon
 
@@ -155,7 +161,7 @@ def render_worklog_card(
         subtitle=subtitle,
         subtitle_align="left",
         border_style=border_style,
-        padding=(0, 1),
+        padding=WORKLOG_PANEL_PADDING,
         expand=False,
     )
 

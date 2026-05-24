@@ -31,6 +31,7 @@ from rich.text import Text
 
 from pythinker_code.ui.shell.components.key_hints import key_hint
 from pythinker_code.ui.shell.components.render_utils import render_message_response
+from pythinker_code.ui.shell.spacing import TINTED_CARD_PADDING
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
     ToolRenderDefinition,
@@ -135,6 +136,13 @@ class ToolExecutionComponent:
         return self._state.expanded
 
     @property
+    def can_expand(self) -> bool:
+        return self._state.expanded or self._has_expandable_payload()
+
+    def toggle_expanded(self) -> None:
+        self._state.expanded = not self._state.expanded
+
+    @property
     def tool_call_id(self) -> str:
         return self._state.tool_call_id
 
@@ -184,7 +192,7 @@ class ToolExecutionComponent:
                 children.append(fallback)
 
         if not self._state.expanded and self._is_truncatable():
-            children.append(key_hint("ctrl+o", "expand"))
+            children.append(key_hint("app.tools.expand", "expand"))
 
         if not children:
             return Text("")
@@ -207,8 +215,10 @@ class ToolExecutionComponent:
         if bg_style is None:
             return body
         # Padding with style fills the padded area with the tint, giving the
-        # "content box" feel without an extra border character.
-        return Padding(body, (1, 1), style=bg_style)
+        # "content box" feel without an extra border character. Vertical padding
+        # stays 0 — the live stream owns the gap between cards (see spacing.py),
+        # so a tinted card spans the same rows as an untinted one.
+        return Padding(body, TINTED_CARD_PADDING, style=bg_style)
 
     # -- Internals -----------------------------------------------------------
 
@@ -282,12 +292,16 @@ class ToolExecutionComponent:
             )
         return body
 
-    def _is_truncatable(self) -> bool:
-        """Heuristic: only show the expand hint when there's likely more to see."""
+    def _has_expandable_payload(self) -> bool:
+        """Heuristic: return True when expanding can plausibly reveal more payload."""
         result = self._state.result
         if result is None or not result.text:
             return False
-        if self._renderer_state.get("__suppress_generic_expand_hint__"):
-            return False
         text = result.text
         return len(text) > 240 or text.count("\n") > 4
+
+    def _is_truncatable(self) -> bool:
+        """Only show the generic expand hint when a renderer did not show its own."""
+        if self._renderer_state.get("__suppress_generic_expand_hint__"):
+            return False
+        return self._has_expandable_payload()

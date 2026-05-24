@@ -30,6 +30,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 from rich.theme import Theme
 
+from pythinker_code.ui.shell.spacing import CODE_BLOCK_PADDING
 from pythinker_code.ui.theme import ThemeName, get_markdown_colors
 from pythinker_code.utils.rich.markdown import CodeBlock, Markdown
 
@@ -60,7 +61,7 @@ class _BorderedCodeBlock(CodeBlock):
             self.lexer_name,
             theme=self.theme,
             word_wrap=True,
-            padding=(0, 1),
+            padding=CODE_BLOCK_PADDING,
             background_color=colors.code_block_bg or None,
         )
         if bg_style:

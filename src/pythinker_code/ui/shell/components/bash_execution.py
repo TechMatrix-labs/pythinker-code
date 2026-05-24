@@ -22,6 +22,7 @@ from pythinker_code.ui.shell.components.render_utils import (
     sanitize_ansi,
     truncate_middle_to_visual_lines,
 )
+from pythinker_code.ui.shell.motion import reduced_motion_enabled
 from pythinker_code.ui.theme import tui_rich_style
 
 __all__ = [
@@ -96,7 +97,7 @@ def _output_lines(output: str) -> list[str]:
 
 
 def _pulsing_marker() -> Text:
-    glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+    glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
     return Text(f"{glyph} ", style=tui_rich_style("muted"))
 
 
@@ -207,9 +208,7 @@ def _bash_footer_lines(
     elif state.status == "error" and state.exit_code is not None:
         footer_lines.append(Text(f"exit {state.exit_code}", style=tui_rich_style("error")))
     elif state.status in ("pending", "running"):
-        footer_lines.append(
-            Text("esc to cancel · ctrl+b background", style=tui_rich_style("muted"))
-        )
+        footer_lines.append(Text("esc to cancel", style=tui_rich_style("muted")))
 
     if state.truncated and state.full_output_path:
         footer_lines.append(

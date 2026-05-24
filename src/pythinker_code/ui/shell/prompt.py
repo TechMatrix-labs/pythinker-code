@@ -63,6 +63,7 @@ from pythinker_code.ui.shell.placeholders import (
     normalize_pasted_text,
     sanitize_surrogates,
 )
+from pythinker_code.ui.shell.spacing import ensure_prompt_newline
 from pythinker_code.ui.shell.spinner_words import spinner_message
 from pythinker_code.ui.theme import get_prompt_style, get_toolbar_colors
 from pythinker_code.ui.tui_config import is_card_style
@@ -1127,6 +1128,52 @@ class _HistoryEntry(BaseModel):
     content: str
 
 
+_HISTORY_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"(?i)\b((?:authorization\s*:\s*)?(?:bearer|basic)\s+)[A-Za-z0-9._~+/=-]{8,}"),
+        r"\1[REDACTED]",
+    ),
+    (
+        re.compile(
+            r"(?i)([\"']?(?:api[_-]?key|token|secret|password|access[_-]?token|"
+            r"refresh[_-]?token|id[_-]?token|session[_-]?token)[\"']?\s*[:=]\s*[\"'])"
+            r"([^\"'\r\n]{8,})([\"'])"
+        ),
+        r"\1[REDACTED]\3",
+    ),
+    (
+        re.compile(
+            r"(?i)\b(api[_-]?key|token|secret|password|access[_-]?token|"
+            r"refresh[_-]?token|id[_-]?token|session[_-]?token)(\s*[:=]\s*)([^\s'\"&]{8,})"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+    (re.compile(r"\b(sk-[A-Za-z0-9][A-Za-z0-9_-]{16,})\b"), "[REDACTED]"),
+    (re.compile(r"\b(?:gh[opusr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[REDACTED]"),
+    (re.compile(r"\b(AKIA[0-9A-Z]{16})\b"), "[REDACTED]"),
+    (re.compile(r"\b(AIza[0-9A-Za-z_-]{20,})\b"), "[REDACTED]"),
+)
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _redact_history_secrets(text: str) -> str:
+    redacted = text
+    for pattern, replacement in _HISTORY_SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
+def _ensure_private_history_path(path: Path) -> None:
+    with contextlib.suppress(OSError):
+        os.chmod(path.parent, 0o700)
+    if path.exists():
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
+
+
 def _load_history_entries(history_file: Path) -> list[_HistoryEntry]:
     entries: list[_HistoryEntry] = []
     if not history_file.exists():
@@ -1524,13 +1571,19 @@ class CustomPromptSession:
         shell_mode_slash_commands: Sequence[SlashCommand[Any]],
         editor_command_provider: Callable[[], str] = lambda: "",
         plan_mode_toggle_callback: Callable[[], Awaitable[bool]] | None = None,
+        history_enabled: bool = True,
     ) -> None:
         history_dir = get_share_dir() / "user-history"
-        history_dir.mkdir(parents=True, exist_ok=True)
         work_dir_id = md5(
             str(HostPath.cwd()).encode(encoding="utf-8"), usedforsecurity=False
         ).hexdigest()
         self._history_file = (history_dir / work_dir_id).with_suffix(".jsonl")
+        self._history_enabled = history_enabled and not _env_truthy(
+            "PYTHINKER_DISABLE_PROMPT_HISTORY"
+        )
+        if self._history_enabled:
+            history_dir.mkdir(parents=True, exist_ok=True)
+            _ensure_private_history_path(self._history_file)
         self._status_provider = status_provider
         self._status_block_provider = status_block_provider
         self._fast_refresh_provider = fast_refresh_provider
@@ -1563,7 +1616,7 @@ class CustomPromptSession:
         self._tips = _build_toolbar_tips(clipboard_available or media_clipboard_available)
         self._tip_rotation_index: int = random.randrange(len(self._tips)) if self._tips else 0
 
-        history_entries = _load_history_entries(self._history_file)
+        history_entries = _load_history_entries(self._history_file) if self._history_enabled else []
         history = InMemoryHistory()
         for entry in history_entries:
             history.append_string(entry.content)
@@ -1686,7 +1739,12 @@ class CustomPromptSession:
 
         @_kb.add("c-o", eager=True)
         def _(event: KeyPressEvent) -> None:
-            """Open current buffer in external editor."""
+            """Expand active transcript content, or open current buffer in external editor."""
+            if self._active_prompt_delegate() is not None:
+                if self._should_handle_running_prompt_key("c-o"):
+                    self._handle_running_prompt_key("c-o", event)
+                return
+
             from pythinker_code.telemetry import track
 
             track("shortcut_editor")
@@ -2024,8 +2082,7 @@ class CustomPromptSession:
 
         if getattr(self, "_shortcut_help_open", False):
             fragments.extend(self._render_shortcut_help(columns))
-            if fragments and not fragments[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
 
         # Dynamic preamble (agent status + modal/interactive body). Keep it
         # within the visible terminal area so it cannot overlap the input/footer.
@@ -2033,14 +2090,12 @@ class CustomPromptSession:
         agent_status = self._render_agent_status(columns)
         if agent_status:
             preamble.extend(agent_status)
-            if not agent_status[-1][1].endswith("\n"):
-                preamble.append(("", "\n"))
+            ensure_prompt_newline(preamble)
 
         body = self._render_interactive_body(columns)
         if body:
             preamble.extend(body)
-            if not body[-1][1].endswith("\n"):
-                preamble.append(("", "\n"))
+            ensure_prompt_newline(preamble)
 
         if preamble:
             preamble = _fit_formatted_text_to_rows(
@@ -2054,8 +2109,7 @@ class CustomPromptSession:
         if self._active_modal_delegate() is not None:
             return fragments
         if is_card_style():
-            if fragments and not fragments[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
             tc = get_toolbar_colors()
             fragments.append((tc.separator, "─" * columns))
             fragments.append(("", "\n"))
@@ -2205,8 +2259,7 @@ class CustomPromptSession:
 
         if getattr(self, "_shortcut_help_open", False) and not modal_active:
             fragments.extend(self._render_shortcut_help(columns))
-            if fragments and not fragments[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
 
         if modal_active and body:
             body_rows = len(_formatted_text_display_rows(body, columns))
@@ -2219,21 +2272,17 @@ class CustomPromptSession:
                     preserve_tail_rows=1,
                 )
                 fragments.extend(clipped_status)
-                if fragments and not fragments[-1][1].endswith("\n"):
-                    fragments.append(("", "\n"))
+                ensure_prompt_newline(fragments)
             fragments.extend(body)
-            if body and not body[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
         else:
             preamble: FormattedText = FormattedText()
             if agent_status:
                 preamble.extend(agent_status)
-                if not agent_status[-1][1].endswith("\n"):
-                    preamble.append(("", "\n"))
+                ensure_prompt_newline(preamble)
             if body:
                 preamble.extend(body)
-                if not body[-1][1].endswith("\n"):
-                    preamble.append(("", "\n"))
+                ensure_prompt_newline(preamble)
             if preamble:
                 preamble = _fit_formatted_text_to_rows(
                     preamble,
@@ -2248,8 +2297,7 @@ class CustomPromptSession:
             return fragments
 
         if is_card_style():
-            if fragments and not fragments[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
             tc = get_toolbar_colors()
             fragments.append((tc.separator, "─" * columns))
             fragments.append(("", "\n"))
@@ -2321,13 +2369,17 @@ class CustomPromptSession:
         if running is not None and isinstance(running, AgentStatusProvider):
             rendered = to_formatted_text(running.render_agent_status(columns))
             if any(fragment for _, fragment, *_ in rendered):
+                # The prompt layer owns the gap below the agent stream: one blank
+                # row under the spinner verb (the stream's tail) before the input,
+                # mirroring the blank row above it inside the stream.
+                ensure_prompt_newline(rendered)
+                rendered.append(("", "\n"))
                 return rendered
 
         fragments = self._render_background_working_status(columns)
         status = self._render_status_block(columns)
         if status:
-            if fragments and not fragments[-1][1].endswith("\n"):
-                fragments.append(("", "\n"))
+            ensure_prompt_newline(fragments)
             fragments.extend(status)
         return fragments
 
@@ -2627,7 +2679,10 @@ class CustomPromptSession:
         )
 
     def _append_history_entry(self, text: str) -> None:
+        if not getattr(self, "_history_enabled", True):
+            return
         safe_history_text = self._get_placeholder_manager().serialize_for_history(text).strip()
+        safe_history_text = _redact_history_secrets(safe_history_text)
         entry = _HistoryEntry(content=safe_history_text)
         if not entry.content:
             return
@@ -2638,8 +2693,12 @@ class CustomPromptSession:
 
         try:
             self._history_file.parent.mkdir(parents=True, exist_ok=True)
-            with self._history_file.open("a", encoding="utf-8") as f:
+            _ensure_private_history_path(self._history_file)
+            fd = os.open(self._history_file, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
                 f.write(entry.model_dump_json(ensure_ascii=False) + "\n")
+            with contextlib.suppress(OSError):
+                os.chmod(self._history_file, 0o600)
             self._last_history_content = entry.content
         except OSError as exc:
             logger.warning(
@@ -2861,6 +2920,11 @@ class CustomPromptSession:
             right_parts.append(f"{mode} {self._model_name} {thinking_dot}")
         right_text = "  ".join(right_parts)
         right_width = _display_width(right_text)
+        if right_width > columns:
+            # Keep the footer single-line on narrow terminals; preserve the right edge
+            # where the model/status glyphs tend to be most useful.
+            right_text = _truncate_left(right_text, max(0, columns))
+            right_width = _display_width(right_text)
 
         # Left side: prefer extension statuses, then active background work,
         # then any active toast. The background-work copy mirrors Codex's

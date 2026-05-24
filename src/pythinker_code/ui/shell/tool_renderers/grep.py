@@ -12,6 +12,7 @@ from rich.console import Group, RenderableType
 from rich.text import Text
 
 from pythinker_code.ui.shell.components.key_hints import key_hint
+from pythinker_code.ui.shell.render_constants import expand_hint
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
     ToolRenderDefinition,
@@ -169,7 +170,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     if body.plain:
         children.append(body)
     if remaining > 0:
-        children.append(fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
+        children.append(fg("muted", expand_hint(remaining)))
     return Group(*children)
 
 

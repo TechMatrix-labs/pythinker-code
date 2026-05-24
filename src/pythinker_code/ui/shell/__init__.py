@@ -649,6 +649,11 @@ class Shell:
                 else ""
             ),
             plan_mode_toggle_callback=_plan_mode_toggle,
+            history_enabled=(
+                self.soul.runtime.config.tui.prompt_history_enabled
+                if isinstance(self.soul, PythinkerSoul)
+                else True
+            ),
         ) as prompt_session:
             self._prompt_session = prompt_session
             if self._prefill_text:

@@ -28,7 +28,11 @@ from pythinker_code.ui.shell.components.markdown import (
     markdown_commit_boundary,
 )
 from pythinker_code.ui.shell.console import console, current_console_width
-from pythinker_code.ui.shell.motion import ActivitySnapshot, activity_status_line
+from pythinker_code.ui.shell.motion import (
+    ActivitySnapshot,
+    activity_status_line,
+    reduced_motion_enabled,
+)
 from pythinker_code.ui.shell.tool_renderers import (
     ToolResultPayload,
     get_tool_renderer,
@@ -250,7 +254,9 @@ class _ContentBlock:
         console.print(self._wrap_bullet(Markdown(committed_text)))
         self._committed_len += boundary
 
-    def _activity_snapshot(self, label: str) -> ActivitySnapshot:
+    def _activity_snapshot(
+        self, label: str, *, label_style: Style | None = None
+    ) -> ActivitySnapshot:
         elapsed = time.monotonic() - self._start_time
         tokens_int = int(self._token_count)
         token_rate = None
@@ -262,11 +268,13 @@ class _ContentBlock:
             elapsed_s=elapsed,
             tokens=tokens_int,
             token_rate=token_rate,
+            label_style=label_style,
         )
 
     def _compose_spinner(self) -> Text:
         return activity_status_line(
-            self._activity_snapshot("Composing"), width=current_console_width()
+            self._activity_snapshot("Composing", label_style=tui_rich_style("activity_label")),
+            width=current_console_width(),
         )
 
     def _compose_thinking_stream(self) -> RenderableType:
@@ -280,7 +288,8 @@ class _ContentBlock:
 
     def _compose_thinking_spinner(self) -> Text:
         return activity_status_line(
-            self._activity_snapshot("Thinking"), width=current_console_width()
+            self._activity_snapshot("Thinking", label_style=tui_rich_style("activity_label")),
+            width=current_console_width(),
         )
 
     def _build_preview(self, text: str) -> str:
@@ -292,7 +301,8 @@ class _ContentBlock:
 
     def _compose_thinking(self) -> Text:
         return activity_status_line(
-            self._activity_snapshot("Thinking"), width=current_console_width()
+            self._activity_snapshot("Thinking", label_style=tui_rich_style("activity_label")),
+            width=current_console_width(),
         )
 
 
@@ -352,6 +362,16 @@ class _ToolCallBlock:
     @property
     def is_background_pending(self) -> bool:
         return self._is_background_pending
+
+    @property
+    def has_expandable_card(self) -> bool:
+        return self._tui_card is not None and self._tui_card.can_expand
+
+    def toggle_expanded(self) -> None:
+        if self._tui_card is None:
+            return
+        self._tui_card.toggle_expanded()
+        self._renderable = self._compose()
 
     def append_args_part(self, args_part: str):
         if self.finished:
@@ -724,7 +744,7 @@ class _CompactionBlock:
         subtle = tui_rich_style("dim")
 
         title = Text()
-        glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+        glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
         title.append(f"{glyph} ", style=tui_rich_style("muted"))
         title.append("Compacting conversation…")
         title.append(f" ({format_elapsed(elapsed)})", style=subtle)

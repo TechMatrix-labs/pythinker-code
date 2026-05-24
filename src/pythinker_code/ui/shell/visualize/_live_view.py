@@ -27,7 +27,12 @@ from rich.text import Text
 from pythinker_code.ui.shell.console import console, current_console_width
 from pythinker_code.ui.shell.echo import render_user_echo
 from pythinker_code.ui.shell.keyboard import KeyboardListener, KeyEvent
-from pythinker_code.ui.shell.motion import ActivitySnapshot, activity_status_line
+from pythinker_code.ui.shell.motion import (
+    ActivitySnapshot,
+    activity_status_line,
+    reduced_motion_enabled,
+)
+from pythinker_code.ui.shell.spacing import BLANK_ROW
 from pythinker_code.ui.shell.spinner_words import spinner_message
 from pythinker_code.ui.shell.visualize._approval_panel import (
     ApprovalRequestPanel,
@@ -84,7 +89,9 @@ from pythinker_code.wire.types import (
 MAX_LIVE_NOTIFICATIONS = 4
 EXTERNAL_MESSAGE_GRACE_S = 0.1
 _LIVE_VERTICAL_OVERFLOW: Literal["crop", "ellipsis", "visible"] = "ellipsis"
-_ACTION_SPACER = Text(" ")
+# Canonical inter-block spacer. The live stream owns the gaps *between* action
+# blocks; cards/panels must not add external top/bottom spacing (see spacing.py).
+_ACTION_SPACER = BLANK_ROW
 
 
 def _append_action_block(
@@ -211,10 +218,10 @@ class _LiveView:
         ) as live:
 
             async def keyboard_handler(listener: KeyboardListener, event: KeyEvent) -> None:
-                # Handle Ctrl+O specially - pause Live while the pager is active.
+                # Handle Ctrl+O specially - pause Live only while the pager is active.
                 # Ctrl+E remains accepted as a legacy alias.
                 if event in (KeyEvent.CTRL_O, KeyEvent.CTRL_E):
-                    if self.has_expandable_panel():
+                    if self._has_expandable_modal_panel():
                         from pythinker_code.telemetry import track
 
                         track("shortcut_expand")
@@ -228,6 +235,8 @@ class _LiveView:
                             live.start()
                             live.update(self.compose(), refresh=True)
                             await listener.resume()
+                    elif self._toggle_latest_tool_card():
+                        live.update(self.compose(), refresh=True)
                     return
 
                 # Handle ENTER/SPACE on question panel when "Other" is selected
@@ -318,6 +327,9 @@ class _LiveView:
             logger.debug("Ignoring external wire message after live view shutdown: {msg}", msg=msg)
 
     def has_expandable_panel(self) -> bool:
+        return self._has_expandable_modal_panel() or self._expandable_tool_card() is not None
+
+    def _has_expandable_modal_panel(self) -> bool:
         return (
             self._expandable_approval_panel() is not None
             or self._expandable_question_panel() is not None
@@ -334,6 +346,24 @@ class _LiveView:
         if panel is not None and panel.has_expandable_content:
             return panel
         return None
+
+    def _expandable_tool_card(self) -> _ToolCallBlock | None:
+        candidates = list(self._tool_call_blocks.values())
+        if self._last_tool_call_block in candidates:
+            candidates.remove(self._last_tool_call_block)
+            candidates.append(self._last_tool_call_block)
+        for block in reversed(candidates):
+            if block.has_expandable_card:
+                return block
+        return None
+
+    def _toggle_latest_tool_card(self) -> bool:
+        block = self._expandable_tool_card()
+        if block is None:
+            return False
+        block.toggle_expanded()
+        self.refresh_soon()
+        return True
 
     def _show_expandable_panel_content(self) -> bool:
         if approval_panel := self._expandable_approval_panel():
@@ -448,8 +478,14 @@ class _LiveView:
         """
         blocks: list[RenderableType] = []
         blocks.extend(self.compose_interactive_panels())
-        blocks.extend(self.compose_agent_output())
+        agent_blocks = self.compose_agent_output()
+        blocks.extend(agent_blocks)
         if include_status:
+            # One blank row under the spinner verb (the agent stream's tail)
+            # before the status line — but only when the status line has content,
+            # since an empty status row already renders as a blank line.
+            if agent_blocks and self._status_block.text.plain.strip():
+                blocks.append(_ACTION_SPACER)
             blocks.append(self._status_block.render())
         return Group(*blocks)
 
@@ -498,7 +534,9 @@ class _LiveView:
                 self._compaction_block = None
                 self.refresh_soon()
             case MCPLoadingBegin():
-                glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+                glyph = (
+                    "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
+                )
                 line = Text(f"{glyph} ", style=Style(color="grey50"))
                 line.append("Connecting MCP servers...", style="grey50")
                 self._mcp_loading_spinner = line
@@ -509,7 +547,9 @@ class _LiveView:
             case BtwBegin(question=question):
                 truncated = (question[:40] + "...") if len(question) > 40 else question
                 self._btw_question = question
-                glyph = "●" if int(time.monotonic() / 0.8) % 2 == 0 else " "
+                glyph = (
+                    "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
+                )
                 line = Text(f"{glyph} ", style=Style(color="grey50"))
                 line.append(f"Side question... {truncated}", style="grey50")
                 self._btw_spinner = line

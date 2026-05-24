@@ -14,13 +14,14 @@ from typing import Any, cast
 
 import pytest
 
-from pythinker_code.tools.display import DiffDisplayBlock
+from pythinker_code.tools.display import DiffDisplayBlock, ShellDisplayBlock
 from pythinker_code.ui.shell.components import sanitize_ansi
 from pythinker_code.ui.shell.console import render_to_ansi
 from pythinker_code.ui.shell.visualize import ApprovalRequestPanel
 from pythinker_code.wire.types import (
     ApprovalRequest,
     ApprovalResponse,
+    BriefDisplayBlock,
     QuestionRequest,
     StatusUpdate,
 )
@@ -106,6 +107,35 @@ def test_approval_panel_truncates_long_diff_preview_rows_to_terminal_width() -> 
     assert long_path not in rendered
     assert "this line is intentionally long and should not overflow" not in rendered
     assert all(len(line) <= 60 for line in rendered.splitlines())
+
+
+def test_approval_panel_hides_expand_hint_when_content_is_not_expandable() -> None:
+    request = _make_approval_request(description="short command")
+
+    rendered = _render_plain(ApprovalRequestPanel(request).render(width=80), width=80)
+
+    assert "expand" not in rendered
+
+
+def test_approval_panel_sanitizes_non_diff_display_blocks() -> None:
+    request = _make_approval_request(
+        sender="Shell\x1b[31m",
+        action="run command\x1b[0m",
+        source_description="Task\x1b[2J",
+        display=[
+            ShellDisplayBlock(language="bash", command="\x1b[31mecho hi\x1b[0m\nprintf done\x07"),
+            BriefDisplayBlock(text="\x1b]8;;https://example.test\x07brief\x1b]8;;\x1b\\"),
+        ],
+    )
+
+    panel = ApprovalRequestPanel(request)
+
+    assert panel._content_blocks[0].text == "echo hi\nprintf done"
+    assert panel._content_blocks[1].text == "brief"
+    rendered = _render_plain(panel.render(width=80), width=80)
+    assert "Task" in rendered
+    assert "\x1b" not in rendered
+    assert "\x07" not in rendered
 
 
 # ---------------------------------------------------------------------------

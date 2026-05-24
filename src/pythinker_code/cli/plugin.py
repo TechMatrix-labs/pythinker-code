@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import ipaddress
+import queue
+import socket
+import threading
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
+from urllib.parse import urljoin, urlparse
 
 import typer
 
@@ -92,6 +97,126 @@ def _extract_zip_to_plugin(zip_path: Path, tmp: Path) -> tuple[Path, Path]:
     raise typer.Exit(1)
 
 
+_MAX_PLUGIN_ZIP_REDIRECTS = 10
+_MAX_PLUGIN_ZIP_SIZE = 100 * 1024 * 1024
+_PLUGIN_DNS_LOOKUP_TIMEOUT_SECONDS = 5.0
+
+
+def _resolve_plugin_download_host(host: str) -> list[Any]:
+    """Resolve a plugin download hostname with a short timeout."""
+    result_queue: queue.Queue[tuple[list[Any] | None, OSError | None]] = queue.Queue(maxsize=1)
+
+    def _resolve() -> None:
+        try:
+            infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            result_queue.put((None, exc))
+        else:
+            result_queue.put((list(infos), None))
+
+    thread = threading.Thread(target=_resolve, daemon=True)
+    thread.start()
+    thread.join(_PLUGIN_DNS_LOOKUP_TIMEOUT_SECONDS)
+    if thread.is_alive():
+        raise TimeoutError(f"DNS lookup timed out for {host}")
+
+    try:
+        infos, error = result_queue.get_nowait()
+    except queue.Empty as exc:
+        raise TimeoutError(f"DNS lookup produced no result for {host}") from exc
+    if error is not None:
+        raise error
+    return infos or []
+
+
+def _is_disallowed_plugin_download_host(host: str | None) -> bool:
+    """Return True for localhost/private IP targets blocked for plugin downloads."""
+    if host is None:
+        return True
+    host = host.strip().strip("[]").lower()
+    if host in {"localhost", "ip6-localhost", "ip6-loopback"} or host.endswith(".localhost"):
+        return True
+
+    def _is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+
+    try:
+        return _is_blocked(ipaddress.ip_address(host))
+    except ValueError:
+        pass
+
+    # Resolve immediately before each request and reject if any resolved address is unsafe.
+    # httpx still performs its own connect-time resolution, so this is a best-effort guard
+    # against DNS aliases to local/private networks rather than a complete DNS-rebinding fix.
+    try:
+        infos = _resolve_plugin_download_host(host)
+    except (OSError, TimeoutError):
+        return True
+
+    if not infos:
+        return True
+
+    for info in infos:
+        address = info[4][0]
+        if not isinstance(address, str):
+            return True
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return True
+        if _is_blocked(ip):
+            return True
+    return False
+
+
+def _validate_plugin_download_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        typer.echo(f"Error: unsafe plugin download redirect scheme: {parsed.scheme}", err=True)
+        raise typer.Exit(1)
+    if _is_disallowed_plugin_download_host(parsed.hostname):
+        host = parsed.hostname or "<missing>"
+        typer.echo(f"Error: unsafe plugin download host: {host}", err=True)
+        raise typer.Exit(1)
+
+
+def _download_plugin_zip(url: str, zip_path: Path) -> None:
+    """Download a plugin zip while validating each redirect target."""
+    import httpx
+
+    current_url = url
+    for redirect_count in range(_MAX_PLUGIN_ZIP_REDIRECTS + 1):
+        _validate_plugin_download_url(current_url)
+        with httpx.stream("GET", current_url, follow_redirects=False, timeout=60.0) as resp:
+            if 300 <= resp.status_code < 400 and resp.headers.get("location"):
+                if redirect_count >= _MAX_PLUGIN_ZIP_REDIRECTS:
+                    typer.echo("Error: plugin download exceeded redirect limit", err=True)
+                    raise typer.Exit(1)
+                current_url = urljoin(str(resp.url), resp.headers["location"])
+                continue
+            resp.raise_for_status()
+            total_size = 0
+            with zip_path.open("wb") as f:
+                for chunk in resp.iter_bytes():
+                    total_size += len(chunk)
+                    if total_size > _MAX_PLUGIN_ZIP_SIZE:
+                        typer.echo(
+                            f"Error: plugin download exceeded size limit "
+                            f"({_MAX_PLUGIN_ZIP_SIZE} bytes)",
+                            err=True,
+                        )
+                        raise typer.Exit(1)
+                    f.write(chunk)
+            return
+
+
 def _resolve_source(target: str) -> tuple[Path, Path | None]:
     """Resolve plugin source to (local_dir, tmp_to_cleanup).
 
@@ -100,7 +225,6 @@ def _resolve_source(target: str) -> tuple[Path, Path | None]:
     """
     import shutil
     import tempfile
-    from urllib.parse import urlparse
 
     # HTTP(S) URL pointing to a .zip — download then extract.
     # Checked before the git-URL branch so GitHub/GitLab archive links
@@ -113,15 +237,14 @@ def _resolve_source(target: str) -> tuple[Path, Path | None]:
         zip_path = tmp / "_download.zip"
         typer.echo(f"Downloading {target}...")
         try:
-            with httpx.stream("GET", target, follow_redirects=True, timeout=60.0) as resp:
-                resp.raise_for_status()
-                with zip_path.open("wb") as f:
-                    for chunk in resp.iter_bytes():
-                        f.write(chunk)
+            _download_plugin_zip(target, zip_path)
         except httpx.HTTPError as exc:
             shutil.rmtree(tmp, ignore_errors=True)
             typer.echo(f"Error: download failed: {exc}", err=True)
             raise typer.Exit(1) from exc
+        except typer.Exit:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
 
         return _extract_zip_to_plugin(zip_path, tmp)
 

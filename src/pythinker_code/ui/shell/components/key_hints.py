@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from rich.text import Text
 
+from pythinker_code.ui.shell.keymap import key_text
+
 
 def raw_key_hint(key: str, description: str) -> Text:
     """Format ``Esc cancel``-style hint with a raw key string.
@@ -18,10 +20,5 @@ def raw_key_hint(key: str, description: str) -> Text:
 
 
 def key_hint(key: str, description: str) -> Text:
-    """Format a key hint. Currently aliased to :func:`raw_key_hint`.
-
-    Reserved for a future keymap registry — once Phase 10 lands, this will
-    look up *key* in a central registry instead of taking it verbatim. The
-    public API is split now so call sites don't churn later.
-    """
-    return raw_key_hint(key, description)
+    """Format a key hint, resolving semantic keybinding ids when available."""
+    return raw_key_hint(key_text(key) or key, description)

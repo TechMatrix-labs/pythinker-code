@@ -317,6 +317,24 @@ def test_shell_collapses_long_command_and_reports_output_lines():
     assert "… +4 lines (ctrl+o to expand)" in rendered
 
 
+def test_shell_component_can_toggle_expansion_when_renderer_suppresses_generic_hint():
+    defn = get_tool_renderer("Shell")
+    assert defn is not None
+    comp = ToolExecutionComponent("Shell", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"command": "pytest", "timeout": 60})
+    comp.set_args_complete()
+    comp.mark_execution_started()
+    comp.set_result(ToolResultPayload(text="\n".join(f"line {i}" for i in range(8))))
+
+    collapsed = render_plain(comp.render(), width=100)
+    assert "line 3" not in collapsed
+    assert comp.can_expand
+
+    comp.toggle_expanded()
+    expanded = render_plain(comp.render(), width=100)
+    assert "line 3" in expanded
+
+
 def test_shell_wraps_substantial_output_in_response_gutter():
     rendered = _render("Shell", {"command": "pytest"}, output="failed\nexit code 1")
     assert "⎿" in rendered

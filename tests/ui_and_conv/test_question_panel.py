@@ -595,6 +595,31 @@ def test_render_does_not_crash():
     _render_to_str(panel)
 
 
+def test_question_panel_sanitizes_body_options_and_headers():
+    request = QuestionRequest(
+        id="qr-sanitize",
+        tool_call_id="tc-sanitize",
+        questions=[
+            QuestionItem(
+                question="Pick?\x1b[31m",
+                header="Head\x1b[0m",
+                options=[
+                    QuestionOption(label="A\x1b[2J", description="desc\x07"),
+                ],
+                body="# Body\x1b[31m\ncontent\x1b[0m",
+                other_label="Other\x1b[3m",
+                other_description="custom\x08desc",
+            )
+        ],
+    )
+
+    panel = QuestionRequestPanel(request)
+
+    assert panel.current_question_text == "Pick?"
+    assert panel._body_text == "# Body\ncontent"
+    assert panel._options == [("A", "desc"), ("Other", "customdesc")]
+
+
 def test_render_tab_bar_status():
     """Tab bar should show correct ●/✓/○ status indicators."""
     panel = QuestionRequestPanel(_make_multi_question_request())
