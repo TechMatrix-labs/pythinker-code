@@ -11,6 +11,7 @@ from pythinker_core.tooling import CallableTool2, ToolReturnValue
 
 from pythinker_code.config import Config
 from pythinker_code.constant import USER_AGENT
+from pythinker_code.execution_profiles import resolve_execution_policy
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.toolset import get_current_tool_call_or_none
 from pythinker_code.tools.utils import ToolResultBuilder, load_desc
@@ -80,6 +81,15 @@ class FetchURL(CallableTool2[Params]):
 
     @override
     async def __call__(self, params: Params) -> ToolReturnValue:
+        policy = resolve_execution_policy(
+            self._runtime.config.agent_execution_profile,
+            yolo=self._runtime.approval.is_yolo_flag(),
+        )
+        if policy.network == "deny":
+            return ToolResultBuilder().error(
+                "Network fetch is denied by the active execution profile.",
+                brief="Execution profile restriction",
+            )
         if self._service_config:
             ret = await self._fetch_with_service(params)
             if not ret.is_error:

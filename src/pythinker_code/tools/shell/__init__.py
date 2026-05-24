@@ -9,6 +9,7 @@ from pythinker_core.tooling import CallableTool2, ToolReturnValue
 from pythinker_host import AsyncReadable
 
 from pythinker_code.background import TaskView, format_task
+from pythinker_code.execution_profiles import resolve_execution_policy
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.approval import Approval
 from pythinker_code.soul.permission import check_shell_command_allowed
@@ -80,6 +81,17 @@ class Shell(CallableTool2[Params]):
 
         if not params.command:
             return builder.error("Command cannot be empty.", brief="Empty command")
+
+        policy = resolve_execution_policy(
+            self._runtime.config.agent_execution_profile,
+            yolo=self._runtime.approval.is_yolo_flag(),
+        )
+        if policy.shell == "deny":
+            return builder.error(
+                "Shell is denied by the active execution profile.",
+                brief="Execution profile restriction",
+                status=ToolResultStatus.denied,
+            )
 
         if err := check_shell_command_allowed(self._runtime, params.command):
             return err

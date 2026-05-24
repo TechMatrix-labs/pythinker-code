@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pythinker_core.tooling import ToolError
 
+from pythinker_code.execution_profiles import resolve_execution_policy
+
 if TYPE_CHECKING:
     from pythinker_code.soul.agent import Runtime
 
@@ -185,7 +187,18 @@ def permission_profile_for_runtime(runtime: Runtime) -> PermissionProfile:
     elif runtime.session.state.plan_mode:
         profile_name = "plan"
     else:
-        profile_name = "implement"
+        policy = resolve_execution_policy(
+            runtime.config.agent_execution_profile,
+            yolo=runtime.approval.is_yolo_flag(),
+        )
+        if policy.write == "deny" and policy.shell == "deny":
+            profile_name = "read_only"
+        elif runtime.config.agent_execution_profile == "review_safe":
+            profile_name = "review"
+        elif runtime.config.agent_execution_profile == "ci_fixer":
+            profile_name = "verify"
+        else:
+            profile_name = "implement"
     return _PERMISSION_PROFILES[profile_name]
 
 

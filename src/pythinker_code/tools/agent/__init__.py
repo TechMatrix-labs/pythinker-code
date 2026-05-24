@@ -7,6 +7,7 @@ from typing import Literal, override
 from pydantic import BaseModel, Field
 from pythinker_core.tooling import CallableTool2, ToolError, ToolReturnValue
 
+from pythinker_code.execution_profiles import resolve_execution_policy
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.toolset import get_current_tool_call_or_none
 from pythinker_code.subagents.models import AgentLaunchSpec, AgentTypeDefinition
@@ -185,6 +186,29 @@ class AgentTool(CallableTool2[Params]):
                 names.append(name)
         return names
 
+    def check_execution_policy(self, subagent_type: str) -> ToolError | None:
+        policy = resolve_execution_policy(
+            self._runtime.config.agent_execution_profile,
+            yolo=self._runtime.approval.is_yolo_flag(),
+        )
+        if policy.subagents == "deny":
+            return ToolError(
+                message="Subagents are denied by the active execution profile.",
+                brief="Execution profile restriction",
+            )
+        if (
+            policy.allowed_subagent_types is not None
+            and subagent_type not in policy.allowed_subagent_types
+        ):
+            return ToolError(
+                message=(
+                    f"Subagent type `{subagent_type}` is not allowed by the active execution "
+                    f"profile `{self._runtime.config.agent_execution_profile}`."
+                ),
+                brief="Execution profile restriction",
+            )
+        return None
+
     @override
     async def __call__(self, params: Params) -> ToolReturnValue:
         if self._runtime.role != "root":
@@ -197,6 +221,9 @@ class AgentTool(CallableTool2[Params]):
                 message=f"Unknown model alias: {params.model}",
                 brief="Invalid model alias",
             )
+        requested_type = params.subagent_type or "coder"
+        if err := self.check_execution_policy(requested_type):
+            return err
         if params.run_in_background:
             return await self._run_in_background(params)
         timeout = params.effective_timeout
@@ -417,6 +444,10 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
                 message=f"Unknown model alias: {params.model}",
                 brief="Invalid model alias",
             )
+        for child in params.agents:
+            requested_type = child.subagent_type or "coder"
+            if err := self._agent_tool.check_execution_policy(requested_type):
+                return err
 
         fingerprint = _run_agents_fingerprint(params)
         if self._runtime.approval.is_orchestration_approved(fingerprint):

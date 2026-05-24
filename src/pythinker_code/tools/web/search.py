@@ -7,6 +7,7 @@ from pythinker_core.tooling import CallableTool2, ToolReturnValue
 
 from pythinker_code.config import Config
 from pythinker_code.constant import USER_AGENT
+from pythinker_code.execution_profiles import resolve_execution_policy
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.soul.toolset import get_current_tool_call_or_none
 from pythinker_code.tools import SkipThisTool
@@ -56,6 +57,15 @@ class SearchWeb(CallableTool2[Params]):
     @override
     async def __call__(self, params: Params) -> ToolReturnValue:
         builder = ToolResultBuilder(max_line_length=None)
+        policy = resolve_execution_policy(
+            self._runtime.config.agent_execution_profile,
+            yolo=self._runtime.approval.is_yolo_flag(),
+        )
+        if policy.network == "deny":
+            return builder.error(
+                "Network search is denied by the active execution profile.",
+                brief="Execution profile restriction",
+            )
 
         api_key = self._runtime.oauth.resolve_api_key(self._api_key, self._oauth_ref)
         if not self._base_url or not api_key:
