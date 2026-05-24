@@ -31,6 +31,7 @@ from pythinker_code.soul.toolset import PythinkerToolset
 from pythinker_code.subagents import AgentTypeDefinition, ToolPolicy
 from pythinker_code.tools.agent import Agent as AgentTool
 from pythinker_code.tools.background import (
+    TaskHandoff,
     TaskInput,
     TaskList,
     TaskOutput,
@@ -272,6 +273,12 @@ def task_list_tool(runtime: Runtime) -> Generator[TaskList]:
 def task_output_tool(runtime: Runtime) -> TaskOutput:
     with tool_call_context("TaskOutput"):
         return TaskOutput(runtime)
+
+
+@pytest.fixture
+def task_handoff_tool(runtime: Runtime) -> Generator[TaskHandoff]:
+    with tool_call_context("TaskHandoff"):
+        yield TaskHandoff(runtime)
 
 
 @pytest.fixture

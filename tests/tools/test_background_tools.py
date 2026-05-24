@@ -138,6 +138,21 @@ async def test_task_output_returns_completed_output(
 
 
 @pytest.mark.asyncio
+async def test_task_handoff_returns_takeover_details(runtime, task_handoff_tool):
+    spec = _write_task(runtime, "b7777781", status="running", output="still going\n")
+
+    result = await task_handoff_tool(task_handoff_tool.params(task_id=spec.id))
+
+    output_path = runtime.background_tasks.store.output_path(spec.id).resolve()
+    assert not result.is_error
+    assert "tool_status: long_running_snapshot" in result.output
+    assert "command: make build" in result.output
+    assert f"output_path: {output_path}" in result.output
+    assert "reattach_warning:" in result.output
+    assert "stop_hint: Use TaskStop" in result.output
+
+
+@pytest.mark.asyncio
 async def test_task_input_queues_input_for_running_shell_task(runtime, task_input_tool):
     spec = _write_task(
         runtime,
@@ -200,7 +215,9 @@ async def test_background_shell_receives_task_input(shell_tool, task_input_tool,
     write = await task_input_tool(task_input_tool.params(task_id=task_id, text="ping"))
     assert not write.is_error
 
-    result = await task_output_tool(task_output_tool.params(task_id=task_id, block=True, timeout=10))
+    result = await task_output_tool(
+        task_output_tool.params(task_id=task_id, block=True, timeout=10)
+    )
 
     assert not result.is_error
     assert "got:ping" in result.output

@@ -16,6 +16,7 @@ agent:
     - "pythinker_code.tools.background:TaskList"
     - "pythinker_code.tools.background:TaskOutput"
     - "pythinker_code.tools.background:TaskInput"
+    - "pythinker_code.tools.background:TaskHandoff"
     - "pythinker_code.tools.background:TaskStop"
     - "pythinker_code.tools.file:ReadFile"
     - "pythinker_code.tools.file:ReadMediaFile"

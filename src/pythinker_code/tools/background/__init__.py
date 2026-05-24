@@ -159,6 +159,10 @@ class TaskOutputParams(BaseModel):
     )
 
 
+class TaskHandoffParams(BaseModel):
+    task_id: str = Field(description="The background task ID to hand off to the user.")
+
+
 class TaskInputParams(BaseModel):
     task_id: str = Field(description="The running background shell task ID to write to.")
     text: str = Field(
@@ -356,9 +360,7 @@ class TaskOutput(CallableTool2[TaskOutputParams]):
 def _is_control_heavy(text: str) -> bool:
     if "\x00" in text:
         return True
-    control_chars = sum(
-        1 for char in text if ord(char) < 32 and char not in {"\n", "\r", "\t"}
-    )
+    control_chars = sum(1 for char in text if ord(char) < 32 and char not in {"\n", "\r", "\t"})
     return control_chars > 0 and control_chars / max(len(text), 1) > 0.1
 
 
@@ -369,6 +371,51 @@ def _redact_input_for_display(text: str) -> str:
     if len(single_line) > 120:
         return single_line[:117] + "..."
     return single_line
+
+
+class TaskHandoff(CallableTool2[TaskHandoffParams]):
+    name: str = "TaskHandoff"
+    description: str = load_desc(Path(__file__).parent / "handoff.md")
+    params: type[TaskHandoffParams] = TaskHandoffParams
+
+    def __init__(self, runtime: Runtime):
+        super().__init__()
+        self._runtime = runtime
+
+    @override
+    async def __call__(self, params: TaskHandoffParams) -> ToolReturnValue:
+        if err := _ensure_root(self._runtime):
+            return err
+        view = self._runtime.background_tasks.get_task(params.task_id)
+        if view is None:
+            return tool_error(
+                message=f"Task not found: {params.task_id}",
+                brief="Task not found",
+                status=ToolResultStatus.error,
+            )
+        output_path = self._runtime.background_tasks.resolve_output_path(params.task_id).resolve()
+        lines = [
+            tool_status_line(_tool_status_for_view(view)),
+            f"task_id: {view.spec.id}",
+            f"kind: {view.spec.kind}",
+            f"status: {view.runtime.status}",
+            f"description: {view.spec.description}",
+            f"command: {view.spec.command or '[not a shell task]'}",
+            f"cwd: {view.spec.cwd or '[not available]'}",
+            f"output_path: {output_path}",
+            "stop_hint: Use TaskStop with this task_id to request cancellation.",
+            (
+                "reattach_warning: Live terminal reattachment is not available for this "
+                "task; use TaskOutput or read output_path for logs."
+            ),
+        ]
+        return ToolReturnValue(
+            is_error=False,
+            output="\n".join(lines),
+            message="Task handoff details retrieved.",
+            display=[_task_display(self._runtime, params.task_id)],
+            extras={"status": _tool_status_for_view(view).value},
+        )
 
 
 class TaskInput(CallableTool2[TaskInputParams]):
