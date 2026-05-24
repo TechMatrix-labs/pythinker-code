@@ -63,17 +63,19 @@ def tool_title(label: str) -> Text:
 
 
 def loading_marker(*, done: bool = False, pulse: bool = True, now: float | None = None) -> Text:
-    """Return the app-wide solid-circle task marker.
+    """Return the app-wide task marker.
 
-    Running tasks pulse by disappearing/reappearing; completed tasks use green.
-    The animated braille spinner is reserved for the bottom thinking-word status.
+    Running tasks always show a visible dot that pulses between heavy/light
+    dot glyphs; completed tasks use a green checkmark. The animated braille
+    spinner is reserved for the bottom thinking-word status.
     """
-    style = tui_rich_style("success" if done else "muted")
-    if done or not pulse:
-        return Text("● ", style=style)
+    if done:
+        return Text("✓ ", style=tui_rich_style("success"))
+    if not pulse:
+        return Text("● ", style=tui_rich_style("muted"))
     t = time.monotonic() if now is None else now
-    glyph = "●" if int(t / 0.8) % 2 == 0 else " "
-    return Text(f"{glyph} ", style=style)
+    glyph = "●" if int(t / 0.8) % 2 == 0 else "•"
+    return Text(f"{glyph} ", style=tui_rich_style("muted"))
 
 
 def running_spinner(

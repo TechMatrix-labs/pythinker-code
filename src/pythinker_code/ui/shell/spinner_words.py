@@ -10,7 +10,7 @@ SPINNER_FRAMES: tuple[str, ...] = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "�
 SPINNER_FRAME_INTERVAL_S = 0.08
 # Keep each verb on-screen long enough to be readable, matching Blackbox's
 # stable loading-word feel rather than changing every frame.
-SPINNER_VERB_INTERVAL_S = 30.0
+SPINNER_VERB_INTERVAL_S = 600.0
 
 # Ported from blackbox/src/constants/spinnerVerbs.ts. Keep the list broad so
 # long-running turns do not look frozen even when no new tool output arrives.

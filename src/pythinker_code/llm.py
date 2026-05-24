@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
-from pydantic import SecretStr
 from pythinker_core.chat_provider import ChatProvider
 
 from pythinker_code.constant import USER_AGENT
@@ -76,18 +75,12 @@ def augment_provider_with_env_vars(
         if base_url := os.getenv("LM_STUDIO_BASE_URL"):
             provider.base_url = base_url
             applied["LM_STUDIO_BASE_URL"] = base_url
-        if api_key := os.getenv("LM_STUDIO_API_KEY"):
-            provider.api_key = SecretStr(api_key)
-            applied["LM_STUDIO_API_KEY"] = "******"
         return applied
 
     if provider_key == "managed:ollama":
         if base_url := os.getenv("OLLAMA_BASE_URL"):
             provider.base_url = base_url
             applied["OLLAMA_BASE_URL"] = base_url
-        if api_key := os.getenv("OLLAMA_API_KEY"):
-            provider.api_key = SecretStr(api_key)
-            applied["OLLAMA_API_KEY"] = "******"
         return applied
 
     match provider.type:
@@ -95,9 +88,6 @@ def augment_provider_with_env_vars(
             if base_url := os.getenv("PYTHINKER_BASE_URL"):
                 provider.base_url = base_url
                 applied["PYTHINKER_BASE_URL"] = base_url
-            if api_key := os.getenv("PYTHINKER_API_KEY"):
-                provider.api_key = SecretStr(api_key)
-                applied["PYTHINKER_API_KEY"] = "******"
             if model_name := os.getenv("PYTHINKER_MODEL_NAME"):
                 model.model = model_name
                 applied["PYTHINKER_MODEL_NAME"] = model_name
@@ -113,10 +103,17 @@ def augment_provider_with_env_vars(
                 )
                 applied["PYTHINKER_MODEL_CAPABILITIES"] = capabilities
         case "openai_legacy" | "openai_responses" | "openai_codex":
-            if base_url := os.getenv("OPENAI_BASE_URL"):
+            # OPENAI_* non-secret overrides are for OpenAI-compatible user
+            # configs and OpenAI managed providers only. Runtime auth must come
+            # from saved config/OAuth created by `pythinker login` or `/login`,
+            # never from ambient shell API-key environment variables.
+            allow_openai_env = provider_key is None or provider_key in {
+                "openai",
+                "managed:openai",
+                "managed:openai-chatgpt",
+            }
+            if allow_openai_env and (base_url := os.getenv("OPENAI_BASE_URL")):
                 provider.base_url = base_url
-            if api_key := os.getenv("OPENAI_API_KEY"):
-                provider.api_key = SecretStr(api_key)
         case _:
             pass
 

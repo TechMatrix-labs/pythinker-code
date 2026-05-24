@@ -146,6 +146,8 @@ def test_pyinstaller_datas():
             "src/pythinker_code/tools/dmail/dmail.md",
             "pythinker_code/tools/dmail",
         ),
+        ("src/pythinker_code/tools/background/handoff.md", "pythinker_code/tools/background"),
+        ("src/pythinker_code/tools/background/input.md", "pythinker_code/tools/background"),
         ("src/pythinker_code/tools/background/list.md", "pythinker_code/tools/background"),
         ("src/pythinker_code/tools/background/output.md", "pythinker_code/tools/background"),
         ("src/pythinker_code/tools/background/stop.md", "pythinker_code/tools/background"),

@@ -204,6 +204,21 @@ def test_task_output_params_schema(task_output_tool: TaskOutput):
                     "description": "Whether to wait for the task to finish before returning.",
                     "type": "boolean",
                 },
+                "max_bytes": {
+                    "default": 32768,
+                    "description": "Maximum bytes to read from the task output log.",
+                    "maximum": 1048576,
+                    "minimum": 1,
+                    "type": "integer",
+                },
+                "offset": {
+                    "anyOf": [
+                        {"minimum": 0, "type": "integer"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                    "description": "Byte offset to read from. Omit to return the default tail preview for compatibility.",
+                },
                 "timeout": {
                     "default": 30,
                     "description": "Maximum number of seconds to wait when block=true.",

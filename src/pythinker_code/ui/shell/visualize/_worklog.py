@@ -15,6 +15,7 @@ from pythinker_code.tools.display import (
     DiffDisplayBlock,
     TodoDisplayBlock,
 )
+from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Markdown
 from pythinker_code.ui.shell.design_system import ShellTone, StatusName, shell_style, status_icon
 from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.utils.rich.diff_render import (
@@ -22,7 +23,6 @@ from pythinker_code.utils.rich.diff_render import (
     render_diff_preview,
     render_diff_summary_panel,
 )
-from pythinker_code.utils.rich.markdown import Markdown
 
 
 class WorkLogState(Enum):

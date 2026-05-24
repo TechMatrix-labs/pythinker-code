@@ -24,12 +24,12 @@ def test_spinner_frames_use_requested_braille_dotted_design() -> None:
     assert SPINNER_FRAMES == ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
 
-def test_spinner_word_stays_stable_for_thirty_seconds() -> None:
-    assert spinner_verb(120.0) == spinner_verb(149.9)
+def test_spinner_word_stays_stable_for_ten_minutes() -> None:
+    assert spinner_verb(0.0) == spinner_verb(599.9)
 
 
 def test_spinner_word_rotates_after_interval() -> None:
-    assert spinner_verb(120.0) != spinner_verb(150.0)
+    assert spinner_verb(0.0) != spinner_verb(600.0)
 
 
 def test_spinner_message_uses_single_unicode_ellipsis() -> None:

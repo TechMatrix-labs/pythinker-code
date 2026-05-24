@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rich.console import Group, RenderableType
-from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.style import Style as RichStyle
 from rich.text import Text
 
+from pythinker_code.ui.shell.components.markdown import pythinker_markdown
 from pythinker_code.ui.shell.keymap import key_text
 from pythinker_code.ui.theme import tui_rich_style
 
@@ -82,7 +82,7 @@ def render_skill_invocation(
     label = _label("skill")
     if expanded and skill.content.strip():
         header = f"**{skill.name}**\n\n"
-        body = Markdown(header + skill.content)
+        body = pythinker_markdown(header + skill.content)
         return _frame(Group(label, Text(""), body))
     line = Text()
     line.append_text(label)
@@ -102,7 +102,7 @@ def render_compaction_summary(
     token_str = f"{compaction.tokens_before:,}"
     if expanded and compaction.summary.strip():
         header = f"**Compacted from {token_str} tokens**\n\n"
-        body = Markdown(header + compaction.summary)
+        body = pythinker_markdown(header + compaction.summary)
         return _frame(Group(label, Text(""), body))
     body_text = _hint(
         f"Compacted from {token_str} tokens (",
@@ -116,7 +116,7 @@ def render_branch_summary(branch: BranchSummaryInput, *, expanded: bool = False)
     label = _label("branch")
     if expanded and branch.summary.strip():
         header = "**Branch Summary**\n\n"
-        body = Markdown(header + branch.summary)
+        body = pythinker_markdown(header + branch.summary)
         return _frame(Group(label, Text(""), body))
     body_text = _hint(
         "Branch summary (",

@@ -18,16 +18,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from rich.cells import cell_len
 from rich.console import Console, ConsoleOptions, RenderableType, RenderResult
-from rich.markdown import CodeBlock, Markdown
 from rich.padding import Padding
-from rich.rule import Rule
 from rich.style import Style as RichStyle
 from rich.syntax import Syntax
 from rich.text import Text
 from rich.theme import Theme
 
 from pythinker_code.ui.theme import ThemeName, get_markdown_colors
+from pythinker_code.utils.rich.markdown import CodeBlock, Markdown
 
 __all__ = [
     "PythinkerMarkdown",
@@ -45,11 +45,10 @@ class _BorderedCodeBlock(CodeBlock):
         bg_style = RichStyle(bgcolor=colors.code_block_bg) if colors.code_block_bg else RichStyle()
 
         label = self.lexer_name.strip() or "code"
-        opener = Rule(
-            title=Text(f" {label} ", style=border_style),
-            characters="─",
+        opener_text = f"╭─ {label} "
+        opener = Text(
+            opener_text + "─" * max(0, options.max_width - cell_len(opener_text)),
             style=border_style,
-            align="left",
         )
         code_text = str(self.text).rstrip("\n")
         body: RenderableType = Syntax(
@@ -62,7 +61,7 @@ class _BorderedCodeBlock(CodeBlock):
         )
         if bg_style:
             body = Padding(body, (0, 0), style=bg_style)
-        closer = Rule(characters="─", style=border_style)
+        closer = Text("╰" + "─" * max(0, options.max_width - 1), style=border_style)
         yield opener
         yield body
         yield closer
@@ -74,6 +73,7 @@ def _markdown_style_overrides(theme: ThemeName | None = None) -> dict[str, RichS
     return {
         "markdown.h1": RichStyle(color=colors.heading, bold=True),
         "markdown.h1.border": RichStyle(color=colors.heading),
+        "markdown.h1.underline": RichStyle(color=colors.heading),
         "markdown.h2": RichStyle(bold=True, underline=True),
         "markdown.h3": RichStyle(color=colors.heading, bold=True),
         "markdown.h4": RichStyle(color=colors.heading, bold=True, dim=True),
@@ -85,6 +85,8 @@ def _markdown_style_overrides(theme: ThemeName | None = None) -> dict[str, RichS
         "markdown.link_url": RichStyle(color=colors.link, underline=True),
         "markdown.block_quote": RichStyle(color=colors.quote, italic=True),
         "markdown.hr": RichStyle(color=colors.code_block_border),
+        "markdown.code_block": RichStyle(color=colors.inline_code),
+        "markdown.code_block.border": RichStyle(color=colors.code_block_border, bold=True),
         "markdown.item.bullet": RichStyle(color=colors.strong, bold=True),
         "markdown.item.number": RichStyle(color=colors.strong, bold=True),
     }

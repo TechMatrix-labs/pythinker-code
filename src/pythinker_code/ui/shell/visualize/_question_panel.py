@@ -12,10 +12,10 @@ from rich.console import RenderableType
 from rich.markup import escape
 from rich.text import Text
 
+from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Markdown
 from pythinker_code.ui.shell.console import console, render_to_ansi
 from pythinker_code.ui.shell.keyboard import KeyEvent
 from pythinker_code.ui.shell.visualize._dialog_shell import DialogOption, render_dialog
-from pythinker_code.utils.rich.markdown import Markdown
 from pythinker_code.wire.types import QuestionRequest
 
 OTHER_OPTION_LABEL = "Other"

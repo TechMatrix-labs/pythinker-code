@@ -41,7 +41,7 @@ def test_augment_provider_with_env_vars_pythinker(monkeypatch):
         LLMProvider(
             type="pythinker",
             base_url="https://env.test/v1",
-            api_key=SecretStr("env-key"),
+            api_key=SecretStr("orig-key"),
         )
     )
     assert model == snapshot(

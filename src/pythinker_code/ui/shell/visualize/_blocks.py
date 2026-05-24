@@ -24,6 +24,7 @@ from rich.text import Text
 from pythinker_code.soul import format_context_status, format_token_count
 from pythinker_code.tools import extract_key_argument
 from pythinker_code.ui.shell.components import ToolExecutionComponent
+from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Markdown
 from pythinker_code.ui.shell.console import console
 from pythinker_code.ui.shell.motion import ActivitySnapshot, activity_status_line
 from pythinker_code.ui.shell.tool_renderers import (
@@ -43,7 +44,6 @@ from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.ui.tui_config import is_card_style
 from pythinker_code.utils.datetime import format_elapsed
 from pythinker_code.utils.rich.columns import BulletColumns
-from pythinker_code.utils.rich.markdown import Markdown
 from pythinker_code.wire.types import (
     MCPStatusSnapshot,
     Notification,

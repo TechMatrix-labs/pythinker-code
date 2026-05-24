@@ -62,25 +62,25 @@ def test_working_indicator_uses_rotating_thinking_words(monkeypatch):
 
     rendered = _render(view._working_indicator())
 
-    assert "Architecting…" in rendered
+    assert "Accomplishing…" in rendered
     assert "Working" not in rendered
 
 
-def test_working_indicator_rotates_thinking_words_every_thirty_seconds(monkeypatch):
-    now = 90.0
+def test_working_indicator_rotates_thinking_words_every_ten_minutes(monkeypatch):
+    now = 0.0
     monkeypatch.setattr(live_view_module.time, "monotonic", lambda: now)
     view = _LiveView(StatusUpdate())
     view.dispatch_wire_message(TurnBegin(user_input="scan"))
 
     first = _render(view._working_indicator())
-    now = 119.9
+    now = 599.9
     still_first = _render(view._working_indicator())
-    now = 120.0
+    now = 600.0
     second = _render(view._working_indicator())
 
-    assert "Architecting…" in first
-    assert "Architecting…" in still_first
-    assert "Baking…" in second
+    assert "Accomplishing…" in first
+    assert "Accomplishing…" in still_first
+    assert "Actioning…" in second
 
 
 def test_prompt_live_view_suppresses_background_task_notifications(monkeypatch):
