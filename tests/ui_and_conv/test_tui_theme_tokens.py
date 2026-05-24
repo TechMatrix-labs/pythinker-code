@@ -31,11 +31,11 @@ def _restore_active_theme():
 def test_dark_tokens_have_pi_reference_values():
     set_active_theme("dark")
     t = get_tui_tokens()
-    #  values (packages/.../theme/dark.json).
-    assert t.tool_pending_bg == "#282832"
-    assert t.tool_success_bg == "#283228"
-    assert t.tool_error_bg == "#3c2828"
+    assert t.tool_pending_bg == "#282a3a"
+    assert t.tool_success_bg == "#253527"
+    assert t.tool_error_bg == "#3a2632"
     assert t.accent == "#BAC4FD"
+    assert t.border == "#8EA0F8"
 
 
 def test_light_tokens_have_pi_reference_values():
@@ -102,6 +102,7 @@ def test_tui_rich_style_unknown_token_raises():
 def test_dark_markdown_uses_lighter_blue_accents():
     colors = get_markdown_colors("dark")
 
-    assert colors.link == "#93c5fd"
+    assert colors.link == "#BAC4FD"
+    assert colors.heading == "#BAC4FD"
     assert colors.spinner_active == "#BAC4FD"
     assert markdown_rich_style("link", theme="dark").color is not None

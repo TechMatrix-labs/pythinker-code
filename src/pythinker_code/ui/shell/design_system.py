@@ -36,12 +36,12 @@ StatusName = Literal[
 
 _TONE_STYLES: dict[ShellTone, Style] = {
     ShellTone.NORMAL: Style(color="default"),
-    ShellTone.MUTED: Style(color="grey50"),
+    ShellTone.MUTED: Style(color="#8b90a8"),
     ShellTone.ACCENT: Style(color="#BAC4FD"),
-    ShellTone.SUCCESS: Style(color="green"),
-    ShellTone.WARNING: Style(color="yellow"),
-    ShellTone.ERROR: Style(color="red"),
-    ShellTone.INFO: Style(color="#93c5fd"),
+    ShellTone.SUCCESS: Style(color="#A6E3A1"),
+    ShellTone.WARNING: Style(color="#F2CC60"),
+    ShellTone.ERROR: Style(color="#F38BA8"),
+    ShellTone.INFO: Style(color="#B8D7FF"),
 }
 
 _STATUS: dict[StatusName, tuple[str, ShellTone]] = {
@@ -67,7 +67,7 @@ def status_icon(name: StatusName) -> Text:
 
 def keyboard_hint(key: str, label: str) -> Text:
     text = Text()
-    text.append(key, style=Style(color="cyan", bold=True))
+    text.append(key, style=shell_style(ShellTone.ACCENT) + Style(bold=True))
     if label:
         text.append(f" {label}", style=shell_style(ShellTone.MUTED))
     return text

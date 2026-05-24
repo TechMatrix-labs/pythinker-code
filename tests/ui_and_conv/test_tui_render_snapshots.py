@@ -90,8 +90,8 @@ def test_pending_card_uses_tool_pending_bg():
     assert "src/foo.py" in text
 
     coloured = _ansi(comp.render(), width=60)
-    # Default dark theme tool_pending_bg = #282832 -> rgb(40,40,50).
-    assert "48;2;40;40;50" in coloured
+    # Default dark theme tool_pending_bg = #282a3a -> rgb(40,42,58).
+    assert "48;2;40;42;58" in coloured
 
 
 def test_success_card_renders_compact_without_success_bg():
@@ -124,8 +124,8 @@ def test_error_card_uses_tool_error_bg():
 
     assert comp.status == ToolExecutionStatus.ERROR
     coloured = _ansi(comp.render(), width=60)
-    # Default dark theme tool_error_bg = #3c2828 -> rgb(60,40,40).
-    assert "48;2;60;40;40" in coloured
+    # Default dark theme tool_error_bg = #3a2632 -> rgb(58,38,50).
+    assert "48;2;58;38;50" in coloured
 
 
 def test_denied_card_uses_error_bg():
@@ -137,7 +137,7 @@ def test_denied_card_uses_error_bg():
     comp.set_status(ToolExecutionStatus.DENIED)
     coloured = _ansi(comp.render(), width=60)
     # Denied also uses error background.
-    assert "48;2;60;40;40" in coloured
+    assert "48;2;58;38;50" in coloured
 
 
 # ---------------------------------------------------------------------------
