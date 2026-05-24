@@ -74,6 +74,8 @@ class ApprovalState:
         """When true, all auto-approval paths are suppressed."""
         self.auto_approve_actions: set[str] = auto_approve_actions or set()
         """Set of action names that should automatically be approved."""
+        self.approved_orchestration_fingerprints: set[str] = set()
+        """RunAgents orchestration shapes approved for this in-memory session."""
         self._on_change = on_change
 
     def notify_change(self) -> None:
@@ -156,6 +158,12 @@ class Approval:
     def is_runtime_auto(self) -> bool:
         """True only when auto mode came from this invocation."""
         return self._state.runtime_auto
+
+    def is_orchestration_approved(self, fingerprint: str) -> bool:
+        return fingerprint in self._state.approved_orchestration_fingerprints
+
+    def approve_orchestration(self, fingerprint: str) -> None:
+        self._state.approved_orchestration_fingerprints.add(fingerprint)
 
     async def request(
         self,

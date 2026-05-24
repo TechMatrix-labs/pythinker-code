@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 from pathlib import Path
 from typing import Literal, override
 
@@ -372,6 +374,20 @@ class AgentTool(CallableTool2[Params]):
             return ToolError(message=str(exc), brief="Background start failed")
 
 
+def _run_agents_fingerprint(params: RunAgentsParams) -> str:
+    payload = {
+        "summary": params.summary,
+        "agent_count": len(params.agents),
+        "subagent_types": [agent.subagent_type or "coder" for agent in params.agents],
+        "model": params.model,
+        "run_in_background": params.run_in_background,
+        "isolation": params.isolation,
+        "timeout": params.timeout,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 class RunAgentsTool(CallableTool2[RunAgentsParams]):
     name: str = "RunAgents"
     params: type[RunAgentsParams] = RunAgentsParams
@@ -402,6 +418,23 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
                 brief="Invalid model alias",
             )
 
+        fingerprint = _run_agents_fingerprint(params)
+        if self._runtime.approval.is_orchestration_approved(fingerprint):
+            orchestration_approval = "reused"
+        else:
+            approval = await self._runtime.approval.request(
+                self.name,
+                "run agents orchestration",
+                (
+                    f"Launch {len(params.agents)} child agent(s) for `{params.summary}` "
+                    f"with isolation={params.isolation}, background={params.run_in_background}"
+                ),
+            )
+            if not approval:
+                return approval.rejection_error()
+            self._runtime.approval.approve_orchestration(fingerprint)
+            orchestration_approval = "requested"
+
         results: list[tuple[AgentRunConfig, ToolReturnValue]] = []
         for child in params.agents:
             child_params = Params(
@@ -420,6 +453,8 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
         tool_status = ToolResultStatus.failure if any_error else ToolResultStatus.launched
         lines = [
             tool_status_line(tool_status),
+            f"orchestration_approval: {orchestration_approval}",
+            f"orchestration_fingerprint: {fingerprint[:12]}",
             f"summary: {params.summary}",
             f"agent_count: {len(results)}",
             "agents:",

@@ -12,6 +12,7 @@ from pythinker_core.tooling.empty import EmptyToolset
 from pythinker_code.approval_runtime import get_current_approval_source_or_none
 from pythinker_code.soul import MaxStepsReached, RunCancelled
 from pythinker_code.soul.agent import Agent as SoulAgent
+from pythinker_code.soul.approval import ApprovalResult
 from pythinker_code.subagents import AgentLaunchSpec, AgentTypeDefinition, ToolPolicy
 from pythinker_code.tools.agent import AgentRunConfig, RunAgents
 from pythinker_code.wire.types import ApprovalRequest, TextPart
@@ -548,6 +549,7 @@ async def test_run_agents_launches_background_children_with_base_prompt(runtime,
 
     assert not result.is_error
     assert "tool_status: launched" in result.output
+    assert "orchestration_approval: requested" in result.output
     assert result.extras == {"status": "launched"}
     assert "agent_count: 2" in result.output
     assert "task_id: task-1" in result.output
@@ -557,6 +559,64 @@ async def test_run_agents_launches_background_children_with_base_prompt(runtime,
         "Shared context\n\nFind API files",
         "Shared context\n\nFind tests",
     ]
+
+
+async def test_run_agents_reuses_approved_orchestration_fingerprint(runtime, monkeypatch):
+    runtime.approval.set_yolo(False)
+    runtime.labor_market.add_builtin_type(
+        AgentTypeDefinition(
+            name="explore",
+            description="Read-only exploration.",
+            agent_file=runtime.subagent_store.root / "explore.yaml",
+            tool_policy=ToolPolicy(mode="inherit"),
+        )
+    )
+    created: list[dict[str, object]] = []
+    approval_requests = 0
+
+    async def fake_request(*args, **kwargs):
+        nonlocal approval_requests
+        approval_requests += 1
+        return ApprovalResult(approved=True)
+
+    def fake_create_agent_task(**kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(
+            spec=SimpleNamespace(
+                id=f"task-{len(created)}",
+                kind="agent",
+                description=kwargs["description"],
+            ),
+            runtime=SimpleNamespace(status="starting"),
+        )
+
+    monkeypatch.setattr(runtime.approval, "request", fake_request)
+    monkeypatch.setattr(runtime.background_tasks, "create_agent_task", fake_create_agent_task)
+    tool = RunAgents(runtime)
+    params = tool.params(
+        summary="parallel scouting",
+        base_prompt="Shared context",
+        agents=[
+            AgentRunConfig(
+                name="api-scout",
+                title="API scout",
+                subagent_type="explore",
+                prompt="Find API files",
+            ),
+        ],
+    )
+
+    with tool_call_context("RunAgents"):
+        first = await tool(params)
+    with tool_call_context("RunAgents"):
+        second = await tool(params)
+
+    assert not first.is_error
+    assert not second.is_error
+    assert "orchestration_approval: requested" in first.output
+    assert "orchestration_approval: reused" in second.output
+    assert approval_requests == 1
+    assert len(created) == 2
 
 
 async def test_agent_tool_background_rejects_resume_when_instance_is_already_running(
