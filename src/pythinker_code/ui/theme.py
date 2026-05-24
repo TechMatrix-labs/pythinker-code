@@ -60,7 +60,7 @@ def _task_browser_style_dark() -> PTKStyle:
             "status.error": "bg:#1f2937 #EF5E62",
             "status.info": "bg:#1f2937 #AFE3F1",
             "task-list": "bg:#111827 #d1d5db",
-            "task-list.checked": "bg:#164e63 #ecfeff bold",
+            "task-list.checked": "bg:#243C54 #AFE3F1 bold",
             "frame.border": "#3A506D",
             "frame.label": "bg:#17182a #EE9983 bold",
             "footer": "bg:#17182a #d7dcff",
@@ -84,7 +84,7 @@ def _task_browser_style_light() -> PTKStyle:
             "status.error": "bg:#e5e7eb #C0392B",
             "status.info": "bg:#e5e7eb #176B7E",
             "task-list": "bg:#f9fafb #374151",
-            "task-list.checked": "bg:#cffafe #164e63 bold",
+            "task-list.checked": "bg:#F3D9D2 #176B7E bold",
             "frame.border": "#495F7C",
             "frame.label": "bg:#f1f5f9 #AE5430 bold",
             "footer": "bg:#f1f5f9 #475569",
@@ -103,11 +103,15 @@ def _task_browser_style_light() -> PTKStyle:
 
 _PROMPT_STYLE_DARK = {
     "bottom-toolbar": "noreverse",
+    # Input area — minimal: no background bar, only the prompt glyph is
+    # colored. Lets the terminal background show through so the input row
+    # reads as a single line of text rather than a chrome panel.
     "compact-input": "",
     "compact-input.prompt": "fg:#EE9983 bold",
-    "compact-input.frame": "fg:#3A506D",
+    "compact-input.frame": "fg:#2B3A52",
     "running-prompt-placeholder": "fg:#8B93A3 italic",
     "running-prompt-separator": "fg:#2B3A52",
+    # Slash completion menu — selected row gets the same selected-bg as cards.
     "slash-completion-menu": "",
     "slash-completion-menu.separator": "fg:#2B3A52",
     "slash-completion-menu.marker": "fg:#2B3A52",
@@ -134,7 +138,7 @@ _PROMPT_STYLE_LIGHT = {
     "bottom-toolbar": "noreverse",
     "compact-input": "",
     "compact-input.prompt": "fg:#AE5430 bold",
-    "compact-input.frame": "fg:#495F7C",
+    "compact-input.frame": "fg:#C8BEC0",
     "running-prompt-placeholder": "fg:#5D6B80 italic",
     "running-prompt-separator": "fg:#C8BEC0",
     "slash-completion-menu": "",

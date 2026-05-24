@@ -53,7 +53,7 @@ def test_light_tokens_have_brand_values():
 def test_get_tui_tokens_with_explicit_theme_arg():
     set_active_theme("dark")
     light = get_tui_tokens("light")
-    assert light.tool_pending_bg.startswith("#EF")
+    assert light.tool_pending_bg == "#EFE7E8"
 
 
 def test_text_token_is_empty_string_for_terminal_default():
