@@ -31,9 +31,11 @@ deliver it in independently-mergeable phases so value ships incrementally:
 - **Phase 3** — Structural polish (rounded borders, coral spinner shimmer, footer alignment).
 - **Phase 4** — Accessibility theme variants (ANSI-16 + daltonized) + theme set expansion.
 
-> Phasing-vs-one-shot note: a smaller alternative is to ship P1–P3 now and carve
-> P4 (a11y variants) into a follow-up spec. The user approved the full scope, so
-> this spec keeps all four; we can carve P4 out at review if desired.
+> **Delivery decision (confirmed at review):** P4 stays in this spec as the
+> intended end-state, but **does not block P1–P3**. The implementation plan ships
+> **P1–P3 as the first PR** (rebrand + gap-closing + structural polish, dark +
+> light) and **P4 as a clean follow-up phase/PR** (a11y variants + theme-set
+> expansion). P4's getter-resolver refactor is sequenced first within P4.
 
 ## Brand source colors
 
@@ -97,13 +99,26 @@ brand-derived colors. Add one new token, `info`, for the cyan secondary role
 
 ### Proposed `TuiTokens` — light (cream background; navy text)
 
+**Two-tier light accents (contrast rule).** On cream `#FAF4F4`, the soft brand
+hues are too weak for normal text: `#DD786D` coral = 2.77:1, `#2F8FA8` cyan =
+3.44:1 (verified, WCAG). So light mode splits the roles:
+
+- **Foreground / text tokens** (`accent`, `info`, `custom_message_label`) carry
+  AA-safe darkened values: coral-text `#AE5430` (4.70:1, orange-leaning so it
+  stays distinct from error red `#C0392B`), cyan-text `#176B7E` (5.61:1).
+- **Border / background tokens** (`border_accent`, `*_bg`, `selected_bg`) keep
+  the softer brand hues (`#DD786D` / `#2F8FA8` family) — fine for 1px rules and
+  fills.
+
+Navy text `#213853` on cream = 11:1. Dark mode is unchanged (reviewed as good).
+
 | token | value | token | value |
 |---|---|---|---|
-| accent | `#DD786D` | selected_bg | `#F3D9D2` |
+| accent | `#AE5430` *(text-safe coral)* | selected_bg | `#F3D9D2` |
 | border | `#495F7C` | user_message_bg | `#F0E4E4` |
-| border_accent | `#DD786D` | custom_message_bg | `#E6F2F6` |
-| border_muted | `#C8BEC0` | custom_message_label | `#2F8FA8` |
-| info *(new)* | `#2F8FA8` | tool_pending_bg | `#EFE7E8` |
+| border_accent | `#DD786D` *(soft, border-use)* | custom_message_bg | `#E6F2F6` |
+| border_muted | `#C8BEC0` | custom_message_label | `#176B7E` |
+| info *(new)* | `#176B7E` *(text-safe cyan)* | tool_pending_bg | `#EFE7E8` |
 | success | `#2C7A39` | tool_success_bg | `#E4F0E6` |
 | warning | `#9A6B18` | tool_error_bg | `#F6E3E3` |
 | error | `#C0392B` | tool_title | `""` |
@@ -113,11 +128,35 @@ brand-derived colors. Add one new token, `info`, for the cyan secondary role
 | thinking_text | `#5D6B80` | tool_diff_context | `#5D6B80` |
 | activity_label | `#213853` | bash_mode | `#2C7A39` |
 
-`_MARKDOWN_*`, `_PROMPT_STYLE_*`, `_TOOLBAR_*`, `_MCP_PROMPT_*`,
-`_task_browser_style_*`, `_DIFF_*` get parallel coral/cyan/navy treatments
-(headings & prompt caret → coral, links/info → cyan, borders → slate, diffs →
-green/red). Full per-table values produced during implementation; they follow
-the same role mapping as above.
+### Secondary palette role mapping (strict — no implementation discretion)
+
+The other palette tables map to brand roles by these fixed rules. "coral" =
+`accent` token value for that theme (dark `#EE9983` / light text-safe `#AE5430`),
+"cyan" = `info` (dark `#AFE3F1` / light `#176B7E`), "slate"/"navy" = `border`/
+`border_muted`, "green/amber/red" = `success`/`warning`/`error`.
+
+- **`_MARKDOWN_*`**: `heading` → coral; `strong` → coral; `emphasis` → muted;
+  `inline_code` → cyan; `link` → cyan; `quote` → muted; `table_border` →
+  border_muted; `code_block_border` → border_muted; `code_block_bg` → unchanged
+  surface tint (dark `#1f2030` / light `#f1f5f9`); `spinner_active` → coral;
+  `spinner_done` → success; `spinner_failed` → error.
+- **`_PROMPT_STYLE_*`**: `compact-input.prompt` → coral bold; `*.frame` /
+  separators → border_muted; completion `*.match` / `*.current` accents → coral;
+  `*.row.current` bg → selected_bg; `shell-footer.warning` → warning;
+  `shell-footer.error` → error; dialog title → text bold, dialog option current
+  → selected_bg + coral.
+- **`_TOOLBAR_*`**: `separator` → border_muted; `yolo_label` → warning bold;
+  `auto_label` → coral bold; `plan_label`/`plan_prompt` → cyan; `cwd`/`tip` →
+  dim; `bg_tasks`/`tip_key` → muted.
+- **`_MCP_PROMPT_*`**: `text` → text; `detail` → muted; `connected` → success;
+  `connecting` → cyan; `pending` → warning; `failed` → error.
+- **`_task_browser_style_*`**: header bg stays a neutral surface; `header.title`/
+  `frame.label`/`footer.key` → coral; `status.running`/`status.success` →
+  success; `status.warning` → warning; `status.error` → error; `status.info` →
+  cyan; `task-list.checked` → selected_bg + cyan; `footer.warning` → warning.
+- **`_DIFF_*`**: `add_bg`/`add_hl` → success-tinted surfaces; `del_bg`/`del_hl`
+  → error-tinted surfaces (keep current dark/light bg tints, re-keyed to the
+  green/red brand semantics).
 
 **Verification:** update `tests/ui_and_conv/test_tui_theme_tokens.py` and
 `tests/ui_and_conv/test_theme.py` to assert the new brand values; regenerate
@@ -189,6 +228,15 @@ Pythinker.
   `_DARK_DALTONIZED`, `_LIGHT_DALTONIZED`) and a `resolve_palette(name)` mapping.
 - `ui/shell/selectors/theme.py` + the `/theme` slash command: list all six
   variants with labels.
+- **Replace every binary `name == "light" else <dark>` getter with the
+  resolver.** Today `get_diff_colors`, `get_task_browser_style`,
+  `get_prompt_style`, `get_toolbar_colors`, `get_mcp_prompt_colors`,
+  `get_markdown_colors`, and `get_tui_tokens` all branch on a two-value
+  light/dark test — under six themes those would **silently fall back** to
+  dark/light. Each getter must key its palette by the full theme name (or by a
+  decomposed `(base, mode)` family map), so `dark-ansi` / `*-daltonized` resolve
+  to their own tables everywhere, not just for `TuiTokens`. This is a required
+  part of P4, not optional.
 
 ### ANSI-16 variants — *explicitly chosen palette, not a fallback*
 
@@ -204,14 +252,18 @@ warning→`yellow`, borders→`bright_black`, etc.).
 > detection logic and test surface. Default proposal: **expose as explicit
 > config choices only**; add auto-selection as a follow-up if wanted.
 
-### Daltonized variants — copy vetted values verbatim
+### Daltonized variants — same vetted strategy, equivalent contrast-tested values
 
-Color-blind-safe palettes are vetted work; we copy `blackbox/src`'s exact values
-(`utils/theme.ts` `lightDaltonizedTheme` L359-415, `darkDaltonizedTheme`
-L521-577) rather than synthesizing our own. Core principle: **blue/orange
-replaces the green/red axis**; error stays pure red.
+Color-blind-safe palettes are vetted work, so we **apply the same accessibility
+strategy** the reference uses and **author our own equivalent, contrast-tested
+values** — we do **not** copy source from `blackbox/src` (it is Claude Code's
+source; provenance/licensing is not cleared for verbatim reuse). The reference
+is consulted only to confirm the strategy. Core principle: **blue/orange
+replaces the green/red axis**; error stays pure red. All values below must be
+contrast-checked against their background (≥4.5:1 for text) during
+implementation.
 
-Role mapping (verbatim from blackbox unless noted):
+Role mapping (Pythinker values, following the standard daltonization strategy):
 
 | role | dark-daltonized | light-daltonized |
 |---|---|---|
@@ -254,7 +306,11 @@ Literal (`tests/core/test_config.py`).
 1. Every colored shell element (welcome rows, tones, spinner, prompt, footer,
    markdown, diffs, tool cards, dialogs) reads as coral/cyan/navy/cream brand.
 2. No hardcoded color literals remain in `ui/shell/**` outside `theme.py` /
-   `design_system.py` resolvers (documented exceptions allowed).
+   `design_system.py` resolvers, **with one explicit exception: the `_LOGO`
+   glyph and its color constants (`_LOGO_NAVY/_FACE/_CORAL/_IRIS`) at
+   `ui/shell/__init__.py:1746-1761` remain hardcoded and byte-for-byte
+   unchanged** — they are the canonical brand source. Any other intentional
+   exception must be documented inline.
 3. Six themes selectable; daltonized variants match blackbox values; ANSI
    variants render cleanly on a 16-color terminal.
 4. All theme/token/snapshot/design-system tests pass; snapshots regenerated and

@@ -17,6 +17,7 @@ wheels/
 uv.toml
 .idea/*
 .superpowers/
+docs/superpowers/
 
 # Build dependencies
 src/pythinker_code/deps/bin
