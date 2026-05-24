@@ -15,8 +15,16 @@ GitHub Releases page; `0.8.0` is the new starting line.
 
 ## Unreleased
 
-- Add the Windows-native PowerShell endpoint `irm https://pythinker.com/install.ps1 | iex`; it downloads `PythinkerSetup-x.y.z.exe`, verifies SHA-256, and runs the per-user installer silently.
-- Make `https://pythinker.com/install.sh` the canonical native curl-bash installer endpoint, add static-site copies with short CDN cache headers, and convert `scripts/install.sh` into a compatibility shim to the native installer.
+## 0.14.0 (2026-05-24)
+
+### What changed in this release
+
+- **Install counter and README badge.** `https://pythinker.com/install.sh` and `https://pythinker.com/install.ps1` now route through a Cloudflare Worker-backed counter that records successful installer fetches and exposes both JSON and Shields-compatible badge endpoints. The README now shows the live install badge alongside PyPI downloads.
+- **Canonical installer endpoint polish.** The hosted shell endpoint is the documented curl-bash path, the Windows PowerShell endpoint is documented as the native bootstrap, and pinned install examples now target `0.14.0` artifacts.
+- **TUI activity and readability refinements.** Tool/agent headers use calmer grey styling, agent task names resolve at call time, live spinner rows stay pinned while status output clips, oversized output is capped, markdown rendering is cleaner, and shell activity indicators are more stable.
+- **Release and CI hardening.** Plugin downloads are stricter, pythinker-home sync dispatch now skips when its optional repository-dispatch secret is absent instead of failing the main branch, and release documentation was refreshed for the native installer flow.
+
+Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.14.0`, or use the native installer for your OS (see the README install table).
 
 ## 0.13.0 (2026-05-22)
 

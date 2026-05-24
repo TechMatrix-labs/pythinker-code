@@ -7,7 +7,7 @@
 #   irm https://pythinker.com/install.ps1 | iex
 #
 # To pin a version when running the hosted script, set:
-#   $env:PYTHINKER_VERSION = "0.13.0"; irm https://pythinker.com/install.ps1 | iex
+#   $env:PYTHINKER_VERSION = "0.14.0"; irm https://pythinker.com/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 

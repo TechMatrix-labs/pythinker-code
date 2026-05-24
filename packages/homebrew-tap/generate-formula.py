@@ -8,7 +8,7 @@ current Python environment so we can enumerate its transitive deps via
 
 Usage:
     python generate-formula.py \\
-        --version 0.13.0 \\
+        --version 0.14.0 \\
         --template packages/homebrew-tap/pythinker-code.rb.tmpl \\
         --output Formula/pythinker-code.rb
 
