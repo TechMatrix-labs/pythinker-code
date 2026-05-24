@@ -167,7 +167,7 @@ def test_card_style_running_subagent_uses_solid_circle(_force_card_style, monkey
     rendered = render_plain(block.compose(), width=80)
     spinner_frames = set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
-    assert "subagent" in rendered
+    assert "Agent(" in rendered
     assert "Audit UI" in rendered
     assert "●" in rendered
     assert not any(frame in rendered for frame in spinner_frames)
@@ -194,7 +194,7 @@ def test_card_style_finished_subagent_shows_elapsed_time(_force_card_style, monk
     block.finish(_ok_result("done"))
     rendered = render_plain(block.compose(), width=80)
 
-    assert "subagent finished" in rendered
+    assert "Agent finished" in rendered
     assert "Crunched for 36s" in rendered
 
 
@@ -214,7 +214,7 @@ def test_card_style_running_task_output_uses_solid_circle(_force_card_style, mon
     rendered = render_plain(block.compose(), width=80)
     spinner_frames = set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
-    assert "task output" in rendered
+    assert "TaskOutput(" in rendered
     assert "agent-123" in rendered
     assert "●" in rendered
     assert not any(frame in rendered for frame in spinner_frames)
@@ -238,15 +238,13 @@ def test_card_style_running_subagent_marker_pulses(_force_card_style, monkeypatc
     second = render_plain(block.compose(), width=80)
 
     assert first != second
-    assert "subagent" in first
+    assert "Agent(" in first
     assert "●" in first
-    assert "subagent" in second
+    assert "Agent(" in second
     assert "•" in second
 
 
-def test_card_style_background_subagent_result_keeps_solid_circle(
-    _force_card_style, monkeypatch
-):
+def test_card_style_background_subagent_result_keeps_solid_circle(_force_card_style, monkeypatch):
     from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
 
     register_builtin_renderers()

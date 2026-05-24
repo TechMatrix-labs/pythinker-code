@@ -156,6 +156,7 @@ class ToolExecutionComponent:
                 width = console.size.width
             except Exception:  # noqa: BLE001 - rendering must not fail on width lookup
                 width = 100
+        self._renderer_state.pop("__suppress_generic_expand_hint__", None)
         ctx = self._build_context(width=width)
         children: list[RenderableType] = []
 
@@ -183,7 +184,7 @@ class ToolExecutionComponent:
                 children.append(fallback)
 
         if not self._state.expanded and self._is_truncatable():
-            children.append(key_hint("Ctrl+E", "expand"))
+            children.append(key_hint("ctrl+o", "expand"))
 
         if not children:
             return Text("")
@@ -285,6 +286,8 @@ class ToolExecutionComponent:
         """Heuristic: only show the expand hint when there's likely more to see."""
         result = self._state.result
         if result is None or not result.text:
+            return False
+        if self._renderer_state.get("__suppress_generic_expand_hint__"):
             return False
         text = result.text
         return len(text) > 240 or text.count("\n") > 4

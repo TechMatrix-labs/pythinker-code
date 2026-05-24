@@ -73,7 +73,7 @@ def truncate_middle_to_visual_lines(
     max_visual_lines: int,
     width: int,
     *,
-    hint: str = "Ctrl+E expand",
+    hint: str = "ctrl+o to expand",
 ) -> VisualTruncateResult:
     """Truncate visual lines with a Codex-style head/tail ellipsis in the middle.
 
@@ -145,7 +145,7 @@ def truncate_to_width(text: str, max_width: int, *, ellipsis: str = _ELLIPSIS) -
 def render_message_response(renderable: RenderableType) -> RenderableType:
     """Render a Blackbox-style indented response gutter for tool details.
 
-    Mirrors ``blackbox/src/components/MessageResponse.tsx``: result/progress
+    Mirrors the reference message-response layout: result/progress
     content sits under a dim ``⎿`` marker so the call header and response are
     visually distinct without a heavy border.
     """

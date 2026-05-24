@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Any, cast
 
 from rich.console import Group, RenderableType
-from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
@@ -25,7 +24,8 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
     format_lines_block,
-    tool_title,
+    running_spinner,
+    tool_call_header,
 )
 
 _TOOL_NAME = "SetTodoList"
@@ -39,7 +39,6 @@ _ICONS = {
 
 _TREE_BRANCH = "├─"
 _TREE_LAST = "└─"
-_LEFT_INSET = 2
 
 
 def _icon_token(status: str) -> str:
@@ -51,14 +50,7 @@ def _icon_token(status: str) -> str:
 
 
 def _todo_level_and_title(item: dict[str, Any]) -> tuple[int, str]:
-    """Return display nesting level and a cleaned title.
-
-    The public todo schema is intentionally tiny, but tool-call payloads and
-    persisted older sessions can still carry presentation hints. Prefer an
-    explicit ``level``/``depth``/``indent`` when present; otherwise infer one
-    from leading spaces in the title so pasted markdown-ish plans render as a
-    real tree instead of a flat wall of text.
-    """
+    """Return display nesting level and a cleaned title."""
     raw_title = as_str(item.get("title")) or ""
     explicit = item.get("level", item.get("depth", item.get("indent")))
     if isinstance(explicit, int):
@@ -82,17 +74,19 @@ def _status_title(status: str, title: str) -> Text:
 def _render_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     todos = args.get("todos")
-
-    header = Text()
-    header.append_text(tool_title("todos"))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
 
     if todos is None:
-        header.append_text(fg("muted", " (read)"))
-        return Padding(header, (0, 0, 0, _LEFT_INSET))
+        header = tool_call_header("todos", fg("muted", "read"), style_token=style_token)
+        return running_spinner(
+            header, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
 
     if not isinstance(todos, list):
-        header.append_text(fg("muted", " ..."))
-        return Padding(header, (0, 0, 0, _LEFT_INSET))
+        header = tool_call_header("todos", fg("muted", "..."), style_token=style_token)
+        return running_spinner(
+            header, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
 
     todos_list = cast("list[Any]", todos)
     items: list[dict[str, Any]] = [
@@ -105,16 +99,18 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
             counts[status] += 1
 
     if not items:
-        header.append_text(fg("muted", " (empty)"))
-        return Padding(header, (0, 0, 0, _LEFT_INSET))
+        header = tool_call_header("todos", fg("muted", "empty"), style_token=style_token)
+        return running_spinner(
+            header, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
 
     total = len(items)
-    badge = f" {counts['done']}/{total} done"
+    badge = f"{counts['done']}/{total} done"
     if counts["in_progress"]:
         badge += f" · {counts['in_progress']} active"
     if counts["pending"]:
         badge += f" · {counts['pending']} pending"
-    header.append_text(fg("muted", badge))
+    header = tool_call_header("todos", fg("muted", badge), style_token=style_token)
 
     visible = items if ctx.expanded else items[:_DEFAULT_COLLAPSED_LINES]
     table = Table.grid(padding=(0, 1))
@@ -139,8 +135,11 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
     rows: list[RenderableType] = [header, table]
     if not ctx.expanded and len(items) > len(visible):
         remaining = len(items) - len(visible)
-        rows.append(fg("muted", f"{_TREE_LAST} ... +{remaining} more (ctrl+e to expand)"))
-    return Padding(Group(*rows), (0, 0, 0, _LEFT_INSET))
+        rows.append(fg("muted", f"{_TREE_LAST} ... +{remaining} more (ctrl+o to expand)"))
+    rendered = Group(*rows)
+    return running_spinner(
+        rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+    )
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:

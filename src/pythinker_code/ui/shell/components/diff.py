@@ -52,6 +52,8 @@ def compute_edit_diff_string(
     new_text: str,
     *,
     context_lines: int = _DEFAULT_CONTEXT_LINES,
+    old_start: int = 1,
+    new_start: int = 1,
 ) -> EditDiffResult:
     """Build Pythinker's custom diff format from ``old_text``/``new_text``.
 
@@ -62,6 +64,10 @@ def compute_edit_diff_string(
     * `` <n> <content>`` — context line
     * `` <pad> ...``   — collapsed-context marker
 
+    ``old_start`` / ``new_start`` let callers render bounded diff hunks with
+    the real source-file line numbers, matching the structured diff display in
+    the reference UI. Defaults preserve the old tool-input-only behavior.
+
     Returns ``("", None)`` when the texts are identical.
     """
     if old_text == new_text:
@@ -69,12 +75,14 @@ def compute_edit_diff_string(
 
     old_lines = old_text.split("\n")
     new_lines = new_text.split("\n")
-    line_num_width = max(2, len(str(max(len(old_lines), len(new_lines)))))
+    last_old = old_start + max(0, len(old_lines) - 1)
+    last_new = new_start + max(0, len(new_lines) - 1)
+    line_num_width = max(2, len(str(max(last_old, last_new))))
 
     matcher = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
     output: list[str] = []
-    old_lineno = 1
-    new_lineno = 1
+    old_lineno = old_start
+    new_lineno = new_start
     first_changed: int | None = None
     last_was_change = False
     opcodes = matcher.get_opcodes()

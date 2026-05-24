@@ -48,6 +48,7 @@ from pythinker_code.ui.shell.visualize._question_panel import (
 )
 from pythinker_code.ui.shell.visualize._worklog import render_worklog_card
 from pythinker_code.utils.aioqueue import Queue, QueueShutDown
+from pythinker_code.utils.datetime import format_elapsed
 from pythinker_code.utils.logging import logger
 from pythinker_code.wire import WireUISide
 from pythinker_code.wire.types import (
@@ -67,6 +68,7 @@ from pythinker_code.wire.types import (
     SteerInput,
     StepBegin,
     StepInterrupted,
+    StepRetry,
     SubagentEvent,
     TextPart,
     ThinkPart,
@@ -92,6 +94,29 @@ def _append_action_block(
     if blocks or leading:
         blocks.append(_ACTION_SPACER)
     blocks.append(block)
+
+
+def _format_step_retry(retry: StepRetry) -> Text:
+    reason = _step_retry_reason(retry)
+    wait = format_elapsed(retry.wait_s)
+    return Text(
+        f"Retrying after {reason} · attempt {retry.next_attempt}/{retry.max_attempts} · {wait}",
+        style="grey50 italic",
+    )
+
+
+def _step_retry_reason(retry: StepRetry) -> str:
+    if retry.status_code == 429:
+        return "rate limit"
+    if retry.status_code is not None and retry.status_code >= 500:
+        return "server error"
+    if retry.error_type == "APITimeoutError":
+        return "timeout"
+    if retry.error_type == "APIConnectionError":
+        return "connection issue"
+    if retry.error_type == "APIEmptyResponseError":
+        return "empty response"
+    return retry.error_type
 
 
 @asynccontextmanager
@@ -137,6 +162,7 @@ class _LiveView:
         self._current_content_block: _ContentBlock | None = None
         self._tool_call_blocks: dict[str, _ToolCallBlock] = {}
         self._last_tool_call_block: _ToolCallBlock | None = None
+        self._current_step_retry: StepRetry | None = None
         self._approval_request_queue = deque[ApprovalRequest]()
         """
         It is possible that multiple subagents request approvals at the same time,
@@ -185,8 +211,9 @@ class _LiveView:
         ) as live:
 
             async def keyboard_handler(listener: KeyboardListener, event: KeyEvent) -> None:
-                # Handle Ctrl+E specially - pause Live while the pager is active
-                if event == KeyEvent.CTRL_E:
+                # Handle Ctrl+O specially - pause Live while the pager is active.
+                # Ctrl+E remains accepted as a legacy alias.
+                if event in (KeyEvent.CTRL_O, KeyEvent.CTRL_E):
                     if self.has_expandable_panel():
                         from pythinker_code.telemetry import track
 
@@ -372,6 +399,9 @@ class _LiveView:
         elif self._compaction_block is not None:
             _append_action_block(blocks, self._compaction_block)
         else:
+            current_step_retry = getattr(self, "_current_step_retry", None)
+            if current_step_retry is not None:
+                _append_action_block(blocks, _format_step_retry(current_step_retry), leading=True)
             if self._current_content_block is not None:
                 _append_action_block(blocks, self._current_content_block.compose(), leading=True)
             # When an approval panel is on-screen for a specific tool call, the
@@ -435,6 +465,10 @@ class _LiveView:
             if self._active_turn_depth == 0:
                 self._active_turn_depth = 1
                 self._turn_start_time = time.monotonic()
+            self.refresh_soon()
+            return
+        if isinstance(msg, StepRetry):
+            self.discard_retry_attempt(msg)
             self.refresh_soon()
             return
 
@@ -679,6 +713,7 @@ class _LiveView:
         self._compaction_block = None
         self._mcp_loading_spinner = None
         self._btw_spinner = None
+        self._current_step_retry = None
 
         if is_interrupt:
             self._active_turn_depth = 0
@@ -692,6 +727,19 @@ class _LiveView:
         while self._question_request_queue:
             self._question_request_queue.popleft().resolve({})
         self._current_question_panel = None
+
+    def discard_retry_attempt(self, retry: StepRetry) -> None:
+        """Discard partial streamed state from a failed step attempt.
+
+        The failed attempt may have already streamed content or a tool call into
+        the transient Live area. Keep scrollback untouched, but clear the live
+        attempt state so the retry status and next attempt do not render beside
+        stale partial output.
+        """
+        self._current_content_block = None
+        self._tool_call_blocks.clear()
+        self._last_tool_call_block = None
+        self._current_step_retry = retry
 
     def flush_content(self) -> None:
         """Flush the current content block."""
@@ -740,6 +788,7 @@ class _LiveView:
                 # (e.g. Anthropic/OpenAI block-start events yield think="").
                 if not text and not is_think:
                     return
+                self._current_step_retry = None
                 if self._current_content_block is None:
                     self._current_content_block = _ContentBlock(
                         is_think, show_thinking_stream=self._show_thinking_stream
@@ -759,6 +808,7 @@ class _LiveView:
                 pass
 
     def append_tool_call(self, tool_call: ToolCall) -> None:
+        self._current_step_retry = None
         self.flush_content()
         self._tool_call_blocks[tool_call.id] = _ToolCallBlock(tool_call)
         self._last_tool_call_block = self._tool_call_blocks[tool_call.id]

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Group, RenderableType
+from rich.padding import Padding
 from rich.style import Style as RichStyle
 from rich.table import Table
 from rich.text import Text
@@ -19,12 +20,14 @@ __all__ = [
     "as_str",
     "fg",
     "format_lines_block",
+    "format_numbered_lines_block",
     "invalid_arg",
     "missing_required_arg",
     "loading_marker",
     "running_spinner",
     "shorten_path",
     "tab_to_spaces",
+    "tool_call_header",
     "tool_title",
 ]
 
@@ -62,6 +65,30 @@ def tool_title(label: str) -> Text:
     return Text(label, style=base + RichStyle(bold=True))
 
 
+def tool_call_header(
+    name: str,
+    summary: str | Text | None = None,
+    *,
+    style_token: str = "success",
+) -> Text:
+    """Return the Blackbox/Claude-style tool-use row.
+
+    Shape: ``● Tool(summary)``.  The surrounding ``ToolExecutionComponent``
+    owns result gutters; individual renderers should keep this row compact.
+    """
+    header = Text()
+    header.append("● ", style=tui_rich_style(style_token))
+    header.append_text(tool_title(name))
+    if summary is not None:
+        header.append("(")
+        if isinstance(summary, Text):
+            header.append_text(summary)
+        else:
+            header.append(summary)
+        header.append(")")
+    return header
+
+
 def loading_marker(
     *,
     done: bool = False,
@@ -91,25 +118,50 @@ def running_spinner(
     execution_started: bool,
     has_result: bool,
 ) -> RenderableType:
-    """Wrap *renderable* in the solid loading marker while the tool is executing.
+    """Wrap *renderable* in the animated tool marker while executing.
 
-    Returns *renderable* unchanged once a result has arrived (or if execution
-    has not yet been dispatched), so callers need no guard of their own.
+    Tool-use headers already render a static ``●`` for completed/error states.
+    While a tool is running, that static marker would sit immediately after the
+    animated marker (``• ● Bash(...)``). Strip the static header marker in the
+    running state and place the content in a two-column grid so wrapped command
+    text remains indented under the tool text instead of jumping to column 0.
     """
     if not (execution_started and not has_result):
         return renderable
 
     marker = loading_marker()
-    if isinstance(renderable, Text):
-        out = marker.copy()
-        out.append_text(renderable)
-        return out
-
+    content = _strip_running_static_marker(renderable)
     table = Table.grid(padding=0)
     table.add_column(width=2, no_wrap=True)
     table.add_column(ratio=1)
-    table.add_row(marker, renderable)
+    table.add_row(marker, content)
     return Group(table)
+
+
+def _strip_running_static_marker(renderable: RenderableType) -> RenderableType:
+    """Remove one leading static bullet from the first visible child.
+
+    Most tool renderers now use ``tool_call_header()`` for completed states.
+    Running rows add their animated marker outside the renderer, so the static
+    header marker must be stripped even when the renderer returns a ``Group``
+    or ``Padding`` around the header and follow-up rows.
+    """
+    if isinstance(renderable, Text):
+        if not renderable.plain.startswith(("● ", "• ")):
+            return renderable
+        parts = renderable.divide([2])
+        return parts[1] if len(parts) > 1 else Text("")
+    if isinstance(renderable, Group) and renderable.renderables:
+        first, *rest = renderable.renderables
+        return Group(_strip_running_static_marker(first), *rest, fit=renderable.fit)
+    if isinstance(renderable, Padding):
+        return Padding(
+            _strip_running_static_marker(renderable.renderable),
+            (renderable.top, renderable.right, renderable.bottom, renderable.left),
+            style=renderable.style,
+            expand=renderable.expand,
+        )
+    return renderable
 
 
 def invalid_arg() -> Text:
@@ -181,3 +233,36 @@ def format_lines_block(
     body = Text("\n".join(tab_to_spaces(line) for line in shown))
     body.stylize(tui_rich_style(style_token))
     return body, remaining
+
+
+def format_numbered_lines_block(
+    text: str,
+    *,
+    expanded: bool,
+    collapsed_max_lines: int,
+    start_line: int = 1,
+    style_token: str = "tool_output",
+) -> tuple[Text, int, int]:
+    """Render source text with dim line numbers, capped like Blackbox code previews.
+
+    Returns ``(rendered, remaining, total_lines)``.  A trailing newline is a
+    terminator, not an extra empty source line, matching editor line numbering.
+    """
+    cleaned = sanitize_ansi(text or "").rstrip("\n")
+    if not cleaned:
+        return Text(""), 0, 0
+    lines = cleaned.split("\n")
+    total_lines = len(lines)
+    max_lines = total_lines if expanded else max(0, collapsed_max_lines)
+    shown = lines[:max_lines] if max_lines else []
+    remaining = max(0, total_lines - len(shown))
+    number_width = max(4, len(str(start_line + max(0, total_lines - 1))))
+    body = Text()
+    number_style = tui_rich_style("muted")
+    content_style = tui_rich_style(style_token)
+    for index, line in enumerate(shown):
+        if index:
+            body.append("\n")
+        body.append(f"{start_line + index:>{number_width}} ", style=number_style)
+        body.append(tab_to_spaces(line), style=content_style)
+    return body, remaining, total_lines

@@ -168,7 +168,7 @@ def test_shell_running_prompt_preserves_unsubmitted_draft(tmp_path: Path) -> Non
 
         first_turn_mark = shell.mark()
         shell.send_line("start long turn")
-        shell.read_until_contains("$ sleep 1.5", after=first_turn_mark, timeout=15.0)
+        shell.read_until_contains("Bash(sleep 1.5", after=first_turn_mark, timeout=15.0)
         time.sleep(0.3)
         shell.send_text("follow-up draft")
         shell.read_until_contains("First turn finished.", after=first_turn_mark, timeout=15.0)
@@ -215,7 +215,7 @@ def test_shell_running_prompt_ignores_shift_tab_plan_toggle(tmp_path: Path) -> N
 
         turn_mark = shell.mark()
         shell.send_line("start long turn")
-        shell.read_until_contains("$ sleep 1.5", after=turn_mark, timeout=15.0)
+        shell.read_until_contains("Bash(sleep 1.5", after=turn_mark, timeout=15.0)
         shift_tab_mark = shell.mark()
         shell.send_key("s_tab")
         shell.read_until_contains("First turn finished.", after=turn_mark, timeout=15.0)
@@ -745,11 +745,10 @@ def test_shell_approval_reject_and_recover(tmp_path: Path) -> None:
             "requesting approval to run command", after=reject_mark, timeout=15.0
         )
         shell.send_key("3")
-        # Wait for the tool call to be fully processed (confirmed by failed marker)
-        # before looking for the prompt, to avoid matching ✨ from a mid-turn redraw.
-        # Shell card shows exit 1 when the rejected tool returns.
+        # Wait for the tool call to be fully processed before looking for the
+        # prompt, to avoid matching ✨ from a mid-turn redraw.
         shell.read_until_contains(
-            "exit 1",
+            "The tool call is rejected by the user",
             after=reject_mark,
             timeout=15.0,
         )
@@ -933,7 +932,7 @@ def test_shell_cancel_running_command_kills_process_and_recovers(tmp_path: Path)
 
         cancel_mark = shell.mark()
         shell.send_line("start cancellable command")
-        shell.read_until_contains("$ sleep 5", after=cancel_mark)
+        shell.read_until_contains("Bash(sleep 5", after=cancel_mark)
         shell.send_key("escape")
         shell.read_until_contains("Interrupted by user", after=cancel_mark)
         cancel_prompt_mark = shell.mark()

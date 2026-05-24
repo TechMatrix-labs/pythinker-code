@@ -1100,6 +1100,31 @@ export function useSessionStream(
           break;
         }
 
+        case "StepRetry": {
+          const staleMessageIds = new Set<string>();
+          if (thinkingMessageIdRef.current) {
+            staleMessageIds.add(thinkingMessageIdRef.current);
+          }
+          if (textMessageIdRef.current) {
+            staleMessageIds.add(textMessageIdRef.current);
+          }
+          for (const toolCall of currentToolCallsRef.current.values()) {
+            if (toolCall.messageId) {
+              staleMessageIds.add(toolCall.messageId);
+            }
+          }
+          resetStepState();
+          currentToolCallsRef.current.clear();
+          currentToolCallIdRef.current = null;
+          if (staleMessageIds.size > 0) {
+            setMessages((prev) => prev.filter((msg) => !staleMessageIds.has(msg.id)));
+          }
+          if (!isReplay) {
+            setStatus("streaming");
+          }
+          break;
+        }
+
         case "ContentPart": {
           if (!isReplay) {
             clearAwaitingFirstResponse();

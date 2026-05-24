@@ -195,7 +195,7 @@ def _enrich_with_ratelimit_fallback(
     return enriched
 
 
-@registry.command(aliases=["/status"])
+@registry.command(aliases=["status", "cost", "/status"])
 async def usage(app: Shell, args: str):
     """Display usage for the current model's provider.
 

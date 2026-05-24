@@ -535,10 +535,29 @@ class _ToolCallBlock:
                 ToolResultPayload(
                     text=self._card_result_text(self._result),
                     is_error=self._result.is_error,
+                    details=self._card_result_details(self._result),
                 ),
                 is_partial=self._is_background_pending,
             )
         return self._tui_card.render()
+
+    @staticmethod
+    def _card_result_details(result: ToolReturnValue) -> dict[str, Any]:
+        """Preserve structured tool result data for Blackbox-style cards.
+
+        The legacy card boundary only passed flattened text, which made exact
+        file/shell renderers impossible: diffs lost their display blocks,
+        shell status lost its machine-readable status, and success messages
+        were mixed into stdout.  Keep the text fallback, but also expose the
+        safe in-process fields that renderers can choose to consume.
+        """
+        output = result.output if isinstance(result.output, str) else ""
+        return {
+            "output": output,
+            "message": result.message,
+            "display": getattr(result, "display", []) or [],
+            "extras": getattr(result, "extras", None) or {},
+        }
 
     @staticmethod
     def _card_result_text(result: ToolReturnValue) -> str:

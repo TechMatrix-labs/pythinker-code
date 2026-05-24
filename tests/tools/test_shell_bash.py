@@ -34,7 +34,10 @@ async def test_command_with_error(shell_tool: Shell):
     assert "No such file or directory" in result.output
     assert "Command failed with exit code:" in result.message
     assert "Failed with exit code:" in result.brief
-    assert result.extras == {"status": "failure"}
+    assert result.extras is not None
+    assert result.extras["status"] == "failure"
+    assert isinstance(result.extras.get("exit_code"), int)
+    assert result.extras["exit_code"] != 0
 
 
 async def test_command_chaining(shell_tool: Shell):

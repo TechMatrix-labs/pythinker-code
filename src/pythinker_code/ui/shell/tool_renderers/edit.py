@@ -6,10 +6,9 @@ Source tool name → Pythinker tool name: ``edit`` → ``StrReplaceFile``.
 Param shape: Pythinker uses ``edit: Edit | list[Edit]`` where each ``Edit``
 has ``{old, new, replace_all}``.
 
-Pythinker's tool produces the diff out-of-band (via display
-blocks), so the renderer reconstructs it from the call args at render time.
-That means the diff appears as soon as the streaming args are complete and
-remains visible after execution.
+Pythinker's tool produces the diff out-of-band (via display blocks). The
+renderer prefers those real diff blocks after execution and only uses call args
+as a pending/fallback preview.
 """
 
 from __future__ import annotations
@@ -19,14 +18,16 @@ from typing import Any, cast
 from rich.console import Group, RenderableType
 from rich.text import Text
 
-from pythinker_code.ui.shell.components import (
-    compute_edit_diff_string,
-    render_diff,
-)
+from pythinker_code.ui.shell.components import compute_edit_diff_string
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
     ToolRenderDefinition,
     ToolResultPayload,
+)
+from pythinker_code.ui.shell.tool_renderers._file_diff import (
+    change_summary_text,
+    diff_frame,
+    preview_from_result,
 )
 from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
@@ -35,7 +36,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     missing_required_arg,
     running_spinner,
     shorten_path,
-    tool_title,
+    tool_call_header,
 )
 
 _TOOL_NAME = "StrReplaceFile"
@@ -72,67 +73,25 @@ def _build_combined_diff(edits: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
-def _diff_counts(diff_text: str) -> tuple[int, int]:
-    """Return ``(added, removed)`` line counts from rendered diff text."""
-    added = removed = 0
-    for line in diff_text.splitlines():
-        if line.startswith("+++") or line.startswith("---"):
-            continue
-        if line.startswith("+"):
-            added += 1
-        elif line.startswith("-"):
-            removed += 1
-    return added, removed
-
-
-def _change_summary(added: int, removed: int) -> Text:
-    parts: list[str] = []
-    if added:
-        parts.append(f"Added {added} line{'s' if added != 1 else ''}")
-    if removed:
-        parts.append(f"Removed {removed} line{'s' if removed != 1 else ''}")
-    if not parts:
-        parts.append("No line changes")
-    summary = Text("└  ", style="dim")
-    summary.append(" · ".join(parts), style="bold")
-    return fg("tool_output", summary)
-
-
-def _diff_frame(diff_renderable: RenderableType, *, width: int) -> Group:
-    """Blackbox-style diff frame: dashed horizontal rails, no side border."""
-    rule_width = max(8, min(width, 100))
-    rule = Text("-" * rule_width, style="dim")
-    return Group(rule, diff_renderable, rule)
-
-
 def _render_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     raw_path = as_str(args.get("path"))
 
-    header = Text()
-    header.append_text(fg("success", "● "))
-    header.append_text(tool_title("Update"))
-    header.append("(")
-
+    summary = Text()
     if raw_path is None:
         if "path" in args:
-            header.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            header.append_text(missing_required_arg("path"))
+            summary.append_text(missing_required_arg("path"))
         else:
-            header.append_text(fg("tool_output", "..."))
+            summary.append_text(fg("tool_output", "..."))
     else:
-        header.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
-    header.append(")")
+        summary.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
+
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    header = tool_call_header("Update", summary, style_token=style_token)
 
     edits = _normalize_edits(args.get("edit"))
-    if not edits:
-        return running_spinner(
-            header,
-            execution_started=ctx.execution_started,
-            has_result=ctx.has_result,
-        )
-
     if len(edits) > 1:
         header.append_text(fg("tool_output", f" ({len(edits)} edits)"))
 
@@ -142,22 +101,66 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
         has_result=ctx.has_result,
     )
 
+    # The reference renderer keeps the tool-use row compact and places the
+    # actual diff in the result/rejection message.  While the tool is still
+    # running we keep a small args-based preview so long approvals do not look
+    # empty; once a result exists, render_result prefers the real display diff.
+    if ctx.has_result:
+        return head
     diff_text = _build_combined_diff(edits)
     if not diff_text:
         return head
-    added, removed = _diff_counts(diff_text)
-    diff_renderable = _diff_frame(render_diff(diff_text), width=ctx.width or 80)
-    return Group(head, _change_summary(added, removed), Text(""), diff_renderable)
+    added, removed = _fallback_diff_counts(diff_text)
+    return Group(
+        head,
+        change_summary_text(added, removed),
+        Text(""),
+        diff_frame(diff_text, width=ctx.width or 80),
+    )
+
+
+def _fallback_diff_counts(diff_text: str) -> tuple[int, int]:
+    added = removed = 0
+    for line in diff_text.splitlines():
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+    return added, removed
+
+
+def _friendly_error(text: str) -> str:
+    lowered = text.lower()
+    if "not been read" in lowered or ("read" in lowered and "first" in lowered):
+        return "File must be read first"
+    if "does not exist" in lowered or "file not found" in lowered:
+        return "File not found"
+    if text.strip():
+        return text.rstrip("\n")
+    return "Error editing file"
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
-    # Errors: surface the message; success: nothing — the call preview
-    # already shows the diff and the card background turns green.
-    if not result.is_error:
-        return None
-    if not result.text:
-        return None
-    return fg("error", result.text.rstrip("\n"))
+    if result.is_error:
+        return fg("error", _friendly_error(result.text))
+
+    preview = preview_from_result(result)
+    if preview is None:
+        edits = _normalize_edits(ctx.args.get("edit"))
+        diff_text = _build_combined_diff(edits)
+        if not diff_text:
+            message = result.details.get("message")
+            return fg("muted", str(message)) if message else None
+        added, removed = _fallback_diff_counts(diff_text)
+        preview_diff = diff_text
+    else:
+        added, removed = preview.added, preview.removed
+        preview_diff = preview.diff_text
+
+    return Group(
+        change_summary_text(added, removed),
+        diff_frame(preview_diff, width=ctx.width or 80),
+    )
 
 
 EDIT_RENDERER = ToolRenderDefinition(

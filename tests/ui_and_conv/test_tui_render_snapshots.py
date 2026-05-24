@@ -206,7 +206,7 @@ def test_long_result_shows_expand_hint_when_collapsed():
     long_text = "\n".join(f"line {i}" for i in range(50))
     comp.set_result(ToolResultPayload(text=long_text))
     rendered = render_plain(comp.render(), width=60)
-    assert "Ctrl+E" in rendered
+    assert "ctrl+o" in rendered
     assert "expand" in rendered
 
 
@@ -217,7 +217,7 @@ def test_long_result_hides_expand_hint_when_expanded():
     comp.set_result(ToolResultPayload(text=long_text))
     comp.set_expanded(True)
     rendered = render_plain(comp.render(), width=60)
-    assert "Ctrl+E" not in rendered
+    assert "ctrl+o" not in rendered
 
 
 def test_short_result_does_not_show_expand_hint():
@@ -225,7 +225,7 @@ def test_short_result_does_not_show_expand_hint():
     comp.update_args({"path": "a.py"})
     comp.set_result(ToolResultPayload(text="ok"))
     rendered = render_plain(comp.render(), width=60)
-    assert "Ctrl+E" not in rendered
+    assert "ctrl+o" not in rendered
 
 
 # ---------------------------------------------------------------------------

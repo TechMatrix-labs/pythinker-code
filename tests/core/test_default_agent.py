@@ -442,6 +442,8 @@ instance can preserve previous findings and work.
 - Default to foreground execution. Use `run_in_background=true` only when the task can continue independently, you do not need the result immediately, and there is a clear benefit to returning control before it finishes.
 - Be explicit about whether the subagent should write code, only research, review, or verify.
 - Provide the subagent all required context and success criteria. New subagents do not inherit your transcript automatically.
+- Brief the agent like a capable teammate joining mid-task: state the goal, why it matters, what you already learned or ruled out, exact paths/commands when known, and the output format you need.
+- Do not delegate synthesis with vague prompts such as "based on your findings, fix it". First understand the finding yourself, then give the subagent a concrete scoped task.
 - Spawn multiple subagents in the same turn when they can investigate independent regions concurrently.
 - Cross-check at least one load-bearing subagent finding before making changes from it.
 - The subagent result is only visible to you. If the user should see it, summarize it yourself.

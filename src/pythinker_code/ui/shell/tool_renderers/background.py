@@ -20,7 +20,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     invalid_arg,
     missing_required_arg,
     running_spinner,
-    tool_title,
+    tool_call_header,
 )
 
 
@@ -29,20 +29,20 @@ def _render_call_with_id(
 ) -> RenderableType:
     args = ctx.args or {}
     task_id = as_str(args.get("task_id"))
-    line = Text()
-    line.append_text(tool_title(label))
-    line.append(" ")
+    summary = Text()
     if task_id is None:
         if "task_id" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("task_id"))
+            summary.append_text(missing_required_arg("task_id"))
         else:
-            line.append_text(fg("muted", "..."))
+            summary.append_text(fg("muted", "..."))
     else:
-        line.append_text(fg("accent", task_id))
+        summary.append_text(fg("accent", task_id))
     for extra in extras:
-        line.append_text(fg("muted", f" {extra}"))
+        summary.append_text(fg("muted", f" · {extra}"))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header(label, summary, style_token=style_token)
     return running_spinner(
         line,
         execution_started=ctx.execution_started,
@@ -67,7 +67,7 @@ def _render_block_result(
     if not body.plain:
         return None
     if remaining > 0:
-        return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+e to expand)"))
+        return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
     return body
 
 
@@ -80,12 +80,12 @@ def _render_task_list_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     active_only = bool(args.get("active_only", True))
     limit = args.get("limit")
-    line = Text()
-    line.append_text(tool_title("tasks"))
-    line.append_text(fg("muted", " (active)" if active_only else " (all)"))
+    summary = Text("active" if active_only else "all")
     if isinstance(limit, int) and limit != 20:
-        line.append_text(fg("muted", f" limit {limit}"))
-    return line
+        summary.append_text(fg("muted", f" · limit {limit}"))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Tasks", summary, style_token=style_token)
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 TASK_LIST_RENDERER = ToolRenderDefinition(
@@ -108,11 +108,9 @@ def _render_task_output_call(ctx: ToolRenderContext) -> RenderableType:
     if args.get("block"):
         timeout = args.get("timeout")
         extras.append(
-            f"(block, timeout {timeout}s)"
-            if isinstance(timeout, int) and timeout != 30
-            else "(block)"
+            f"block, timeout {timeout}s" if isinstance(timeout, int) and timeout != 30 else "block"
         )
-    return _render_call_with_id("task output", ctx, extras=extras)
+    return _render_call_with_id("TaskOutput", ctx, extras=extras)
 
 
 TASK_OUTPUT_RENDERER = ToolRenderDefinition(
@@ -134,8 +132,8 @@ def _render_task_stop_call(ctx: ToolRenderContext) -> RenderableType:
     extras: list[str] = []
     reason = as_str(args.get("reason"))
     if reason and reason != "Stopped by TaskStop":
-        extras.append(f"({reason})")
-    return _render_call_with_id("task stop", ctx, extras=extras)
+        extras.append(reason)
+    return _render_call_with_id("TaskStop", ctx, extras=extras)
 
 
 TASK_STOP_RENDERER = ToolRenderDefinition(

@@ -1,0 +1,1356 @@
+[
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/authlib/oauth2/rfc7523/client.py",
+    "severity": "CRITICAL",
+    "vulnSlug": "jwt-algorithm-confusion",
+    "title": "Missing algorithm restriction in JWT verification leads to potential algorithm confusion",
+    "description": "In `JWTBearerClientAssertion.process_assertion_claims` the JWT is decoded with `jwt.decode(assertion, resolve_key)` without specifying the `algorithms` parameter. If the key obtained from `resolve_client_public_key` is an asymmetric key (e.g., RSA), an attacker who knows the client's public key can craft a JWT with algorithm set to HS256 and use the public key as the HMAC secret. The library may accept the token, allowing client impersonation. This is a known attack pattern (CVE-2023-23940 etc.). The source `assertion` is attacker-controlled via the request form, and the sink is the `jwt.decode` call.",
+    "lineNumbers": [
+      124
+    ],
+    "recommendation": "Pass an explicit `algorithms` parameter to `jwt.decode`, e.g., `algorithms=['RS256', 'ES256']` that matches the expected key type. Also consider using a list of allowed asymmetric algorithms based on the key.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/authlib/oauth2/rfc7523/jwt_bearer.py",
+    "severity": "CRITICAL",
+    "vulnSlug": "jwt-algorithm-confusion",
+    "title": "Missing algorithm restriction in JWT verification leads to potential algorithm confusion",
+    "description": "In `JWTBearerGrant.process_assertion_claims` the JWT is decoded with `jwt.decode(assertion, key)` without specifying the `algorithms` parameter. If the key obtained from `resolve_client_public_key` is an asymmetric key, an attacker who knows the client's public key can forge valid assertion grants using algorithm confusion (e.g., HS256), bypassing client authentication. The assertion is taken from the attacker-controlled request body, and the vulnerability arises from the lack of algorithm validation.",
+    "lineNumbers": [
+      97
+    ],
+    "recommendation": "Pass an explicit `algorithms` parameter to `jwt.decode` restricting it to a list of accepted asymmetric algorithms. For example, `algorithms=['RS256']`.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/authlib/oauth2/rfc7523/validator.py",
+    "severity": "CRITICAL",
+    "vulnSlug": "jwt-algorithm-confusion",
+    "title": "Missing algorithm restriction in JWT token validation leads to potential algorithm confusion",
+    "description": "In `JWTBearerTokenValidator.authenticate_token` the bearer token (JWT) is decoded with `jwt.decode(token_string, self.public_key)` without specifying `algorithms`. The `public_key` is typically an asymmetric key (e.g., RSA) used by the authorization server. An attacker who obtains the server's public key (e.g., from a JWKS endpoint) can forge access tokens by setting the algorithm to HS256 and signing with the public key as the HMAC secret. This bypasses authentication and grants arbitrary access. The token is attacker-controlled (e.g., from Bearer header).",
+    "lineNumbers": [
+      50
+    ],
+    "recommendation": "Add an `algorithms` parameter to the `jwt.decode` call that explicitly lists allowed asymmetric algorithms (e.g., `algorithms=['RS256', 'ES256']`). Do not accept symmetric algorithms when using a public key.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/openai-codex-responses.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "other-ssrf-redirect",
+    "title": "SSRF and credential leakage via unvalidated baseUrl and automatic redirect following",
+    "description": "The streamOpenAICodexResponses function uses model.baseUrl to construct the request URL without validation (line 240). The default fetch behavior follows redirects, so an attacker controlling model.baseUrl can redirect the request to an arbitrary server, leaking the API key and potentially allowing internal network access.",
+    "lineNumbers": [
+      240
+    ],
+    "recommendation": "Validate model.baseUrl against an allowlist. Disable redirects by setting redirect: 'error' in fetch options. Ensure the URL is HTTPS and points to a trusted domain.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/utils/oauth/github-copilot.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "ssrf",
+    "title": "SSRF and OAuth Token Exfiltration via Unvalidated Enterprise Domain",
+    "description": "The `github-copilot.ts` module constructs all OAuth API URLs (device code, access token, Copilot internal token) from a user-provided `domain` or `enterpriseDomain` parameter without verifying that the host belongs to a trusted scope (e.g., `github.com`). The `normalizeDomain` function extracts a hostname but performs no allowlisting, IP resolution, or private-network blocking. Additionally, Node.js's `new URL` treats `@` as a credential separator, so a user-supplied value like `https://github.com@evil.com` is parsed as hostname `evil.com`, enabling social-engineering attacks.\n\nAn attacker who controls this parameter (e.g., via a malicious model configuration or a crafted login prompt) can redirect HTTP requests to an arbitrary server. This directly exfiltrates the user's active Copilot token, which is sent as a `Bearer` token in `refreshGitHubCopilotToken`. The device flow is also redirected, allowing interception of device codes and tokens during login.",
+    "lineNumbers": [
+      74,
+      95,
+      175,
+      284
+    ],
+    "recommendation": "Validate the `domain`/`enterpriseDomain` against a strict allowlist of known GitHub domains (e.g., `github.com`, `*.github.com`, `*.githubenterprise.com`). Perform hostname resolution and verify that the resolved IP belongs to GitHub's published address ranges before making any security-sensitive request. Avoid using unsanitized user-supplied hostnames for constructing API endpoints.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/custom-provider-gitlab-duo/index.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "untrusted-redirect-following",
+    "title": "Credential leak via default HTTP redirect following in fetch calls",
+    "description": "The `getDirectAccessToken`, `loginGitLab`, and `refreshGitLabToken` functions make `fetch()` calls to GitLab's API and OAuth endpoints without specifying the `redirect` option. The default `fetch` behavior (`follow`) will automatically send the `Authorization` header and the full POST body (containing `refresh_token`, `code_verifier`, and authorization `code`) to any HTTP redirect target. An attacker able to trigger a redirect on the GitLab server (e.g., through a compromised endpoint, SSRF, or network attack) can capture these credentials. This is an active credential exposure vulnerability.",
+    "lineNumbers": [
+      149,
+      210,
+      238
+    ],
+    "recommendation": "Add `redirect: 'manual'` or `redirect: 'error'` to every `fetch()` call that sends sensitive credentials. If a redirect must be followed manually, validate the redirect location against a strict allowlist of trusted URLs before making the next request.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/truncated-tool.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "rce",
+    "title": "Command Injection via execSync in rg tool",
+    "description": "The `execute` function builds a shell command by joining user-controlled `pattern`, `path`, and `glob` parameters without any escaping and passes it to `execSync`. An attacker controlling these parameters (e.g., via prompt injection) can inject arbitrary shell commands, leading to remote code execution with the privileges of the coding agent process.",
+    "lineNumbers": [
+      67
+    ],
+    "recommendation": "Replace `execSync` with `execFileSync` and pass arguments as an array to avoid shell interpretation. Alternatively, escape each argument with a library like `shell-escape`.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/core/tools/bash.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "agent-tool-rce",
+    "title": "Unrestricted shell command execution via prompt injection",
+    "description": "The bash tool spawns a shell with the user-supplied command (line 74) without any sanitisation or restriction. An attacker controlling the agent prompt can execute arbitrary system commands with the agent's privileges, leading to full remote code execution. The tool is intended for shell access, but the default configuration lacks command allowlisting, sandboxing, or user confirmation.",
+    "lineNumbers": [
+      74
+    ],
+    "recommendation": "Restrict the bash tool to a safe subset of commands, require explicit user confirmation for each execution, run commands inside a sandboxed environment (e.g., container), or remove the tool if not essential.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/code-review/code_review/servers/github_app.py",
+    "severity": "CRITICAL",
+    "vulnSlug": "missing-webhook-signature",
+    "title": "Missing mandatory webhook secret verification",
+    "description": "The endpoint /api/v1/github_webhooks only verifies the x-hub-signature-256 header if the webhook_secret configuration is set (line 83). When unset, no authentication is performed. An attacker can send arbitrary webhook payloads with a fake installation.id or comment.pull_request_url, leading to cross-account access, SSRF to internal services, and arbitrary command execution via the code review agent.",
+    "lineNumbers": [
+      36,
+      65,
+      83
+    ],
+    "recommendation": "Make webhook secret mandatory; reject requests if not configured. Always verify the signature on this endpoint.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/codereview-pythinker/src/mapper.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "other-rce-project-config",
+    "title": "Arbitrary Command Execution via Project Configuration",
+    "description": "The `mapFeatureSeeds` function passes a test command derived from the scanned project's configuration (e.g., package.json scripts) to `nearbyTests`. The `nearbyTests` function is expected to execute that command to discover test files. An attacker who controls the repository can set a malicious `test` script in package.json, causing arbitrary command execution on the scanner's host when the scanner runs. No sanitization or sandboxing is applied to the command string.",
+    "lineNumbers": [
+      88,
+      90,
+      95
+    ],
+    "recommendation": "Avoid executing commands from untrusted project configurations. Instead, use static analysis to locate tests, or validate and sandbox any executed commands. Consider requiring explicit user opt-in for test command execution, or restrict allowed commands to a safe allowlist.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/codereview-pythinker/src/validation.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "other-command-injection",
+    "title": "Command injection via feature test commands",
+    "description": "The function validationCommandsForFeature includes test commands from the FeatureRecord's tests array directly in the returned command list without sanitization. If an attacker can control the feature record (e.g., via path traversal in state.ts), they can inject arbitrary shell commands. When these commands are executed by the caller, it leads to remote code execution.",
+    "lineNumbers": [
+      15,
+      16,
+      22
+    ],
+    "recommendation": "Validate or whitelist feature test commands to ensure they are safe. Consider restricting commands to a set of known safe tools (e.g., 'npm run lint', 'go vet'). Use parameterized execution or vet commands before running.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/harness/env/nodejs.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "rce",
+    "title": "Remote Code Execution via Agent Shell Tool",
+    "description": "The spawn function (lines 111, 195, 277) is used to execute shell commands. Agent tool definitions allow command execution with arguments that may originate from LLM output. An attacker controlling the LLM output (prompt injection) can inject arbitrary commands, resulting in RCE. The file does not appear to restrict the command or args to an allowlist, nor does it use exec-style safeguards.",
+    "lineNumbers": [
+      111,
+      195,
+      277
+    ],
+    "recommendation": "Replace spawn with a safer execution mechanism: use a strict allowlist of permitted commands and arguments, avoid passing user/LLM-controlled strings to shell, deploy sandboxing (e.g., containers, seccomp), and validate all inputs.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/harness/types.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "agent-tool-definition-shell-exec",
+    "title": "Unrestricted shell command execution tool exposed to AI agent",
+    "description": "The `Shell` interface at line 323 defines an `exec` method that executes arbitrary shell commands. If this tool is made available to the LLM (e.g., via AgentHarness), a prompt injection attack can cause the model to invoke `exec` with attacker-controlled commands, leading to remote code execution on the host. No input validation or allowlist is visible in the interface definition; concrete implementations may add restrictions, but the interface itself advertises unrestricted command execution.",
+    "lineNumbers": [
+      323
+    ],
+    "recommendation": "Restrict the `Shell.exec` implementation to a strict allowlist of safe commands, or remove the tool entirely if not required. Validate and sanitize any command arguments before execution.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/harness/utils/shell-output.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "rce",
+    "title": "Remote Code Execution via env.exec in Shell Tool",
+    "description": "The env.exec function (line 106) executes a shell command. The command is passed from the LLM output; insufficient validation allows command injection. This can lead to RCE if an attacker controls the prompt.",
+    "lineNumbers": [
+      106
+    ],
+    "recommendation": "Apply input validation and allowlisting; use a restricted execution environment that prevents arbitrary command execution.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/examples/extensions/doom-overlay/doom-engine.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "other-rce-new-function",
+    "title": "Arbitrary Code Execution via Function Constructor",
+    "description": "The code reads doomJsPath and passes its contents directly to the Function constructor. An attacker who can influence doomJsPath (e.g., via extension configuration or by placing a malicious file in a scanned path) can execute arbitrary JavaScript in the Node.js runtime. The nativeRequire variable is available inside the evaluated code, granting full access to Node.js modules including child_process.",
+    "lineNumbers": [
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70
+    ],
+    "recommendation": "Remove the use of new Function(...) for dynamic code evaluation. If dynamic loading is necessary, use static imports or sandbox the code with vm.runInNewContext() after strictly validating the file path against an allowlist.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/src/core/resolve-config-value.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "command-injection",
+    "title": "Command injection via shell execution in config value resolution",
+    "description": "The functions `executeWithDefaultShell` (line 57) and `spawnSync` (line 28) execute arbitrary shell commands from a command string that originates from a configuration value. An attacker can craft a malicious project configuration file that includes a shell command, resulting in remote code execution when the coding agent resolves config values.",
+    "lineNumbers": [
+      28,
+      57
+    ],
+    "recommendation": "Avoid executing user-controlled shell commands. Use a safe interpolation method that does not invoke a shell. If shell execution is necessary, strictly validate and limit commands to a whitelist.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/src/core/tools/bash.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "rce",
+    "title": "RCE via prompt injection in bash tool",
+    "description": "The bash tool executes arbitrary shell commands via spawn using unsanitized input from the agent. An attacker can exploit prompt injection to execute arbitrary commands on the host system.",
+    "lineNumbers": [
+      74
+    ],
+    "recommendation": "Implement sandboxing, restrict available commands to an allowlist, require user approval before execution, or run in a container.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/src/core/tools/find.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "rce",
+    "title": "RCE via argument injection in find tool",
+    "description": "The find tool executes the fd command with arguments derived from agent input. An attacker can pass malicious arguments (e.g., --exec) to execute arbitrary commands.",
+    "lineNumbers": [
+      251
+    ],
+    "recommendation": "Sanitize or restrict arguments passed to fd. Avoid using --exec or implement an allowlist of safe options.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/src/modes/interactive/components/login-dialog.ts",
+    "severity": "CRITICAL",
+    "vulnSlug": "command-injection",
+    "title": "Command Injection in OAuth URL opening via exec",
+    "description": "The login dialog opens a browser URL using `exec()` with a shell-formatted command string (`${openCmd} \"${url}\"`). The `url` originates from an external OAuth provider, placing it outside the application's trust boundary. Because `exec()` invokes a shell, double quotes do not prevent shell metacharacter expansion. Sub-command injection via `$(...)`, backticks, or pipe characters in the URL allows an attacker who controls the OAuth provider (e.g., a malicious redirect URI, compromised remote provider configuration) to achieve arbitrary code execution on the user's machine. No URL validation or safe process spawning is used.",
+    "lineNumbers": [
+      3,
+      106
+    ],
+    "recommendation": "Replace `exec()` with `spawn()` or `execFile()`, passing the program name, arguments, and URL as separate parameters. Validate the URL against a strict allowlist: scheme must be `https://` and host must match an explicitly trusted set of OAuth provider endpoints. Avoid running any shell when opening URLs.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/release-pythinker-host.yml",
+    "severity": "HIGH",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references with OIDC token permission",
+    "description": "The workflow uses actions referenced by version tags (actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v1, pypa/gh-action-pypi-publish@release/v1) instead of immutable commit hashes. An attacker who compromises the upstream repository of any of these actions could move the version tag to point to a malicious version, potentially stealing the OIDC token or injecting arbitrary code. The workflow grants id-token: write permission, which is used by the PyPI publish action; a compromised action could exfiltrate this token and publish a malicious package to PyPI.",
+    "lineNumbers": [
+      17,
+      20,
+      38,
+      42,
+      45,
+      51
+    ],
+    "recommendation": "Pin all action references to specific commit SHAs (e.g., actions/checkout@<sha256>, pypa/gh-action-pypi-publish@<sha256>). Use Dependabot to manage updates, and review the pypa/gh-action-pypi-publish action for best practices.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/release-pythinker-sdk.yml",
+    "severity": "HIGH",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references with OIDC token permission",
+    "description": "The workflow uses actions referenced by version tags (actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v1, pypa/gh-action-pypi-publish@release/v1) instead of immutable commit hashes. An attacker who compromises the upstream repository of any of these actions could move the version tag to point to a malicious version, potentially stealing the OIDC token or injecting arbitrary code. The workflow grants id-token: write permission, which is used by the PyPI publish action; a compromised action could exfiltrate this token and publish a malicious package to PyPI.",
+    "lineNumbers": [
+      17,
+      20,
+      38,
+      42,
+      45,
+      51
+    ],
+    "recommendation": "Pin all action references to specific commit SHAs (e.g., actions/checkout@<sha256>, pypa/gh-action-pypi-publish@<sha256>). Use Dependabot to manage updates.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/translator.yml",
+    "severity": "HIGH",
+    "vulnSlug": "github-workflow-security",
+    "title": "Use of pull_request_target with third-party action and write permissions",
+    "description": "The workflow triggers on pull_request_target events, which run in the context of the base repository with write permissions and access to secrets (GITHUB_TOKEN). The third-party action lizheming/github-translate-action@1.1.2 is executed in this privileged context. If the action processes untrusted input from the pull request (e.g., issue/PR title or comment), it could be exploited to execute arbitrary commands or exfiltrate the GITHUB_TOKEN. Additionally, the action is referenced using a version tag not a commit hash, allowing for potential tag-moving attacks. This could lead to privilege escalation, unauthorized modifications to issues/PRs, and possible secret exfiltration.",
+    "lineNumbers": [
+      11,
+      26,
+      27
+    ],
+    "recommendation": "Replace pull_request_target with pull_request trigger or restrict permissions. If pull_request_target is necessary, avoid using third-party actions that may process untrusted input; pin action to a specific commit hash after reviewing its source. Consider using a custom action that validates input.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/authlib/integrations/base_client/sync_openid.py",
+    "severity": "HIGH",
+    "vulnSlug": "other-missing-default-jwt-alg",
+    "title": "Missing default signing algorithm for JWT ID token verification",
+    "description": "The sync OpenID mixin does not set a default value for `id_token_signing_alg_values_supported` when the provider metadata does not include it. The async version defaults to `[\"RS256\"]`. Passing `None` as `algorithms` to `jwt.decode` may allow algorithm confusion attacks, including acceptance of unsigned tokens (`alg: none`), enabling authentication bypass. This affects lines where `alg_values` is retrieved from metadata and used in `jwt.decode` calls.",
+    "lineNumbers": [
+      66,
+      73
+    ],
+    "recommendation": "Add a default fallback immediately after `alg_values = metadata.get(...)`: `if not alg_values: alg_values = [\"RS256\"]`. This matches the behavior of the async version.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/fastmcp/cli/apps_dev.py",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "Cross-Site Scripting in dev server host page via tool parameter",
+    "description": "The dev server's host page (served at /launch) reflects the tool query parameter into a JavaScript string literal without sanitization (see `_HOST_SHELL` template containing `const tool = \"{tool}\";`). An attacker can break out of the string by including a double quote or backslash, enabling arbitrary JS execution. The tool value originates from a POST to /api/launch (line 1407) which parses JSON body and extracts the tool field (line 1598), then redirects to the launch page. This results in reflected XSS.",
+    "lineNumbers": [
+      1407,
+      1598
+    ],
+    "recommendation": "Use a safe escaping mechanism when embedding user input into JavaScript. Replace the raw `{tool}` placeholder with a JSON-encoded value using `json.dumps(tool)` or manually escape double quotes and backslashes. Additionally, validate the tool parameter against an allowlist of valid tool names if feasible.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/google-vertex.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-ssrf-baseurl",
+    "title": "SSRF via unvalidated model.baseUrl",
+    "description": "The code sets httpOptions.baseUrl directly from model.baseUrl (line 368) without validation, then passes it to the GoogleGenAI SDK. An attacker who controls the model configuration can redirect API requests to an arbitrary server, leading to credential leakage (apiKey) and potential internal network probing.",
+    "lineNumbers": [
+      368
+    ],
+    "recommendation": "Validate model.baseUrl against an allowlist of trusted endpoints or restrict to a hardcoded base URL. Ensure the URL uses HTTPS and matches expected patterns.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/google.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-ssrf-baseurl",
+    "title": "SSRF via unvalidated model.baseUrl",
+    "description": "The code uses model.baseUrl to set the HTTP base URL for the Google GenAI client at line 324 without validation. An attacker who controls model.baseUrl can direct API requests to an arbitrary server, leaking the API key.",
+    "lineNumbers": [
+      324
+    ],
+    "recommendation": "Validate model.baseUrl against an allowlist or use a hardcoded base URL. Restrict to HTTPS and known API endpoints.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/mistral.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-ssrf-baseurl",
+    "title": "SSRF via unvalidated model.baseUrl in Mistral client",
+    "description": "The streamMistral function creates a Mistral client with serverURL set to model.baseUrl (approx. line 64) without validation. An attacker controlling model.baseUrl can redirect API requests to an attacker-controlled server, stealing the apiKey.",
+    "lineNumbers": [
+      64
+    ],
+    "recommendation": "Validate model.baseUrl against an allowlist of known Mistral endpoints. If custom endpoints are required, restrict to HTTPS and validate the host.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/openai-codex-responses.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-jwt-unverified",
+    "title": "JWT payload decoded without signature verification for session affinity",
+    "description": "The extractAccountId function (lines 1252-1258) decodes the JWT payload without verifying the cryptographic signature. Any crafted token can supply an arbitrary chatgpt_account_id, which is used for the x-session-affinity header. An attacker can manipulate session routing, potentially causing data leakage across users.",
+    "lineNumbers": [
+      1252,
+      1258
+    ],
+    "recommendation": "Verify the JWT signature using the appropriate public key before trusting any claims. Avoid relying on decoded payload for security-sensitive routing headers.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/core/agent-session.ts",
+    "severity": "HIGH",
+    "vulnSlug": "secret-in-log",
+    "title": "API key or sensitive provider error leaked in thrown error message",
+    "description": "When a model API call fails and the error does not start with 'No API key found', the raw `result.error` is thrown directly via `throw new Error(result.error)`. If the provider includes the API key or other credentials in the error text (common for authentication failures), those secrets are exposed to the user. This occurs at lines 356, 367, 1043, and 2978.",
+    "lineNumbers": [
+      356,
+      367,
+      1043,
+      2978
+    ],
+    "recommendation": "Sanitize error messages from model providers to remove any secret material. Log the full error server-side and present a generic, safe message to the user.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/core/agent-session.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "Stored XSS via skill name and file path in template literal",
+    "description": "The `skillBlock` is constructed by directly interpolating `skill.name`, `skill.filePath`, and `skill.baseDir` into an HTML-like string without escaping. These values originate from skill files on disk (user-controlled content). If the resulting string is later rendered in an HTML context (e.g., session export HTML), an attacker who can write a malicious skill file can inject arbitrary HTML or JavaScript. The specific pattern is at line 1160 (and potentially lines 2249, 2259, 2293 in similar code).",
+    "lineNumbers": [
+      1160
+    ],
+    "recommendation": "Escape HTML special characters in all interpolated values before constructing the string, or use a safe template function that automatically encodes attribute content.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/core/tools/edit.ts",
+    "severity": "HIGH",
+    "vulnSlug": "path-traversal",
+    "title": "Path traversal allows arbitrary file write",
+    "description": "The edit tool accepts a 'path' parameter (line 22) that is resolved to an absolute path via resolveToCwd without validation that it stays within the intended workspace. An attacker can supply a path like '../../etc/malicious' to overwrite arbitrary files the process has write access to. The tool uses fs.readFile and fs.writeFile with the user-controlled absolute path. No containment check is visible before file operations.",
+    "lineNumbers": [
+      22
+    ],
+    "recommendation": "Validate that the resolved path is within the allowed project directory (e.g., using path.relative and checking it does not start with '..'). Consider using a sandbox or restricting writes to a specific directory.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/modes/interactive/components/login-dialog.ts",
+    "severity": "HIGH",
+    "vulnSlug": "command-injection",
+    "title": "Command injection in exec when opening OAuth URL",
+    "description": "The `showAuth` method constructs a shell command using `exec(${openCmd} \"${url}\")` to open the OAuth URL in a browser. The `url` parameter is not sanitized before being passed to a shell, allowing command injection if it contains shell metacharacters (e.g., `;`, backticks, `$()`). An attacker who controls the OAuth provider configuration (e.g., through a malicious models.json file in the user's workspace or a supply-chain compromise) can craft a URL that executes arbitrary commands on the user's machine. The command uses `open`, `xdg-open`, or `start` depending on the platform, but all go through a shell (Node.js `child_process.exec`).",
+    "lineNumbers": [
+      104
+    ],
+    "recommendation": "Replace `exec` with `child_process.execFile` to avoid shell interpretation, or use the `open` npm package which safely handles URL opening. If shell execution is unavoidable, validate that the URL starts with a safe scheme (e.g., `http://` or `https://`) and escape shell special characters properly.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/SandboxedIframe.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "Unescaped validation error in srcdoc leads to XSS",
+    "description": "In `loadContent`, when HTML validation fails, the `validationError` string is embedded directly into the iframe `srcdoc` using a template literal without escaping. If `validationError` contains user-controlled data (e.g., the offending HTML fragment), an attacker can inject arbitrary HTML/JavaScript that executes in the sandboxed iframe (which has `allow-scripts`).",
+    "lineNumbers": [
+      116
+    ],
+    "recommendation": "Escape `validationError` using a function like `encodeURIComponent` or manually escape HTML special characters before inserting into `srcdoc`. Alternatively, use a safer method such as setting `textContent` of an error element after the iframe loads.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/sandbox/ArtifactsRuntimeProvider.ts",
+    "severity": "HIGH",
+    "vulnSlug": "path-traversal",
+    "title": "Path traversal in artifact filename parameter",
+    "description": "The handleMessage method does not sanitize the `filename` parameter before using it to access the artifacts map or pass it to `this.artifactsPanel.tool.execute`. An attacker with the ability to send artifact-operation messages (e.g., sandbox code) can set filename to values such as `../../../etc/passwd` to read, overwrite, or delete files outside the intended artifacts directory, depending on the implementation of tool.execute. The filename is used directly at lines 113, 130, 152 without any validation.",
+    "lineNumbers": [
+      113,
+      130,
+      152
+    ],
+    "recommendation": "Validate the filename to prevent directory traversal. Reject filenames containing path separators (/, \\), dots, or other unsafe characters. Use a basename extraction and apply an allowlist of safe characters.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/sandbox/RuntimeMessageBridge.ts",
+    "severity": "HIGH",
+    "vulnSlug": "postmessage-targetorigin-asterisk",
+    "title": "Insecure window.parent.postMessage targetOrigin '*'",
+    "description": "The generated sandbox bridge code uses `window.parent.postMessage(..., '*')`. This allows any parent window (regardless of origin) to receive messages sent by the sandbox iframe. An attacker who can control a window that embeds the extension's page (e.g., through an XSS or a compromised extension page) could intercept these messages, gaining access to artifact contents, filenames, and other data, or inject malicious responses. The insecure call is on line 48 of the source file (inside the template string).",
+    "lineNumbers": [
+      48
+    ],
+    "recommendation": "Replace the wildcard targetOrigin with the specific origin of the parent window. In extension contexts, consider using `chrome.runtime.sendMessage` instead of postMessage. If postMessage must be used, set targetOrigin to the expected parent origin, e.g., `window.location.origin` of the parent frame when known.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts",
+    "severity": "HIGH",
+    "vulnSlug": "postmessage-origin-validation",
+    "title": "Missing origin validation in postMessage communication",
+    "description": "The RuntimeMessageRouter registers a global window message listener that processes incoming messages without validating e.origin. The respond() function also sends messages back to the iframe using targetOrigin '*'. An attacker who can embed a malicious iframe or inject a script into the page can send crafted messages to impersonate a sandbox, trigger provider actions, or intercept sensitive responses. The user script listener similarly does not authenticate the sender, but is scoped to extension-managed script contexts.",
+    "lineNumbers": [
+      137,
+      159,
+      163
+    ],
+    "recommendation": "Validate e.origin against a whitelist of trusted origins. Use a specific target origin instead of '*' in postMessage. Consider adding a message authentication token tied to the sandboxId and verifying it in the listener.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/storage/stores/custom-providers-store.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-plaintext-api-key-storage",
+    "title": "API key stored in plaintext in IndexedDB",
+    "description": "The CustomProvider interface includes an optional apiKey field which is stored as part of the provider object in IndexedDB without encryption. An attacker who achieves JavaScript execution in the same origin (e.g., via XSS) can read all stored API keys from IndexedDB and use them to make requests on behalf of the user, potentially incurring cost or accessing user data. The store does not apply any encryption before persisting sensitive data.",
+    "lineNumbers": [
+      11,
+      23,
+      26
+    ],
+    "recommendation": "Encrypt apiKey before storing using the Web Crypto API with a key derived from a user-provided passphrase or a securely-generated key stored in an isolated context (e.g., session-only). Alternatively, consider not storing the key at all and requiring the user to enter it each session, or use a backend proxy that holds the key.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/storage/stores/provider-keys-store.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-plaintext-api-key-storage",
+    "title": "API keys stored in plaintext in IndexedDB",
+    "description": "The ProviderKeysStore stores provider API keys as plaintext string values in IndexedDB without any encryption. The set method writes the key directly to the backend. An attacker with same-origin script execution (e.g., XSS) can retrieve all stored API keys and abuse them for unauthorized API calls, leading to potential financial and data exposure.",
+    "lineNumbers": [
+      18
+    ],
+    "recommendation": "Encrypt the key before storing using the Web Crypto API with a suitable key management strategy, such as deriving an encryption key from the user's session authentication. Avoid persisting keys if possible, or use a backend proxy to mediate API requests.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/artifacts/DocxArtifact.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "XSS via DOCX document rendering",
+    "description": "The `renderAsync` function from the `docx-preview` library writes the rendered DOCX content as HTML into the `wrapper` element's DOM. The library does not sanitize the output, so an attacker can craft a malicious DOCX file that, when rendered, executes arbitrary JavaScript. The source `this._content` is set from the `content` attribute, which can be controlled by an external untrusted source (e.g., user-uploaded artifact or code execution result). No sanitization is applied before or after the rendering.",
+    "lineNumbers": [
+      105
+    ],
+    "recommendation": "Sanitize the rendered HTML using DOMPurify after the `renderAsync` call. Alternatively, render the document inside a sandboxed iframe to isolate it from the main application context.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/artifacts/ExcelArtifact.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "XSS via Excel spreadsheet rendering",
+    "description": "The `XLSX.utils.sheet_to_html` method generates an HTML string from worksheet data without escaping HTML entities. This string is then assigned to `tempDiv.innerHTML` at line 171. If a cell contains malicious HTML (e.g., `<script>` or event handlers), the code will execute when the artifact is viewed. The source `this._content` is attacker-controllable, and no additional sanitization is performed.",
+    "lineNumbers": [
+      171
+    ],
+    "recommendation": "Sanitize the HTML generated by `sheet_to_html` using DOMPurify before setting innerHTML. Alternatively, avoid innerHTML and build the table using DOM APIs with textContent for cell values.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/extract-document.ts",
+    "severity": "HIGH",
+    "vulnSlug": "ssrf",
+    "title": "SSRF via prompt injection in extract-document tool",
+    "description": "The extract_document tool fetches a URL provided by the AI agent without validating the host. An attacker can use prompt injection to force the AI to call this tool with an internal URL (e.g., http://localhost:8080, http://169.254.169.254/latest/meta-data), leading to SSRF from the user's browser. The fetch follows redirects, allowing further exploitation. This can disclose internal information or be used for further attacks.",
+    "lineNumbers": [
+      57,
+      67
+    ],
+    "recommendation": "Validate the URL against an allowlist of permitted hosts (e.g., only known public document sources). Block requests to private IP ranges, loopback addresses, and cloud metadata endpoints. Additionally, consider requiring user confirmation for outbound requests.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/javascript-repl.ts",
+    "severity": "HIGH",
+    "vulnSlug": "prompt-injection-code-execution",
+    "title": "Prompt injection leads to arbitrary JavaScript execution in REPL tool",
+    "description": "The javascript_repl tool executes arbitrary JavaScript code provided by the AI agent. An attacker who can control the AI's output via prompt injection can make it call this tool with malicious code. The code runs in a sandboxed iframe, but the sandbox may still allow sensitive operations such as making HTTP requests to internal resources, accessing local storage via postMessage, or exfiltrating data. The tool does not require user approval or validate the code source.",
+    "lineNumbers": [
+      129,
+      136
+    ],
+    "recommendation": "Consider adding user confirmation before executing arbitrary code. Limit the capabilities of the sandbox by using strict sandbox attributes and removing any API access that could be abused. Additionally, implement content security policies to reduce impact.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/utils/attachment-utils.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "XSS via unescaped user-controlled filename in extractedText XML",
+    "description": "The 'fileName' parameter, which originates from user-controlled sources (URL, File.name), is directly interpolated into an XML-like template literal without any escaping (line 212: `<pdf filename=\"${fileName}\">`). This XML is later used as `extractedText` and likely rendered as HTML in the UI. An attacker can craft a malicious filename containing HTML/JavaScript payloads, leading to XSS when the extracted text is displayed.",
+    "lineNumbers": [
+      212
+    ],
+    "recommendation": "Escape the fileName value before inserting it into the XML template. Use a proper XML escaping function for attribute values, or better, avoid embedding user data in markup. Consider using DOM APIs or a templating engine that auto-escapes.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/utils/model-discovery.ts",
+    "severity": "HIGH",
+    "vulnSlug": "ssrf",
+    "title": "Client-side SSRF via user-controlled baseUrl in model discovery",
+    "description": "Multiple discovery functions (`discoverOllamaModels`, `discoverLlamaCppModels`, `discoverVLLMModels`, `discoverLMStudioModels`) accept a user-supplied `baseUrl` and make HTTP requests (or WebSocket connections) to it without any sanitisation or host allowlist. An attacker can control this `baseUrl` through the provider configuration and trick a user into refreshing models, causing the browser to send arbitrary requests to internal services (e.g., `http://localhost/admin`, `http://192.168.1.1/`). This is a classic client-side SSRF vector, especially dangerous in multi-tenant environments or when settings can be imported.",
+    "lineNumbers": [
+      9,
+      95,
+      157,
+      173
+    ],
+    "recommendation": "Validate the `baseUrl` against a list of allowed hostnames or enforce that it points only to known safe origins (e.g., localhost). In a browser context, also consider using a sandboxed iframe or a dedicated proxy service. If possible, disable automatic discovery for untrusted hosts.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/code-review/code_review/git_providers/gitlab_provider.py",
+    "severity": "HIGH",
+    "vulnSlug": "other-gitlab-submodule-injection",
+    "title": "Unvalidated submodule project resolution allows accessing internal projects",
+    "description": "The methods `_get_gitmodules_map`, `_url_to_project_path`, `_project_by_path`, and `_compare_submodule` in gitlab_provider.py process user-controlled `.gitmodules` file content from a merge request to resolve submodule project paths and fetch their diffs via the GitLab API. The `.gitmodules` URL is parsed to extract a project path, which is then passed to `self.gl.projects.get()` or `self.gl.projects.list()` without validation that the resolved project is within the allowed scope. An attacker can craft a `.gitmodules` file with a URL pointing to a different project (e.g., using `../` path traversal or a name search) that the configured GitLab token has access to. This could allow an attacker to read commit diffs, enumerate projects, or access sensitive data in projects not intended to be accessible, thereby bypassing the intended repository boundary.",
+    "lineNumbers": [
+      57,
+      102,
+      118,
+      145
+    ],
+    "recommendation": "Validate that the resolved submodule project path belongs to an allowed namespace (e.g., same group as the parent project) or restrict submodule scanning to only relative URLs. Ensure the GitLab token has minimal required scopes and consider disabling submodule expansion by default unless reviewed.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/codereview-pythinker/src/state.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-path-traversal",
+    "title": "Path traversal in file operations via unsanitized featureId",
+    "description": "Functions in state.ts construct file paths from user-controlled featureId (and similar identifiers) without sanitization, allowing directory traversal. An attacker can read, write, or delete arbitrary .json files outside the intended state directory. This can lead to further exploitation, such as injecting malicious content into feature records for downstream command execution.",
+    "lineNumbers": [
+      66,
+      72,
+      79,
+      82,
+      99,
+      113,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182
+    ],
+    "recommendation": "Sanitize or validate featureId and other identifiers to disallow path traversal characters (e.g., enforce a strict alphanumeric or UUID pattern). Ensure the final path is within the intended base directory using path.resolve and a contains check.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/agent.ts",
+    "severity": "HIGH",
+    "vulnSlug": "agentic-untrusted-prompt-input",
+    "title": "Untrusted user input flows into LLM prompt without separation from system instructions",
+    "description": "User-supplied input is passed directly to normalizePromptInput and then to runPromptMessages without visible separation of trusted system instructions. This enables prompt injection attacks, where an attacker can craft input that overrides system directives and causes the LLM to invoke tools (e.g., send emails, modify data) without authorization.",
+    "lineNumbers": [
+      333
+    ],
+    "recommendation": "Ensure system instructions are kept separate from user input by using distinct roles (system/user) and consider adding input content filtering to detect and block prompt injection attempts.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/harness/session/uuid.ts",
+    "severity": "HIGH",
+    "vulnSlug": "insecure-crypto",
+    "title": "Insecure random number generation using Math.random",
+    "description": "The code uses Math.random() to generate random bytes, which is not cryptographically secure. For generating UUIDs, session IDs, or other security-sensitive values, a cryptographically secure pseudorandom number generator (CSPRNG) such as crypto.randomBytes() should be used. This makes the generated values predictable and vulnerable to brute force or prediction attacks.",
+    "lineNumbers": [
+      11
+    ],
+    "recommendation": "Replace Math.random() with a cryptographically secure random number generator, e.g., Node's crypto.randomBytes() or use the native crypto.getRandomValues() if in browser context.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/harness/types.ts",
+    "severity": "HIGH",
+    "vulnSlug": "agent-tool-definition-file-write",
+    "title": "Unrestricted file write tools exposed to AI agent",
+    "description": "The `FileSystem` interface at line 286\u2013288 defines `writeFile` and `appendFile` methods that allow creating or overwriting files without any path restrictions. If exposed to the LLM, a prompt injection could direct the agent to write arbitrary content to arbitrary paths, potentially leading to code execution (e.g., overwriting scripts, configuration files, or startup files).",
+    "lineNumbers": [
+      286,
+      287,
+      288
+    ],
+    "recommendation": "Restrict file write operations to a specific directory with no-execute permissions, validate and sanitize file paths, and limit file extensions if necessary. Consider removing write capabilities unless strictly required.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/agent/src/proxy.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-ssrf",
+    "title": "SSRF via HTTP tool with potentially controllable proxy URL",
+    "description": "The agent tool defined at line 152 sends a POST request to `${options.proxyUrl}/api/stream`. If the proxyUrl argument is controllable by the LLM (via prompt injection), an attacker can direct the request to internal services, potentially leading to data exfiltration or further compromise. Additionally, the fetch follows redirects, which could be leveraged to bypass URL restrictions.",
+    "lineNumbers": [
+      152
+    ],
+    "recommendation": "Restrict the proxyUrl to a predefined set of allowed values; do not allow the LLM to control the URL directly. Disable redirect following or validate any redirect target against an allowlist.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/ai/src/utils/oauth/oauth-page.ts",
+    "severity": "HIGH",
+    "vulnSlug": "xss",
+    "title": "Cross-site scripting in OAuth callback page via unescaped title",
+    "description": "The OAuth callback page inserts the `title` variable directly into HTML using template literals without escaping. If `title` is derived from attacker-controlled input (e.g., OAuth error parameters or state), arbitrary HTML/JavaScript can be injected, leading to XSS. This page is served on localhost during the OAuth flow, and XSS could allow exfiltration of OAuth tokens or other sensitive data.",
+    "lineNumbers": [
+      23,
+      85,
+      86,
+      87,
+      88
+    ],
+    "recommendation": "Escape the `title` value by replacing HTML special characters (<, >, &, \", ') before inserting into the template, or use a safe DOM API like textContent. Alternatively, define the title statically.",
+    "confidence": "low",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/examples/extensions/doom-overlay/wad-finder.ts",
+    "severity": "HIGH",
+    "vulnSlug": "supply-chain",
+    "title": "Unvalidated Download of Doom WAD File Leading to Supply Chain Risk",
+    "description": "The application downloads a Doom game file (doom1.wad) from an external URL (distro.ibiblio.org) without integrity verification. The default fetch() behavior follows redirects. An attacker who compromises the upstream server, performs a DNS spoofing attack, or executes a man-in-the-middle attack can replace the WAD file with a malicious one. Malicious WAD files can exploit parsing vulnerabilities in the Doom engine (e.g., memory corruption in the C/WASM port), potentially leading to arbitrary code execution in the coding agent's context.",
+    "lineNumbers": [
+      4,
+      15,
+      41
+    ],
+    "recommendation": "Add integrity verification for downloaded files using a cryptographic checksum (e.g., SHA-256) from a trusted source. Set the fetch redirect option to 'manual' or 'error' to prevent automatic redirect following. Pin the TLS certificate for the download host. Consider bundling the required WAD file with the extension.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/processor/src/agents/claude-agent-sdk.ts",
+    "severity": "HIGH",
+    "vulnSlug": "prompt-injection",
+    "title": "Prompt injection via repository files enables arbitrary code execution in AI agent",
+    "description": "The agent prompt is built from repository file content (batch) which may contain attacker-controlled instructions. The Claude Agent SDK is invoked with `allowedTools` including Bash, `permissionMode: 'dontAsk'`, and an optional sandbox that degrades gracefully when unavailable. An attacker who submits a malicious file can inject Bash commands into the prompt, leading to arbitrary code execution within the sandbox or on the host if sandbox is absent. The subprocess environment includes API keys (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_TOKEN), which can be exfiltrated if network is accessible (e.g., on systems without sandbox).",
+    "lineNumbers": [
+      87,
+      93,
+      156
+    ],
+    "recommendation": "Sanitize or strip injected instructions from prompt content; consider using a dedicated API client instead of spawning a CLI with Bash access; enforce sandbox mandatory (fail if unavailable); restrict allowed tools further (e.g., remove Bash or replace with a controlled command runner).",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/processor/src/agents/codex-sdk.ts",
+    "severity": "HIGH",
+    "vulnSlug": "prompt-injection",
+    "title": "Prompt injection via repository files enables arbitrary code execution in AI agent",
+    "description": "The agent prompt is built from repository file content (batch) which may contain attacker-controlled instructions. The Codex SDK is invoked with a sandbox mode that allows shell execution (`workspace-write` locally or `danger-full-access` inside VM) and the subprocess environment includes API keys (OPENAI_API_KEY, ANTHROPIC_AUTH_TOKEN, etc.). An attacker who submits a malicious file can inject Bash commands into the prompt, leading to arbitrary code execution. The effective sandbox can be bypassed when running inside a VM (`danger-full-access`) or when the OS-level sandbox is not installed, and network access may be available to exfiltrate credentials.",
+    "lineNumbers": [
+      42,
+      277,
+      565
+    ],
+    "recommendation": "Sanitize or strip injected instructions from prompt content; consider using a dedicated API client instead of spawning a CLI with Bash access; enforce sandbox mandatory (fail if unavailable) and deny network access in sandbox; restrict allowed tools further.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/processor/src/index.ts",
+    "severity": "HIGH",
+    "vulnSlug": "path-traversal",
+    "title": "Path traversal via unsanitized manifestPath, rootPathOverride, and projectId",
+    "description": "The `process` function accepts `params.manifestPath`, `params.rootPathOverride`, and `params.projectId` without any validation or sanitization. `manifestPath` is passed directly to `fs.readFileSync()` (line ~180), allowing an attacker to read arbitrary files on the system by supplying a path like `/etc/passwd`. `rootPathOverride` is passed to `path.resolve()` and used as the project root (line ~165), enabling directory traversal to unintended directories. `projectId` is used in `dataDir(projectId)`, `readProjectConfig(projectId)`, and `loadAllFileRecords(projectId)`, which can allow traversal outside the intended data directory if `projectId` contains `../` sequences. This can lead to arbitrary file read and, depending on the context, arbitrary file write. No access controls, allowlists, or path containment checks are applied.",
+    "lineNumbers": [
+      165,
+      180
+    ],
+    "recommendation": "Validate and constrain all user-supplied paths: (1) For `manifestPath`, resolve the path and reject if it does not reside within an allowed base directory. (2) For `rootPathOverride`, resolve and then verify that the resolved path starts with a configured safe base. (3) For `projectId`, enforce a strict format (e.g., UUID, slug, no path separators) and avoid using it directly in filesystem operations; use an internal identifier and map it to a safe directory.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/processor/src/triage.ts",
+    "severity": "HIGH",
+    "vulnSlug": "path-traversal",
+    "title": "Path traversal via unsanitized projectId in dataDir, readProjectConfig, and loadAllFileRecords",
+    "description": "The `triage` function uses `params.projectId` directly in calls to `readProjectConfig(projectId)`, `dataDir(projectId)`, and `loadAllFileRecords(projectId)`. No validation is performed on `projectId`, so an attacker can supply a value containing `../` to escape the intended data directory and read arbitrary files from the filesystem. For example, setting `projectId` to `../../etc` could allow reading `/etc/passwd` via the `INFO.md` read (`fs.readFileSync(path.join(dataDir(projectId), 'INFO.md'))`). This undermines tenant isolation and can expose sensitive data.",
+    "lineNumbers": [
+      20,
+      24,
+      29
+    ],
+    "recommendation": "Enforce a strict format for `projectId` (e.g., UUID, alphanumeric slug, no path separators). Use an internal safe mapping from project identifier to filesystem path instead of interpolating directly into path construction.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/processor/src/triage.ts",
+    "severity": "HIGH",
+    "vulnSlug": "other-prompt-injection",
+    "title": "Prompt injection via unsanitized finding data sent to LLM",
+    "description": "The `triage` function constructs an LLM prompt that includes finding fields (title, filePath, severity, vulnSlug, description, etc.) directly from scanned records without any sanitization or structural separation. An attacker who can influence the contents of scanned files (e.g., by contributing code to a repository under scan) can embed malicious instructions in finding descriptions or other fields. These instructions can then manipulate the LLM's triage output, potentially causing all findings to be misclassified (e.g., as 'skip') or altering prioritization. This can hide real vulnerabilities or create noise, undermining the reliability of the triage process.",
+    "lineNumbers": [
+      94,
+      100
+    ],
+    "recommendation": "Sanitize or escape user-controlled fields before embedding them in the prompt. Use a structured format (e.g., JSON with clear delimiters) that separates data from instructions. Consider preprocessing the data to remove or truncate content that could be interpreted as directives. Validate the LLM output against expected patterns and log anomalies.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/release-pythinker-cli.yml",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-github-workflow-supply-chain",
+    "title": "Unpinned mutable action references in high-permission release workflow",
+    "description": "Multiple action references use mutable version tags (e.g., @stable, @v1, @release/v1) instead of a full commit SHA. This supply-chain risk is amplified because the workflow has `contents: write` access and processes signing certificates, PyPI tokens, and other secrets. A compromise of a referenced action repository could lead to secret exfiltration, artifact tampering, or malicious package publication. Affected lines include third-party actions such as `dtolnay/rust-toolchain@stable` (L124), `astral-sh/setup-uv@v1` (L130), and `pypa/gh-action-pypi-publish@release/v1` (L537), as well as several official GitHub actions.",
+    "lineNumbers": [
+      19,
+      40,
+      114,
+      124,
+      130,
+      135,
+      495,
+      516,
+      537,
+      569,
+      572,
+      578,
+      583
+    ],
+    "recommendation": "Pin every action to a full commit hash (e.g., `dtolnay/rust-toolchain@<sha256>`). Use Dependabot's `groups` configuration to manage automated updates for action SHAs. For official GitHub actions, same hash pinning is recommended.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/release-pythinker-core.yml",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-github-workflow-supply-chain",
+    "title": "Unpinned mutable action references in release workflow",
+    "description": "Several action references use mutable version tags instead of a full commit SHA. While this workflow has limited permissions (`contents: read`), the publish job requires `id-token: write` for PyPI OIDC, and a machine token (`PYTHINKER_CORE_PAGES_TOKEN`) is used to push to gh-pages. A compromised third-party action could still exfiltrate the OIDC token or the pages token. Affected lines include third-party actions such as `astral-sh/setup-uv@v1` and official GitHub actions used throughout.",
+    "lineNumbers": [
+      17,
+      20,
+      42,
+      45,
+      51,
+      68,
+      71,
+      77
+    ],
+    "recommendation": "Pin all actions to a full commit hash (e.g., `astral-sh/setup-uv@<sha256>`). Use Dependabot to manage automated updates. This is especially important for actions that handle secrets or tokens.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/mistral.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-header-injection",
+    "title": "Potential header injection via unchecked model.headers and options.headers",
+    "description": "In buildRequestOptions, model.headers and options.headers are merged directly into request headers via Object.assign (lines 93 and 95) without validation. An attacker who controls these values can inject arbitrary HTTP headers (Authorization, Cookie, etc.), enabling request smuggling or cache poisoning in some deployments.",
+    "lineNumbers": [
+      93,
+      95
+    ],
+    "recommendation": "Validate and sanitize user-supplied headers. Only allow a predefined set of safe headers or drop headers that could be used for injection.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/custom-provider-gitlab-duo/index.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "secret-in-log",
+    "title": "Sensitive information disclosure in error messages",
+    "description": "Error handling routines in `getDirectAccessToken` (line 162), `loginGitLab` (line 222), and `refreshGitLabToken` (line 247) include the raw HTTP response body (`await response.text()`) in the thrown `Error` objects. If the GitLab API echoes back user secrets, partial tokens, or sensitive debug information in error responses, these details propagate to stderr, application logs, or the user's terminal via the stream error handler (line 276). This breaks the principle of least privilege on error feedback.",
+    "lineNumbers": [
+      162,
+      222,
+      247,
+      276
+    ],
+    "recommendation": "Replace raw response body inclusion in error messages with a sanitized status-code and a generic error identifier. Log the full details only to an internal secure log, not back to the user or into raised exceptions.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/protected-paths.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-incomplete-file-protection",
+    "title": "Protected paths extension can be bypassed via other file-modifying tools",
+    "description": "The extension only listens to 'write' and 'edit' tool events. Other tools such as 'create', 'update', 'delete', or any custom tool that modifies files are not blocked, allowing an attacker (AI agent) to bypass the intended protection. Additionally, the path check relies on a simple substring match (path.includes(p)), which may be evaded by case variations on case-insensitive filesystems or by using symlinks, although the practical exploitability is limited.",
+    "lineNumbers": [
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "recommendation": "Register handlers for all file-modifying tool events or use a wildcard pattern. Consider normalizing paths and using case-insensitive comparison when needed. Avoid relying solely on substring matching for security boundaries.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/src/core/tools/find.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "path-traversal",
+    "title": "Path traversal allows information disclosure via file listing",
+    "description": "The find tool accepts an optional 'path' parameter (line 16) used to set the search directory via resolveToCwd without validation that it stays within the intended workspace. An attacker can supply a path like '../' to list files outside the allowed area, exposing sensitive file names and directory structure.",
+    "lineNumbers": [
+      16
+    ],
+    "recommendation": "Validate that the resolved search directory is within the allowed project directory before performing file search.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/tui/src/components/markdown.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-terminal-injection",
+    "title": "Terminal escape sequence injection in markdown rendering",
+    "description": "The Markdown component renders parsed markdown tokens directly to terminal output without sanitizing ANSI escape sequences. If an attacker can control the markdown content (e.g., through external data, AI output with prompt injection), they can inject arbitrary escape sequences. This can lead to terminal-based attacks such as display manipulation, clipboard theft (OSC 52), or potentially command injection depending on the terminal emulator. The render and renderToken methods pass raw token text to theme styling functions and the resulting string is printed to the terminal; no filtering of C0 or C1 control characters is applied.",
+    "lineNumbers": [],
+    "recommendation": "Strip or escape all ANSI/escape control characters (C0 and C1 ranges) from the rendered text before applying terminal styling, or use a dedicated sanitizer like `strip-ansi` to ensure only intended markup is output.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/SandboxedIframe.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "other-unvalidated-external-url",
+    "title": "Unvalidated URL opening via postMessage allows arbitrary tab creation",
+    "description": "The sandbox iframe can send an `open-external-url` message to the parent, which opens the URL via `chrome.tabs.create` (in browser extension context) or `window.open` (fallback) with no validation. An attacker executing code in the sandbox can open arbitrary URLs, enabling phishing, spam tabs, or navigation to malicious sites. The source check confirms the message is from the iframe, but no URL allowlist or sanitization is applied.",
+    "lineNumbers": [
+      155,
+      162
+    ],
+    "recommendation": "Add a URL allowlist (e.g., restrict to http/https schemes) or require user confirmation before opening external URLs. Sanitize the URL and use `noreferrer` in the fallback path. Consider removing the chrome.tabs path or requiring a user gesture.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/sandbox/RuntimeMessageBridge.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "postmessage-origin-validation",
+    "title": "Missing origin validation in sandbox message listener",
+    "description": "The sandbox bridge code registers a `message` event listener that does not verify the `origin` property of incoming events. An attacker who can send cross-origin messages to the sandbox iframe (e.g., from a compromised parent or a co-located malicious iframe) could forge `runtime-response` messages, causing the sandbox code to resolve promises with attacker-controlled data, potentially leading to code execution or data corruption. The listener is defined on lines 35\u201344 of the source file.",
+    "lineNumbers": [
+      35,
+      44
+    ],
+    "recommendation": "Before processing the event, check that `e.origin` matches the expected parent origin (the same origin used for postMessage). If the parent origin is not static, use a secret token or messageId correlation to authenticate responses.",
+    "confidence": "low",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/javascript-repl.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "xss",
+    "title": "Potential XSS via unescaped sandbox output in console-block",
+    "description": "The REPL tool's renderer passes the output of sandbox execution to a <console-block> component as a property. If that component renders the content using innerHTML without sanitization, an attacker can use prompt injection to have the sandbox output arbitrary HTML/JavaScript, leading to XSS in the extension's context.",
+    "lineNumbers": [
+      278,
+      279
+    ],
+    "recommendation": "Ensure that the console-block component escapes all content before rendering. Use textContent or Lit's escaping for any rendering of user-controlled text. Alternatively, sanitize the output before passing to the component.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/scripts/tool-stats.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "xss",
+    "title": "Unescaped data in generated HTML report leads to cross-site scripting",
+    "description": "The script generates an HTML report by embedding data from session files (tool names, bash command names, the sessionsDir path, etc.) directly into HTML via template literals and innerHTML without escaping. For example, line 168 interpolates the sessionsDir argument into the HTML, and line 203 uses r.name directly inside innerHTML. An attacker who can write to session files can inject arbitrary HTML/JavaScript that will execute when the report is opened. The esc() function is defined but not used in visible code paths.",
+    "lineNumbers": [
+      168,
+      203
+    ],
+    "recommendation": "Use the esc() function to escape all user-controlled (session file-derived) data before inserting into the HTML template. For innerHTML assignments, interpolate escaped values via esc(). Alternatively, use createTextNode or textContent to avoid HTML interpretation.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/examples/extensions/doom-overlay/wad-finder.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "path-traversal",
+    "title": "Missing Path Validation in WAD File Discovery",
+    "description": "The findWadFile function accepts a custom path (customPath) without validating that the resolved path is within an expected directory. An attacker who controls this parameter (e.g., via extension configuration) can make the Doom engine load arbitrary files from the filesystem. If the Doom engine has parsing vulnerabilities, this can lead to arbitrary code execution or information disclosure.",
+    "lineNumbers": [
+      18,
+      19,
+      20
+    ],
+    "recommendation": "Validate that the resolved absolute path is within a set of allowed directories (e.g., workspace root or configuration directory). Use path.resolve() combined with path.dirname() comparisons or a strict allowlist of filenames.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/scripts/tool-stats.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "xss",
+    "title": "Cross-Site Scripting in generated HTML report",
+    "description": "Line 166 directly interpolates `${data.files}`, `${sessionsDir}`, and `${data.generatedAt}` into an HTML template literal without any escaping. Any HTML special characters in these values (e.g., from session file names) will be interpreted as markup, enabling XSS when a user opens the generated report. The `esc()` function defined later in the script is not used here.",
+    "lineNumbers": [
+      166
+    ],
+    "recommendation": "Apply the `esc()` function (already defined) to all dynamic values inserted into HTML. For example: `<p class=\"text-zinc-400\">${esc(data.files)} session files from <code>${esc(sessionsDir)}</code>. Generated ${esc(data.generatedAt)}.</p>`.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/pythinker-security-scanner/src/commands/export.ts",
+    "severity": "MEDIUM",
+    "vulnSlug": "xss",
+    "title": "Markdown injection via github_username in exported findings",
+    "description": "The `buildDescription` function constructs a GitHub profile link by interpolating `o.github_username` into a markdown URL and display text without any escaping or validation. An attacker who can control the `github_username` (e.g., via a malicious git committer name or ownership configuration) can inject arbitrary markdown syntax, potentially leading to cross-site scripting when the exported report is rendered in a web browser. For example, a username containing `](https://attacker.com)` would break out of the intended link and create a link to an attacker-controlled domain. This can be used to phish users who view the exported report or to manipulate findings in a CI pipeline.",
+    "lineNumbers": [
+      159
+    ],
+    "recommendation": "Sanitize or encode `github_username` before using it in markdown. Use a function to escape markdown special characters in the display text and stably encode the URL path (e.g., `encodeURIComponent`). Consider using a static label like 'on\u2011call engineer' instead of the user-controlled username.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/agent/src/agent-loop.ts",
+    "severity": "HIGH_BUG",
+    "vulnSlug": "other-unhandled-promise-rejection",
+    "title": "Unhandled promise rejection in agentLoop and agentLoopContinue",
+    "description": "The agentLoop and agentLoopContinue functions fire the async runAgentLoop/runAgentLoopContinue with `void` and attach a `.then()` but no `.catch()`. If the agent loop throws (e.g., due to a misbehaving convertToLlm or transformContext callback, or an unexpected error), the promise rejects without a handler, causing an unhandled promise rejection that terminates the Node.js process. This also leaves the returned stream incomplete, as stream.end is never called.",
+    "lineNumbers": [
+      38,
+      78
+    ],
+    "recommendation": "Add a `.catch()` handler that ends the stream with an error event and logs the error. For example: `.then(messages => stream.end(messages)).catch(error => { stream.push({ type: 'error', reason: 'error', error: { ... } }); stream.end(); })`",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/ai/src/cli.ts",
+    "severity": "HIGH_BUG",
+    "vulnSlug": "missing-await",
+    "title": "Missing await on prompt call may corrupt auth credentials",
+    "description": "The CLI script defines an async prompt function to collect authentication credentials. Candidate matcher indicates that the promise returned by prompt is not awaited on lines 35, 53, and 96. This can cause the script to proceed with saving undefined or incomplete credentials to auth.json before user input is received, potentially overwriting valid credentials with undefined and causing authentication failures.",
+    "lineNumbers": [
+      35,
+      53,
+      96
+    ],
+    "recommendation": "Ensure that the prompt function call is awaited or handle the promise correctly before using the returned value.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/coding-agent/examples/extensions/doom-overlay/doom-engine.ts",
+    "severity": "HIGH_BUG",
+    "vulnSlug": "missing-await",
+    "title": "Missing await on Async Module Initialization",
+    "description": "moduleFunc and/or createDoomModule (line 87) are likely async operations that are not awaited. Since the module returns a Promise<DoomModule>, failing to await it can cause race conditions or partial initialization, potentially leading to undefined behavior or security control bypasses.",
+    "lineNumbers": [
+      67,
+      68,
+      69,
+      87
+    ],
+    "recommendation": "Ensure the async function call is properly awaited.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts",
+    "severity": "BUG",
+    "vulnSlug": "unhandled-promise-rejection",
+    "title": "Unhandled promise rejections in message listeners",
+    "description": "Both the window message listener and the user-script message listener execute async code without catching errors. The async event handler returns a promise that is ignored, and the user-script listener uses an async IIFE with no catch clause. If a provider or consumer throws, the error becomes an unhandled promise rejection, potentially causing silent failures or crashes.",
+    "lineNumbers": [
+      137,
+      178
+    ],
+    "recommendation": "Wrap async operations in try-catch and handle errors gracefully, at least logging them. For the user-script listener, catch rejections inside the IIFE.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/dialogs/SettingsDialog.ts",
+    "severity": "BUG",
+    "vulnSlug": "other-missing-await",
+    "title": "Missing await on async saveProxySettings call in event handlers",
+    "description": "In the ProxyTab component, the async method `saveProxySettings` is called from the `onChange` callback of both the Switch (line 90) and the Input (line 96) without an `await`. This can lead to race conditions in local storage writes if multiple settings are changed in quick succession, and it may cause incomplete or lost proxy settings data. Although errors are caught inside `saveProxySettings`, the lack of awaiting could still result in unhandled rejections if the promise rejects before entering the try-catch (e.g., if `getAppStorage()` fails).",
+    "lineNumbers": [
+      90,
+      96
+    ],
+    "recommendation": "Make the event handler callbacks `async` and `await saveProxySettings()`, or call `saveProxySettings().catch(...)` to handle potential errors. For example: `onChange: async (checked) => { this.proxyEnabled = checked; await this.saveProxySettings(); }`.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/scanner/src/matchers/connectrpc-handler-impl.ts",
+    "severity": "BUG",
+    "vulnSlug": "other-incomplete-function-detection",
+    "title": "Multi-line function signatures not detected by ConnectRPC handler matcher",
+    "description": "The regex FUNC_OPEN (/^\\s*func\\s*\\([^)]+\\)\\s+[A-Z]\\w*\\s*\\(/) requires the entire function signature up to the opening parenthesis after the method name to be on a single line. If the method name or receiver spans multiple lines, the first line will not match and the handler is silently skipped. This causes false negatives in scanner coverage, potentially missing ConnectRPC handler implementations that should be analyzed.",
+    "lineNumbers": [
+      45
+    ],
+    "recommendation": "Support multi-line declarations by either: (1) joining consecutive lines up to a reasonable limit before applying the regex, (2) using a multi-line state machine that tracks opening parentheses, or (3) widening the initial match to detect any function definition and then scanning ahead for the ConnectRPC types and context.Context.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pythinker-security-scanner/packages/scanner/src/matchers/github-workflow-security.ts",
+    "severity": "BUG",
+    "vulnSlug": "other-ineffective-run-block-pattern",
+    "title": "Ineffective regex for run block expression interpolation in GitHub workflow scanner",
+    "description": "The pattern `\\brun\\s*:\\s*\\|.*\\$\\{\\{[^}]*\\}\\}/s` intends to detect shell injection via `${{ }}` expressions in `run:` blocks that use the `|` literal block scalar. However, the matcher splits the file content by newline and tests each line individually. Since the expression appears on a separate line after `run: |`, the pattern will never match multiline run blocks, rendering this detection entirely ineffective for its primary use case. This leads to false negatives when scanning workflows for potentially malicious interpolations.",
+    "lineNumbers": [
+      66
+    ],
+    "recommendation": "Either remove the pattern if the other patterns cover the cases, or refactor the matching logic to operate on the full file content (without line splitting) and adjust the regex to account for the fact that `${{ }}` may appear on subsequent lines. For example, use a pattern like `/^\\s+run:\\s*\\|\\s*$[\\s\\S]*?\\$\\{\\{/m` on the full content.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/ci-docs.yml",
+    "severity": "LOW",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references",
+    "description": "The workflow uses `actions/checkout@v4`, `actions/setup-node@v4`, and `actions/cache@v4` with mutable tags instead of pinned commit hashes. An attacker who compromises those action repositories could redirect the tag to malicious code, leading to arbitrary code execution in the CI pipeline. While no secrets are used and the workflow only builds documentation, this still represents a supply-chain risk.",
+    "lineNumbers": [
+      24,
+      27,
+      32
+    ],
+    "recommendation": "Pin each action to its full commit SHA (e.g., `actions/checkout@<sha256>`). Use Dependabot version updates or Renovate to manage pinning.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/ci-pythinker-cli.yml",
+    "severity": "LOW",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references",
+    "description": "Multiple actions (`actions/checkout@v4`, `actions/setup-python@v5`, `astral-sh/setup-uv@v1`, `actions/setup-node@v4`, `actions/upload-artifact@v4`) are referenced with mutable tags rather than commit hashes. This allows the action owners to change the behavior of the tag, potentially injecting malicious code into the build, test, or release\u2011validation jobs.",
+    "lineNumbers": [
+      38,
+      42,
+      48,
+      72,
+      76,
+      82,
+      132,
+      140,
+      145,
+      152,
+      197,
+      209,
+      214,
+      326,
+      329
+    ],
+    "recommendation": "Replace every action tag with its specific commit SHA. For third\u2011party actions, consider vendoring or using a trusted registry that enforces pinning.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/ci-pythinker-core.yml",
+    "severity": "LOW",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references",
+    "description": "The workflow uses `actions/checkout@v4`, `actions/setup-python@v5`, `astral-sh/setup-uv@v1`, and `actions/upload-artifact@v4` with mutable tags. An attacker who compromises any of these action repositories could alter the tag and execute arbitrary code in the CI environment.",
+    "lineNumbers": [
+      27,
+      31,
+      37,
+      64,
+      67,
+      73,
+      90
+    ],
+    "recommendation": "Pin each action to its full commit SHA.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/ci-pythinker-host.yml",
+    "severity": "LOW",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references",
+    "description": "The workflow uses `actions/checkout@v4`, `actions/setup-python@v5`, and `astral-sh/setup-uv@v1` without pinning to a specific commit hash. This exposes the CI pipeline to supply\u2011chain attacks if any action tag is repointed to malicious code.",
+    "lineNumbers": [
+      50,
+      59,
+      65
+    ],
+    "recommendation": "Pin each action to its full commit SHA.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".github/workflows/ci-pythinker-sdk.yml",
+    "severity": "LOW",
+    "vulnSlug": "github-workflow-security",
+    "title": "Unpinned action references",
+    "description": "The workflow uses `actions/checkout@v4`, `actions/setup-python@v5`, `astral-sh/setup-uv@v1`, and `actions/upload-artifact@v4` with mutable tags. This is a supply\u2011chain risk because the action repositories could be compromised and the tags could point to malicious code.",
+    "lineNumbers": [
+      27,
+      31,
+      37,
+      64,
+      67,
+      73,
+      90
+    ],
+    "recommendation": "Pin each action to its full commit SHA.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".venv/lib/python3.14/site-packages/textual_serve/server.py",
+    "severity": "LOW",
+    "vulnSlug": "other-directory-listing",
+    "title": "Static file directory listing enabled",
+    "description": "The static route is configured with show_index=True, enabling directory listing. This exposes the file structure of the static directory to any visitor. In this deployment the static folder contains only intended public assets, but enabling directory listing still increases information disclosure risk and may reveal file names or paths that an attacker could leverage.",
+    "lineNumbers": [
+      159
+    ],
+    "recommendation": "Set show_index=False (or remove the argument) to disable directory listing.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/ai/src/providers/openai-codex-responses.ts",
+    "severity": "LOW",
+    "vulnSlug": "insecure-random",
+    "title": "Weak request ID generation when crypto.randomUUID is unavailable",
+    "description": "The createCodexRequestId function (line 1266) falls back to Math.random() when crypto.randomUUID is not available. If the request ID is used in a security-sensitive context, it may be predictable.",
+    "lineNumbers": [
+      1266
+    ],
+    "recommendation": "Use a cryptographically strong random generator (e.g., crypto.getRandomValues) for fallback request ID generation.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/custom-provider-anthropic/index.ts",
+    "severity": "LOW",
+    "vulnSlug": "secret-in-log",
+    "title": "OAuth token response body exposed in error messages",
+    "description": "In the custom Anthropic provider example, when token exchange or token refresh fails, the error message includes the full response body (`await tokenResponse.text()`). This could leak sensitive OAuth tokens, client secrets, or other data if the OAuth server returns them in error responses. Attack scenario: an attacker who can trigger a token error and capture the output (e.g., through logs or user-facing error display) may obtain valid tokens.",
+    "lineNumbers": [
+      111,
+      139
+    ],
+    "recommendation": "Do not include raw response body in error messages. Use a generic error message such as 'Token exchange failed' and log detailed errors server-side or via a secure channel.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/custom-provider-gitlab-duo/index.ts",
+    "severity": "LOW",
+    "vulnSlug": "other-missing-oauth-state-validation",
+    "title": "OAuth state parameter not validated at callback",
+    "description": "The `loginGitLab` function generates a cryptographic `state` parameter for the authorization request, but never stores or validates it when the user supplies the callback URL. Although PKCE (S256) prevents code injection attacks, the missing state check violates the OAuth 2.0 security best practices (RFC 9700) and exposes the client to CSRF on the authorization code request. An attacker who can intercept or replace the user's callback URL can inject a code from a different authorization session, potentially causing an account linkage or denial of service.",
+    "lineNumbers": [
+      192,
+      210
+    ],
+    "recommendation": "Store the `state` value alongside the PKCE `verifier`. When the callback URL is provided, extract the `state` parameter and verify it matches the stored value. Reject the callback if the state is missing or mismatched.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/coding-agent/examples/extensions/qna.ts",
+    "severity": "LOW",
+    "vulnSlug": "agentic-untrusted-prompt-input",
+    "title": "Untrusted assistant message used as prompt in LLM extraction call",
+    "description": "The last assistant message (lastAssistantText) is directly placed into a user message for a secondary LLM call via the `complete` function. If the assistant message contains crafted instructions, it could act as a prompt injection and override the intended system prompt, influencing the extraction model's behavior. While the output only goes to the editor visible to the user, this could still be used to produce misleading content or exfiltrate information through the UI. The impact is limited because the user already sees the original assistant message.",
+    "lineNumbers": [
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115
+    ],
+    "recommendation": "Treat the assistant message as data by clearly separating it from instructions in the prompt. Prefix it with a statement like 'Extract questions from the following text:' and avoid embedding it directly into the system prompt. Consider using a different architecture that does not require an LLM to process untrusted content.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/tools/artifacts/TextArtifact.ts",
+    "severity": "LOW",
+    "vulnSlug": "xss",
+    "title": "Unescaped HTML via highlight.js output in unsafeHTML directive",
+    "description": "The `render()` method passes the result of `hljs.highlight(this.content).value` directly to the `unsafeHTML` directive. While highlight.js normally escapes HTML entities, a bypass or unexpected language-processing edge case could allow an attacker who can control the artifact content (through crafted AI prompts) to inject arbitrary HTML/JavaScript. This is stored in the artifact and executed when the artifact is displayed.",
+    "lineNumbers": [
+      127,
+      136
+    ],
+    "recommendation": "Sanitize the highlighted output using a library like DOMPurify before passing it to `unsafeHTML`, or avoid `unsafeHTML` altogether by using a safer rendering approach (e.g., escape the content and only allow specific formatting).",
+    "confidence": "low",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": ".worktrees/pi-main/packages/web-ui/src/utils/attachment-utils.ts",
+    "severity": "LOW",
+    "vulnSlug": "other-insecure-prng",
+    "title": "Weak random ID generation uses Math.random",
+    "description": "Attachment ID is generated using `Math.random()` (line 80: `const id = `${detectedFileName}_${Date.now()}_${Math.random()}`;`). Math.random() is not cryptographically secure. If this ID is used for any security-sensitive purpose (e.g., session token, CSRF token), it could be predictable. Currently it appears as an internal identifier; however, it is a defense-in-depth issue.",
+    "lineNumbers": [
+      80
+    ],
+    "recommendation": "Replace `Math.random()` with `crypto.randomUUID()` or `crypto.getRandomValues()` for better randomness.",
+    "confidence": "high",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/code-review/code_review/servers/github_app.py",
+    "severity": "LOW",
+    "vulnSlug": "unauthenticated-endpoint",
+    "title": "Marketplace webhook endpoint lacks authentication",
+    "description": "The endpoint /api/v1/marketplace_webhooks (line 93) does not enforce authentication; it logs the full request body. Without proper verification, an attacker can pollute logs or send arbitrary payloads.",
+    "lineNumbers": [
+      93
+    ],
+    "recommendation": "Remove the endpoint if unused, or add signature verification with a dedicated secret.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  },
+  {
+    "filePath": "blackbox/pi-main/packages/ai/src/providers/openai-codex-responses.ts",
+    "severity": "LOW",
+    "vulnSlug": "other-weak-random-id",
+    "title": "Weak request ID generation using Math.random fallback",
+    "description": "The function createCodexRequestId falls back to Math.random combined with Date.now when crypto.randomUUID is unavailable. This produces predictable IDs that could be guessed by an attacker, potentially enabling request forgery or session hijacking if the ID is used in security-sensitive contexts.",
+    "lineNumbers": [
+      1317
+    ],
+    "recommendation": "Replace Math.random fallback with crypto.getRandomValues-based UUID generation, or ensure crypto.randomUUID is always available by polyfilling.",
+    "confidence": "medium",
+    "producedByRunId": "20260522131731-829aeca41599b1a8"
+  }
+]

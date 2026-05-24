@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.console import Group, RenderableType
 from rich.text import Text
 
+from pythinker_code.ui.shell.components.key_hints import key_hint
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
     ToolRenderDefinition,
@@ -17,14 +18,23 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     invalid_arg,
     missing_required_arg,
     running_spinner,
-    tool_title,
+    tool_call_header,
 )
+from pythinker_code.ui.theme import tui_rich_style
 
 
 def _shorten_url(url: str, *, max_chars: int = 60) -> str:
     if len(url) <= max_chars:
         return url
     return url[: max_chars - 1].rstrip() + "…"
+
+
+def _plural(count: int, singular: str) -> str:
+    return singular if count == 1 else f"{singular}s"
+
+
+def _nonempty_lines(text: str) -> list[str]:
+    return [line for line in (text or "").splitlines() if line.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -35,18 +45,18 @@ def _shorten_url(url: str, *, max_chars: int = 60) -> str:
 def _render_fetch_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     url = as_str(args.get("url"))
-    line = Text()
-    line.append_text(tool_title("fetch"))
-    line.append(" ")
+    summary = Text()
     if url is None:
         if "url" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("url"))
+            summary.append_text(missing_required_arg("url"))
         else:
-            line.append_text(fg("muted", "..."))
+            summary.append_text(fg("muted", "..."))
     else:
-        line.append_text(fg("accent", _shorten_url(url)))
+        summary.append_text(fg("accent", _shorten_url(url)))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Fetch", summary, style_token=style_token)
     return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
@@ -55,18 +65,48 @@ def _render_fetch_result(
 ) -> RenderableType | None:
     if not result.text:
         return None
+    if result.is_error:
+        body, remaining = format_lines_block(
+            result.text,
+            expanded=ctx.expanded,
+            collapsed_max_lines=15,
+            style_token="error",
+        )
+        if not body.plain:
+            return None
+        if remaining > 0:
+            return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
+        return body
+
+    byte_count = len(result.text.encode("utf-8"))
+    line_count = len(_nonempty_lines(result.text))
+    summary = Text()
+    summary.append("Received ", style=tui_rich_style("tool_output"))
+    summary.append(f"{byte_count:,}", style=tui_rich_style("tool_title"))
+    summary.append(" bytes", style=tui_rich_style("tool_output"))
+    if line_count:
+        summary.append(" · ", style=tui_rich_style("muted"))
+        summary.append(str(line_count), style=tui_rich_style("tool_title"))
+        summary.append(f" {_plural(line_count, 'line')}", style=tui_rich_style("muted"))
+
+    ctx.state["__suppress_generic_expand_hint__"] = True
+    if not ctx.expanded:
+        summary.append(" ")
+        summary.append_text(key_hint("ctrl+o", "expand"))
+        return summary
+
     body, remaining = format_lines_block(
         result.text,
-        expanded=ctx.expanded,
+        expanded=True,
         collapsed_max_lines=15,
-        style_token="error" if result.is_error else "tool_output",
+        style_token="tool_output",
     )
-    if not body.plain:
-        return None
+    children: list[RenderableType] = [summary]
+    if body.plain:
+        children.append(body)
     if remaining > 0:
-        more = fg("muted", f"... ({remaining} more lines, ctrl+e to expand)")
-        return Group(body, more)
-    return body
+        children.append(fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
+    return Group(*children)
 
 
 FETCH_RENDERER = ToolRenderDefinition(
@@ -89,26 +129,41 @@ def _render_search_call(ctx: ToolRenderContext) -> RenderableType:
     limit = args.get("limit")
     include_content = bool(args.get("include_content"))
 
-    line = Text()
-    line.append_text(tool_title("search"))
-    line.append(" ")
+    summary = Text()
     if query is None:
         if "query" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("query"))
+            summary.append_text(missing_required_arg("query"))
         else:
-            line.append_text(fg("muted", "..."))
+            summary.append_text(fg("muted", "..."))
     else:
-        line.append_text(fg("accent", f'"{query}"'))
+        summary.append_text(fg("accent", f'"{query}"'))
     extras: list[str] = []
     if isinstance(limit, int) and limit != 5:
         extras.append(f"limit {limit}")
     if include_content:
         extras.append("with content")
     for extra in extras:
-        line.append_text(fg("muted", f" ({extra})"))
+        summary.append_text(fg("muted", f" · {extra}"))
+
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("WebSearch", summary, style_token=style_token)
     return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
+
+
+def _search_result_count(text: str) -> int:
+    """Count results emitted by SearchWeb's `Title/Date/URL/Summary` blocks."""
+    blocks = [block for block in text.split("\n---\n\n") if block.strip()]
+    structured_count = sum(
+        1
+        for block in blocks
+        if any(line.startswith("Title: ") for line in block.splitlines())
+        and any(line.startswith("URL: ") for line in block.splitlines())
+    )
+    if structured_count:
+        return structured_count
+    return len([line for line in text.splitlines() if line.strip()])
 
 
 def _render_search_result(
@@ -116,18 +171,44 @@ def _render_search_result(
 ) -> RenderableType | None:
     if not result.text:
         return None
+    if result.is_error:
+        body, remaining = format_lines_block(
+            result.text,
+            expanded=ctx.expanded,
+            collapsed_max_lines=15,
+            style_token="error",
+        )
+        if not body.plain:
+            return None
+        if remaining > 0:
+            return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
+        return body
+
+    count = _search_result_count(result.text)
+    summary = Text()
+    summary.append("Found ", style=tui_rich_style("tool_output"))
+    summary.append(str(count), style=tui_rich_style("tool_title"))
+    summary.append(f" {_plural(count, 'result')}", style=tui_rich_style("tool_output"))
+    ctx.state["__suppress_generic_expand_hint__"] = True
+    if count and not ctx.expanded:
+        summary.append(" ")
+        summary.append_text(key_hint("ctrl+o", "expand"))
+        return summary
+    if not ctx.expanded:
+        return summary
+
     body, remaining = format_lines_block(
         result.text,
-        expanded=ctx.expanded,
+        expanded=True,
         collapsed_max_lines=15,
-        style_token="error" if result.is_error else "tool_output",
+        style_token="tool_output",
     )
-    if not body.plain:
-        return None
+    children: list[RenderableType] = [summary]
+    if body.plain:
+        children.append(body)
     if remaining > 0:
-        more = fg("muted", f"... ({remaining} more lines, ctrl+e to expand)")
-        return Group(body, more)
-    return body
+        children.append(fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
+    return Group(*children)
 
 
 SEARCH_RENDERER = ToolRenderDefinition(

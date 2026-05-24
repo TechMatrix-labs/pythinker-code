@@ -168,7 +168,7 @@ def _display_output_lines(state: BashExecutionState, *, width: int) -> tuple[lis
         "\n".join(lines),
         max_visual_lines=PREVIEW_LINES,
         width=visual_width,
-        hint="Ctrl+E expand",
+        hint="ctrl+o to expand",
     )
     return result.visual_lines, result.skipped_count
 
@@ -201,19 +201,14 @@ def _bash_footer_lines(
 ) -> list[Text]:
     footer_lines: list[Text] = []
     if hidden > 0 and state.expanded:
-        footer_lines.append(Text("ctrl+e to collapse", style=tui_rich_style("muted")))
+        footer_lines.append(Text("ctrl+o to collapse", style=tui_rich_style("muted")))
     if state.status == "cancelled":
         footer_lines.append(Text("cancelled", style=tui_rich_style("warning")))
-    elif state.status == "error":
-        code = state.exit_code if state.exit_code is not None else "?"
-        footer_lines.append(Text(f"exit {code}", style=tui_rich_style("error")))
+    elif state.status == "error" and state.exit_code is not None:
+        footer_lines.append(Text(f"exit {state.exit_code}", style=tui_rich_style("error")))
     elif state.status in ("pending", "running"):
         footer_lines.append(
             Text("esc to cancel · ctrl+b background", style=tui_rich_style("muted"))
-        )
-    elif total_output_lines > PREVIEW_LINES and not state.expanded:
-        footer_lines.append(
-            Text(f"{total_output_lines} lines · ctrl+e expand", style=tui_rich_style("muted"))
         )
 
     if state.truncated and state.full_output_path:

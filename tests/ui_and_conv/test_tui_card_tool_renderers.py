@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from pythinker_code.tools.display import DiffDisplayBlock
 from pythinker_code.ui.shell.components import (
     ToolExecutionComponent,
     compute_edit_diff_string,
@@ -23,6 +24,7 @@ from pythinker_code.ui.shell.tool_renderers import (
     get_tool_renderer,
     register_builtin_renderers,
 )
+from pythinker_code.ui.shell.tool_renderers._file_diff import preview_from_diff_blocks
 from pythinker_code.ui.shell.tool_renderers.generic import generic_renderer
 
 
@@ -70,6 +72,16 @@ def _render_with_definition(
     return render_plain(comp.render(), width=width)
 
 
+def _render_running(tool: str, args: dict, *, width: int = 100) -> str:
+    defn = get_tool_renderer(tool)
+    assert defn is not None, f"renderer not registered for {tool!r}"
+    comp = ToolExecutionComponent(tool, "tc-1", definition=defn, cwd="/repo")
+    comp.update_args(args)
+    comp.set_args_complete()
+    comp.mark_execution_started()
+    return render_plain(comp.render(), width=width)
+
+
 # ---------------------------------------------------------------------------
 # read
 # ---------------------------------------------------------------------------
@@ -81,18 +93,37 @@ def test_read_renders_path_and_range():
         {"path": "/repo/src/foo.py", "line_offset": 10, "n_lines": 30},
         output="line1\nline2",
     )
-    assert "read" in rendered
+    assert "● Read(" in rendered
     assert "src/foo.py" in rendered
     assert ":10-39" in rendered
     assert "Read 2 lines" in rendered
 
 
-def test_read_collapses_long_output_with_hint():
+def test_read_result_matches_reference_summary_only():
     body = "\n".join(f"line {i}" for i in range(20))
     rendered = _render("ReadFile", {"path": "/repo/x.py"}, output=body)
     assert "Read 20 lines" in rendered
-    assert "line 0" in rendered
-    assert "more lines" in rendered  # collapse hint
+    assert "line 0" not in rendered
+    assert "more lines" not in rendered
+
+
+def test_read_error_prefers_structured_message():
+    defn = get_tool_renderer("ReadFile")
+    assert defn is not None
+    comp = ToolExecutionComponent("ReadFile", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"path": "/repo/missing.py"})
+    comp.mark_execution_started()
+    comp.set_args_complete()
+    comp.set_result(
+        ToolResultPayload(
+            text="",
+            is_error=True,
+            details={"message": "File does not exist: /repo/missing.py"},
+        )
+    )
+
+    rendered = render_plain(comp.render(), width=100)
+    assert "File not found" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +137,9 @@ def test_write_shows_path_and_content_preview():
         {"path": "/repo/new.py", "content": "def f():\n    return 1\n"},
         output="Successfully wrote",
     )
-    assert "write" in rendered
-    assert "new.py" in rendered
-    assert "def f():" in rendered
+    assert "● Write(new.py)" in rendered
+    assert "Wrote 2 lines to new.py" in rendered
+    assert "1 def f():" in rendered
 
 
 def test_write_error_surfaced():
@@ -137,7 +168,8 @@ def test_edit_renders_inline_diff():
     assert "Added 1 line" in rendered
     assert "return 1" in rendered
     assert "return 2" in rendered
-    assert "---" in rendered
+    assert "- 1 return 1" in rendered
+    assert "+ 1 return 2" in rendered
 
 
 def test_edit_multi_count_in_header():
@@ -154,6 +186,57 @@ def test_edit_multi_count_in_header():
     assert "(2 edits)" in rendered
 
 
+def test_edit_prefers_structured_result_diff_blocks():
+    defn = get_tool_renderer("StrReplaceFile")
+    assert defn is not None
+    comp = ToolExecutionComponent("StrReplaceFile", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"path": "/repo/foo.py", "edit": {"old": "old", "new": "new"}})
+    comp.mark_execution_started()
+    comp.set_args_complete()
+    comp.set_result(
+        ToolResultPayload(
+            text="File successfully edited.",
+            details={
+                "display": [
+                    DiffDisplayBlock(
+                        path="/repo/foo.py",
+                        old_text="keep\nold",
+                        new_text="keep\nnew",
+                        old_start=40,
+                        new_start=40,
+                    )
+                ]
+            },
+        )
+    )
+
+    rendered = render_plain(comp.render(), width=100)
+    assert "Removed 1 line" in rendered
+    assert "Added 1 line" in rendered
+    assert "-41 old" in rendered
+    assert "+41 new" in rendered
+
+
+def test_summary_diff_blocks_count_each_line():
+    preview = preview_from_diff_blocks(
+        [
+            DiffDisplayBlock(
+                path="/repo/large.py",
+                old_text="line1\nline2\nline3",
+                new_text="new1\nnew2",
+                is_summary=True,
+            )
+        ]
+    )
+
+    assert preview is not None
+    assert preview.summary_only is True
+    assert preview.removed == 3
+    assert preview.added == 2
+    assert "- line2" in preview.diff_text
+    assert "+ new2" in preview.diff_text
+
+
 # ---------------------------------------------------------------------------
 # grep
 # ---------------------------------------------------------------------------
@@ -165,10 +248,20 @@ def test_grep_renders_pattern_and_path():
         {"pattern": "def\\s+", "path": "/repo/src", "glob": "*.py"},
         output="src/foo.py:10: def hello():",
     )
-    assert "grep" in rendered
+    assert "● Search(" in rendered
     assert "/def\\s+/" in rendered
     assert "src" in rendered
-    assert "(*.py)" in rendered
+    assert "*.py" in rendered
+    assert "Found 1 file" in rendered
+
+
+def test_grep_content_counts_paths_with_punctuation():
+    rendered = _render(
+        "Grep",
+        {"pattern": "needle", "path": "/repo", "output_mode": "content"},
+        output="src/a-b.py:10:needle\nsrc/a-b.py-11-context\nsrc/colon:name.py:3:needle",
+    )
+    assert "Found 3 lines across 2 files" in rendered
 
 
 def test_invalid_empty_grep_call_names_missing_pattern():
@@ -181,8 +274,9 @@ def test_invalid_empty_grep_call_names_missing_pattern():
         ),
         is_error=True,
     )
-    assert "grep <missing pattern> in ." in rendered
-    assert "grep ... in ." not in rendered
+    assert "● Search(<missing pattern> in .)" in rendered
+    assert "Error searching files" in rendered
+    assert "Search(... in .)" not in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +290,9 @@ def test_glob_renders_pattern_and_directory():
         {"pattern": "**/*.py", "directory": "/repo/src"},
         output="src/a.py\nsrc/b.py",
     )
-    assert "find" in rendered
+    assert "● Find(" in rendered
     assert "**/*.py" in rendered
+    assert "Found 2 files" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -205,11 +300,11 @@ def test_glob_renders_pattern_and_directory():
 # ---------------------------------------------------------------------------
 
 
-def test_shell_renders_command_and_output():
+def test_shell_renders_command_and_output_under_response_gutter():
     rendered = _render("Shell", {"command": "ls -la", "timeout": 60}, output="total 0")
-    assert "$ ls -la" in rendered
+    assert "● Bash(ls -la)" in rendered
     assert "total 0" in rendered
-    assert "⎿" not in rendered
+    assert "⎿" in rendered
 
 
 def test_shell_collapses_long_command_and_reports_output_lines():
@@ -219,7 +314,7 @@ def test_shell_collapses_long_command_and_reports_output_lines():
     assert "echo first" in rendered
     assert "echo second" in rendered
     assert "echo third" not in rendered
-    assert "8 lines · ctrl+e expand" in rendered
+    assert "… +4 lines (ctrl+o to expand)" in rendered
 
 
 def test_shell_wraps_substantial_output_in_response_gutter():
@@ -230,10 +325,54 @@ def test_shell_wraps_substantial_output_in_response_gutter():
     assert "exit code 1" in rendered
 
 
+def test_shell_error_with_empty_output_shows_message():
+    defn = get_tool_renderer("Shell")
+    assert defn is not None
+    comp = ToolExecutionComponent("Shell", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"command": "printf rejected > reject.txt"})
+    comp.mark_execution_started()
+    comp.set_args_complete()
+    comp.set_result(
+        ToolResultPayload(
+            text="The tool call is rejected by the user.",
+            is_error=True,
+            details={"output": "", "message": "The tool call is rejected by the user."},
+        )
+    )
+
+    rendered = render_plain(comp.render(), width=100)
+    assert "The tool call is rejected by the user" in rendered
+    assert "exit 1" not in rendered
+
+
+def test_shell_error_uses_structured_exit_code_when_available():
+    defn = get_tool_renderer("Shell")
+    assert defn is not None
+    comp = ToolExecutionComponent("Shell", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"command": "python -c 'raise SystemExit(2)'"})
+    comp.mark_execution_started()
+    comp.set_args_complete()
+    comp.set_result(
+        ToolResultPayload(
+            text="Command failed with exit code: 2.",
+            is_error=True,
+            details={
+                "output": "",
+                "message": "Command failed with exit code: 2.",
+                "extras": {"status": "failure", "exit_code": 2},
+            },
+        )
+    )
+
+    rendered = render_plain(comp.render(), width=100)
+    assert "Command failed with exit code: 2" in rendered
+    assert "exit 2" in rendered
+
+
 def test_shell_uses_comment_label_for_long_script():
     command = "# build assets\n" + "\n".join(f"echo {i}" for i in range(5))
     rendered = _render("Shell", {"command": command, "timeout": 60}, output="ok")
-    assert "$ build assets" in rendered
+    assert "● Bash(build assets)" in rendered
     assert "echo 0" not in rendered
 
 
@@ -253,6 +392,40 @@ def test_shell_background_marker():
     assert "background: watch" in rendered
 
 
+def test_running_tool_headers_do_not_duplicate_status_bullets():
+    cases = [
+        ("Shell", {"command": "ls packages/pythinker-review/AGENTS.md"}, "Bash("),
+        ("ReadFile", {"path": "/repo/src/foo.py"}, "Read("),
+        ("WriteFile", {"path": "/repo/src/foo.py", "content": "x"}, "Write("),
+        (
+            "StrReplaceFile",
+            {"path": "/repo/src/foo.py", "edit": {"old": "a", "new": "b"}},
+            "Update(",
+        ),
+        ("Grep", {"pattern": "needle", "path": "/repo"}, "Search("),
+        ("Glob", {"pattern": "**/*.py", "directory": "/repo"}, "Find("),
+        ("FetchURL", {"url": "https://example.com"}, "Fetch("),
+        ("SearchWeb", {"query": "python"}, "WebSearch("),
+        (
+            "Agent",
+            {"description": "audit", "prompt": "check", "subagent_type": "explore"},
+            "Agent(",
+        ),
+        ("AskUserQuestion", {"questions": [{"question": "Continue?"}]}, "Ask("),
+        ("Think", {"thought": "check"}, "Think"),
+        ("TaskList", {"active_only": True}, "Tasks("),
+        ("TaskOutput", {"task_id": "abc"}, "TaskOutput("),
+        ("TaskStop", {"task_id": "abc"}, "TaskStop("),
+        ("EnterPlanMode", {}, "Plan("),
+        ("ExitPlanMode", {"options": [{"label": "Continue"}]}, "Plan("),
+    ]
+    for tool, args, label in cases:
+        rendered = _render_running(tool, args, width=64)
+        assert label in rendered
+        assert "● ●" not in rendered
+        assert "• ●" not in rendered
+
+
 def test_invalid_empty_shell_call_names_missing_command():
     rendered = _render(
         "Shell",
@@ -263,7 +436,7 @@ def test_invalid_empty_shell_call_names_missing_command():
         ),
         is_error=True,
     )
-    assert "$ <missing command>" in rendered
+    assert "● Bash(<missing command>)" in rendered
     assert "$ ..." not in rendered
 
 
@@ -311,10 +484,10 @@ def test_agent_renders_type_description_and_prompt_preview():
         },
         output="Plan ready",
     )
-    assert "subagent" in rendered
+    assert "● Agent(" in rendered
     assert "code-architect" in rendered
     assert "design auth flow" in rendered
-    assert "Design the OAuth flow with PKCE" in rendered
+    assert "Prompt: Design the OAuth flow with PKCE" in rendered
 
 
 def test_invalid_empty_agent_call_names_missing_required_fields():
@@ -352,7 +525,7 @@ def test_ask_user_renders_question_and_options():
             ]
         },
     )
-    assert "ask user" in rendered
+    assert "● Ask(1 question)" in rendered
     assert "Which auth method?" in rendered
     assert "OAuth" in rendered
     assert "API key" in rendered
@@ -365,7 +538,7 @@ def test_ask_user_renders_question_and_options():
 
 def test_think_renders_thought_body():
     rendered = _render("Think", {"thought": "First, check the file layout.\nThen draft a fix."})
-    assert "think" in rendered
+    assert "● Think" in rendered
     assert "First, check the file layout." in rendered
 
 
@@ -418,8 +591,9 @@ def test_todo_infers_nested_items_from_leading_spaces():
 
 def test_fetch_renders_url():
     rendered = _render("FetchURL", {"url": "https://example.com/page"}, output="<html>...")
-    assert "fetch" in rendered
+    assert "● Fetch(" in rendered
     assert "example.com" in rendered
+    assert "Received 9 bytes" in rendered
 
 
 def test_search_renders_query_and_extras():
@@ -428,10 +602,24 @@ def test_search_renders_query_and_extras():
         {"query": "python typing", "limit": 10, "include_content": True},
         output="result 1",
     )
-    assert "search" in rendered
+    assert "● WebSearch(" in rendered
     assert "python typing" in rendered
     assert "limit 10" in rendered
     assert "with content" in rendered
+    assert "Found 1 result" in rendered
+
+
+def test_search_counts_structured_result_blocks():
+    rendered = _render(
+        "SearchWeb",
+        {"query": "python"},
+        output=(
+            "Title: One\nDate: \nURL: https://example.com/1\nSummary: A\n\n"
+            "---\n\n"
+            "Title: Two\nDate: \nURL: https://example.com/2\nSummary: B\n\n"
+        ),
+    )
+    assert "Found 2 results" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -441,8 +629,7 @@ def test_search_renders_query_and_extras():
 
 def test_task_list_renders_active_flag():
     rendered = _render("TaskList", {"active_only": True}, output="task-1: running")
-    assert "tasks" in rendered
-    assert "(active)" in rendered
+    assert "● Tasks(active)" in rendered
 
 
 def test_task_output_renders_id_and_block_flag():
@@ -451,14 +638,14 @@ def test_task_output_renders_id_and_block_flag():
         {"task_id": "abc-123", "block": True, "timeout": 60},
         output="logs...",
     )
-    assert "task output" in rendered
+    assert "● TaskOutput(" in rendered
     assert "abc-123" in rendered
     assert "block" in rendered
 
 
 def test_task_stop_renders_id():
     rendered = _render("TaskStop", {"task_id": "abc-123", "reason": "user requested"})
-    assert "task stop" in rendered
+    assert "● TaskStop(" in rendered
     assert "abc-123" in rendered
 
 
@@ -469,8 +656,7 @@ def test_task_stop_renders_id():
 
 def test_enter_plan_mode_renders():
     rendered = _render("EnterPlanMode", {})
-    assert "plan mode" in rendered
-    assert "entering" in rendered
+    assert "● Plan(entering)" in rendered
 
 
 def test_exit_plan_mode_renders_options():
@@ -483,7 +669,7 @@ def test_exit_plan_mode_renders_options():
             ]
         },
     )
-    assert "plan mode" in rendered
+    assert "● Plan(exiting)" in rendered
     assert "Refactor first" in rendered
     assert "Add tests first" in rendered
 
@@ -497,8 +683,8 @@ def test_card_renders_compact_without_outer_padding():
     """Compact tool cards should start at the title and avoid extra outer padding."""
     rendered = _render("Glob", {"pattern": "*.py", "directory": "/repo"}, output="foo.py")
     lines = [line.strip() for line in rendered.splitlines()]
-    assert lines[0] == "find *.py in /repo"
-    assert lines[-1] == "⎿  foo.py"
+    assert lines[0] == "● Find(*.py in /repo)"
+    assert lines[-1] == "⎿  Found 1 file ctrl+o expand"
 
 
 def test_card_places_result_immediately_under_response_gutter():
@@ -506,11 +692,10 @@ def test_card_places_result_immediately_under_response_gutter():
     rendered = _render("Glob", {"pattern": "*.py", "directory": "/repo"}, output="foo.py\nbar.py")
     lines = [line.strip() for line in rendered.splitlines()]
     header_idx = next(
-        (i for i, line in enumerate(lines) if "find" in line and "*.py" in line), None
+        (i for i, line in enumerate(lines) if "Find" in line and "*.py" in line), None
     )
     assert header_idx is not None, "header line not found in rendered output"
-    assert lines[header_idx + 1].startswith("⎿  foo.py"), (
+    assert lines[header_idx + 1].startswith("⎿  Found 2 files"), (
         f"expected response gutter after header at index {header_idx}, "
         f"got {lines[header_idx + 1]!r}"
     )
-    assert any("bar.py" in line for line in lines[header_idx + 2 :])

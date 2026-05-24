@@ -893,7 +893,7 @@ async def title(app: Shell, args: str):
     console.print(f"[green]Session title set to: {new_title}[/green]")
 
 
-@registry.command(name="sessions", aliases=["resume"])
+@registry.command(name="sessions", aliases=["resume", "session"])
 async def list_sessions(app: Shell, args: str):
     """List sessions and resume optionally"""
     import shlex
@@ -931,8 +931,8 @@ async def list_sessions(app: Shell, args: str):
     raise Reload(session_id=selection)
 
 
-@registry.command(name="task")
-@shell_mode_registry.command(name="task")
+@registry.command(name="task", aliases=["tasks"])
+@shell_mode_registry.command(name="task", aliases=["tasks"])
 async def task(app: Shell, args: str):
     """Browse and manage background tasks"""
     soul = ensure_pythinker_soul(app)
@@ -948,8 +948,8 @@ async def task(app: Shell, args: str):
     await TaskBrowserApp(soul).run()
 
 
-@registry.command
-@shell_mode_registry.command
+@registry.command(aliases=["color"])
+@shell_mode_registry.command(aliases=["color"])
 async def theme(app: Shell, args: str) -> None:
     """Switch terminal color theme — interactive picker when no args given"""
     from pythinker_code.ui.theme import get_active_theme
@@ -1051,32 +1051,35 @@ async def thinking(app: Shell, args: str) -> None:
     raise Reload(session_id=soul.runtime.session.id)
 
 
-@registry.command
-@shell_mode_registry.command
+@registry.command(aliases=["keybindings"])
+@shell_mode_registry.command(aliases=["keybindings"])
 def keys(app: Shell, args: str):
     """List keyboard shortcuts (semantic keymap)"""
     from rich.console import Group, RenderableType
     from rich.table import Table
     from rich.text import Text
 
-    from pythinker_code.ui.shell.keymap import all_keybindings
+    from pythinker_code.ui.shell.keymap import keybinding_help
 
-    bindings = all_keybindings()
+    bindings = keybinding_help()
     if not bindings:
         console.print("[yellow]No keybindings registered.[/yellow]")
         return
 
     table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Keys", style="bold")
+    table.add_column("Shortcut", style="bold", no_wrap=True)
+    table.add_column("Action", style="cyan")
+    table.add_column("Where", style="dim", no_wrap=True)
 
-    for name in sorted(bindings):
-        keys_text = "/".join(bindings[name])
-        table.add_row(name, keys_text)
+    for binding in bindings:
+        table.add_row("/".join(binding.keys), binding.description, binding.context)
 
     blocks: list[RenderableType] = [
         Text.from_markup("[bold]Keyboard shortcuts[/bold]"),
         table,
+        Text.from_markup(
+            "[grey50]Tip: press ? on an empty prompt for the compact overlay.[/grey50]"
+        ),
     ]
     console.print(Group(*blocks))
 

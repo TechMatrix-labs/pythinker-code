@@ -33,7 +33,7 @@ def test_tool_style_maps_common_tools_to_professional_labels():
     assert tool_style("TodoWrite").label == "Todo"
     assert tool_style("Agent").label == "Subagent"
     assert tool_style("Agent").icon == "●"
-    assert tool_style("Agent").style == "grey50"
+    assert tool_style("Agent").style == "#BAC4FD"
     assert tool_style("AskUser").label == "Ask"
     assert tool_style("UnknownTool").label == "UnknownTool"
 

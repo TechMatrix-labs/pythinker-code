@@ -811,8 +811,8 @@ def test_ctrl_c_during_running_turn_interrupts(tmp_path: Path) -> None:
 
         turn_mark = shell.mark()
         shell.send_line("run slow command")
-        # Bash tool call-renderer prints `$ <command>` as the running marker.
-        shell.read_until_contains("$ sleep 30", after=turn_mark, timeout=15.0)
+        # Bash tool call-renderer prints `Bash(<command>)` as the running marker.
+        shell.read_until_contains("Bash(sleep 30", after=turn_mark, timeout=15.0)
         time.sleep(0.5)
         shell.send_key("ctrl_c")
         shell.read_until_contains("Interrupted by user", after=turn_mark, timeout=10.0)

@@ -34,6 +34,7 @@ from pythinker_code.wire.types import (
     SteerInput,
     StepBegin,
     StepInterrupted,
+    StepRetry,
     SubagentEvent,
     TextPart,
     ThinkPart,
@@ -169,6 +170,8 @@ class ACPSession:
                         pass
                     case StepInterrupted():
                         break
+                    case StepRetry():
+                        pass
                     case CompactionBegin():
                         pass
                     case CompactionEnd():

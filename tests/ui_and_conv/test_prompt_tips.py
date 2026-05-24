@@ -50,6 +50,17 @@ def test_shortcut_help_popup_fits_narrow_columns() -> None:
     assert all(len(line) <= 20 for line in plain.splitlines())
 
 
+def test_shortcut_help_popup_lists_prompt_and_transcript_shortcuts() -> None:
+    prompt_session = object.__new__(CustomPromptSession)
+
+    fragments = prompt_session._render_shortcut_help(columns=90)
+    plain = "".join(fragment[1] for fragment in fragments)
+
+    assert "!" in plain
+    assert "run one shell command" in plain
+    assert "expand/collapse tool output (transcript)" in plain
+
+
 def test_prompt_toolkit_keyprocessor_shutdown_noise_is_filtered() -> None:
     unraisable = SimpleNamespace(
         exc_value=KeyError("__import__"),
@@ -187,10 +198,12 @@ def _render_toolbar_lines(
 
 def test_build_toolbar_tips_without_clipboard() -> None:
     assert _build_toolbar_tips(clipboard_available=False) == [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
+        "?: shortcuts",
+        "ctrl+x: toggle mode",
+        "shift+tab: plan mode",
+        "!: shell command",
+        "ctrl+o: editor",
+        "ctrl+j/alt+enter: newline",
         "/feedback: send feedback",
         "/theme: switch dark/light",
         "@: mention files",
@@ -199,13 +212,15 @@ def test_build_toolbar_tips_without_clipboard() -> None:
 
 def test_build_toolbar_tips_with_clipboard() -> None:
     assert _build_toolbar_tips(clipboard_available=True) == [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
+        "?: shortcuts",
+        "ctrl+x: toggle mode",
+        "shift+tab: plan mode",
+        "!: shell command",
+        "ctrl+o: editor",
+        "ctrl+j/alt+enter: newline",
         "/feedback: send feedback",
         "/theme: switch dark/light",
-        "ctrl-v: paste clipboard",
+        "ctrl+v: paste clipboard",
         "@: mention files",
     ]
 

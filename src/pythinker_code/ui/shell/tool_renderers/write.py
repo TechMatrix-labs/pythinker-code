@@ -1,11 +1,9 @@
-"""Pythinker renderer for Pythinker's ``WriteFile`` tool.
+"""Blackbox-style renderer for Pythinker's ``WriteFile`` tool.
 
- .
-
-This renderer could incrementally syntax-highlights streaming content via a
-lookahead cache. We skip the cache for now and rely on plain text plus a
-trailing truncation hint — highlighting can be layered on later via
-``rich.syntax.Syntax``.
+The tool-use row stays compact (``write path`` / ``append path``). Success
+results render like the reference file-write UI: created files
+show ``Wrote N lines to path`` plus a capped content preview, while updates
+prefer the real diff display blocks returned by the Python tool.
 """
 
 from __future__ import annotations
@@ -18,15 +16,21 @@ from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderDefinition,
     ToolResultPayload,
 )
+from pythinker_code.ui.shell.tool_renderers._file_diff import (
+    change_summary_text,
+    diff_frame,
+    preview_from_result,
+)
 from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
     format_lines_block,
+    format_numbered_lines_block,
     invalid_arg,
     missing_required_arg,
     running_spinner,
     shorten_path,
-    tool_title,
+    tool_call_header,
 )
 
 _TOOL_NAME = "WriteFile"
@@ -36,66 +40,94 @@ _DEFAULT_PREVIEW_LINES = 10
 def _render_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     raw_path = as_str(args.get("path"))
-    raw_content = as_str(args.get("content"))
     mode = args.get("mode")
 
-    title = tool_title("write" if mode != "append" else "append")
-    line = Text()
-    line.append_text(title)
-    line.append(" ")
-
+    summary = Text()
     if raw_path is None:
         if "path" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("path"))
+            summary.append_text(missing_required_arg("path"))
         else:
-            line.append_text(fg("tool_output", "..."))
+            summary.append_text(fg("tool_output", "..."))
     else:
-        line.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
+        summary.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
 
-    head = running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header(
+        "Append" if mode == "append" else "Write",
+        summary,
+        style_token=style_token,
+    )
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
-    if raw_content is None:
-        if "content" in args:
-            return Group(
-                head,
-                fg("error", "[invalid content arg - expected string]"),
-            )
-        if ctx.has_result:
-            return Group(head, missing_required_arg("content"))
-        return head
 
-    if not raw_content:
-        return head
+def _count_visible_lines(text: str) -> int:
+    if not text:
+        return 0
+    parts = text.split("\n")
+    return len(parts) - 1 if text.endswith("\n") else len(parts)
 
-    body, remaining = format_lines_block(
-        raw_content,
+
+def _render_created_or_appended(
+    ctx: ToolRenderContext, content: str, *, append: bool
+) -> RenderableType:
+    args = ctx.args or {}
+    path = as_str(args.get("path")) or ""
+    display_path = shorten_path(path, cwd=ctx.cwd) if path else "<missing path>"
+    line_count = _count_visible_lines(content)
+    noun = "line" if line_count == 1 else "lines"
+    verb = "Appended" if append else "Wrote"
+
+    summary = Text(f"{verb} ")
+    summary.append(str(line_count), style="bold")
+    summary.append(f" {noun} to ")
+    summary.append(display_path, style="bold")
+
+    preview_text = content or "(No content)"
+    body, remaining, _total = format_numbered_lines_block(
+        preview_text,
         expanded=ctx.expanded,
         collapsed_max_lines=_DEFAULT_PREVIEW_LINES,
         style_token="tool_output",
     )
-    if not body.plain:
-        return head
+    children: list[RenderableType] = [fg("tool_output", summary)]
+    if body.plain:
+        children.append(body)
     if remaining > 0:
-        total = raw_content.count("\n") + 1
-        more = fg("muted", f"... ({remaining} more lines, {total} total, ctrl+e to expand)")
-        return Group(head, Text(""), body, more)
-    return Group(head, Text(""), body)
+        ctx.state["__suppress_generic_expand_hint__"] = True
+        children.append(
+            fg(
+                "muted",
+                f"… +{remaining} {'line' if remaining == 1 else 'lines'} (ctrl+o to expand)",
+            )
+        )
+    return Group(*children)
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
-    # Render the result when it's an error. On success, the call
-    # preview already shows the full payload.
-    if not result.is_error or not result.text:
-        return None
-    body, _ = format_lines_block(
-        result.text,
-        expanded=True,
-        collapsed_max_lines=0,
-        style_token="error",
-    )
-    return body if body.plain else None
+    if result.is_error:
+        if not result.text:
+            return fg("error", "Error writing file")
+        body, _ = format_lines_block(
+            result.text,
+            expanded=True,
+            collapsed_max_lines=0,
+            style_token="error",
+        )
+        return body if body.plain else fg("error", result.text.rstrip("\n"))
+
+    preview = preview_from_result(result)
+    mode = ctx.args.get("mode")
+    raw_content = as_str(ctx.args.get("content")) or ""
+
+    if preview is not None and preview.removed > 0:
+        return Group(
+            change_summary_text(preview.added, preview.removed),
+            diff_frame(preview.diff_text, width=ctx.width or 80),
+        )
+
+    return _render_created_or_appended(ctx, raw_content, append=mode == "append")
 
 
 WRITE_RENDERER = ToolRenderDefinition(

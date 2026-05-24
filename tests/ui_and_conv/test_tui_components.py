@@ -61,7 +61,7 @@ def test_truncate_middle_to_visual_lines_preserves_head_and_tail():
     assert result.visual_lines == [
         "line 0",
         "line 1",
-        "… +4 lines (Ctrl+E expand)",
+        "… +4 lines (ctrl+o to expand)",
         "line 6",
         "line 7",
     ]
@@ -290,7 +290,7 @@ def test_bash_execution_truncates_long_output_with_head_tail_preview():
 
     assert "⎿ line 0" in out
     assert "line 1" in out
-    assert "… +4 lines (Ctrl+E expand)" in out
+    assert "… +4 lines (ctrl+o to expand)" in out
     assert "line 6" in out
     assert "line 7" in out
     assert "line 3" not in out

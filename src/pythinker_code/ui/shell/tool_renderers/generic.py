@@ -17,6 +17,7 @@ from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderDefinition,
     ToolResultPayload,
 )
+from pythinker_code.ui.shell.tool_renderers._render_utils import running_spinner, tool_call_header
 
 _GENERIC_TOOL_NAME = "__generic__"
 """Sentinel name used to register the fallback. Tools without their own
@@ -24,18 +25,23 @@ entry can be looked up via ``get_tool_renderer(name) or _generic()``."""
 
 
 def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
-    header = Text()
-    label = ctx.state.get("__tool_name__", _GENERIC_TOOL_NAME)
-    header.append(str(label), style="bold")
+    label = str(ctx.state.get("__tool_name__", _GENERIC_TOOL_NAME))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    header = tool_call_header(label, None, style_token=style_token)
 
     if not ctx.args:
-        return header
+        return running_spinner(
+            header, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
 
     try:
         body = json.dumps(ctx.args, indent=2, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError):
         body = repr(ctx.args)
-    return Group(header, Text(body, style="grey50"))
+    rendered = Group(header, Text(body, style="grey50"))
+    return running_spinner(
+        rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+    )
 
 
 def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:

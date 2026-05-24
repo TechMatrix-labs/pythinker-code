@@ -1,16 +1,10 @@
-"""Pythinker renderers for Pythinker's plan-mode tools.
-
-Covers ``EnterPlanMode`` (no args) and ``ExitPlanMode`` (optional alternatives
-list). Both produce single-line headers; ExitPlanMode also lists the options
-inline since they're short.
-"""
+"""Pythinker renderers for Pythinker's plan-mode tools."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 
 from rich.console import Group, RenderableType
-from rich.text import Text
 
 from pythinker_code.ui.shell.tool_renderers import (
     ToolRenderContext,
@@ -21,7 +15,8 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
     format_lines_block,
-    tool_title,
+    running_spinner,
+    tool_call_header,
 )
 
 # ---------------------------------------------------------------------------
@@ -29,11 +24,10 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
 # ---------------------------------------------------------------------------
 
 
-def _render_enter_call(_ctx: ToolRenderContext) -> RenderableType:
-    line = Text()
-    line.append_text(tool_title("plan mode"))
-    line.append_text(fg("muted", " (entering)"))
-    return line
+def _render_enter_call(ctx: ToolRenderContext) -> RenderableType:
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Plan", fg("muted", "entering"), style_token=style_token)
+    return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
 def _render_plan_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
@@ -48,7 +42,7 @@ def _render_plan_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Re
     if not body.plain:
         return None
     if remaining > 0:
-        return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+e to expand)"))
+        return Group(body, fg("muted", f"... ({remaining} more lines, ctrl+o to expand)"))
     return body
 
 
@@ -69,24 +63,30 @@ ENTER_PLAN_RENDERER = ToolRenderDefinition(
 def _render_exit_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     options = args.get("options")
-    line = Text()
-    line.append_text(tool_title("plan mode"))
-    line.append_text(fg("muted", " (exiting)"))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Plan", fg("muted", "exiting"), style_token=style_token)
 
     if not isinstance(options, list) or not options:
-        return line
+        return running_spinner(
+            line, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
     options_list = cast("list[Any]", options)
     opts: list[dict[str, Any]] = [
         cast("dict[str, Any]", o) for o in options_list if isinstance(o, dict)
     ]
     if not opts:
-        return line
+        return running_spinner(
+            line, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
 
     children: list[RenderableType] = [line]
     for opt in opts[:3]:
         label = as_str(opt.get("label")) or "?"
         children.append(fg("accent", f"  • {label}"))
-    return Group(*children)
+    rendered = Group(*children)
+    return running_spinner(
+        rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+    )
 
 
 EXIT_PLAN_RENDERER = ToolRenderDefinition(

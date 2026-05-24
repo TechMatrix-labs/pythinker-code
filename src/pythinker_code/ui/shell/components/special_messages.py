@@ -1,7 +1,7 @@
 """Custom message components for skill invocations, compaction, and branches.
 
 Each helper takes a small input dataclass and returns a Rich renderable. The
-collapsed form is a single labelled line with an inline ``ctrl+e to expand``
+collapsed form is a single labelled line with an inline ``ctrl+o to expand``
 hint; the expanded form shows the full body with a Markdown rendering for
 the long-form fields.
 """
@@ -60,7 +60,7 @@ def _label(text: str) -> Text:
 
 
 def _hint(prefix_text: str, suffix_text: str) -> Text:
-    """Produce ``"<prefix> <ctrl+e> <suffix>"`` styled as a hint line."""
+    """Produce ``"<prefix> <ctrl+o> <suffix>"`` styled as a hint line."""
     out = Text()
     out.append(prefix_text, style=tui_rich_style("custom_message_text"))
     expand = key_text("app.tools.expand")

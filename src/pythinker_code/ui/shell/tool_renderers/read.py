@@ -1,16 +1,16 @@
-"""Pythinker renderer for Pythinker's ``ReadFile`` tool.
+"""Blackbox-style renderer for Pythinker's ``ReadFile`` tool.
 
- .
-
-Source tool name → Pythinker tool name: ``read`` → ``ReadFile``.
-Param mapping: ``offset/limit`` → ``line_offset/n_lines``.
+The reference UI shows a compact path/range in the tool-use row and a typed
+summary result (``Read N lines``, ``File not found``, etc.) rather than echoing
+the entire file body into the terminal transcript.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from rich.console import Group, RenderableType
+from rich.console import RenderableType
 from rich.text import Text
 
 from pythinker_code.ui.shell.tool_renderers import (
@@ -21,16 +21,15 @@ from pythinker_code.ui.shell.tool_renderers import (
 from pythinker_code.ui.shell.tool_renderers._render_utils import (
     as_str,
     fg,
-    format_lines_block,
     invalid_arg,
     missing_required_arg,
     running_spinner,
     shorten_path,
-    tool_title,
+    tool_call_header,
 )
 
 _TOOL_NAME = "ReadFile"
-_DEFAULT_COLLAPSED_LINES = 10
+_READ_COUNT_RE = re.compile(r"(\d+)\s+lines?\s+read", re.IGNORECASE)
 
 
 def _format_line_range(args: dict[str, Any]) -> Text | None:
@@ -54,47 +53,62 @@ def _format_line_range(args: dict[str, Any]) -> Text | None:
 def _render_call(ctx: ToolRenderContext) -> RenderableType:
     args = ctx.args or {}
     raw_path = as_str(args.get("path"))
-    title = tool_title("read")
-    line = Text()
-    line.append_text(title)
-    line.append(" ")
-
+    summary = Text()
     if raw_path is None:
         # Either missing (still streaming) or wrong type.
         if "path" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("path"))
+            summary.append_text(missing_required_arg("path"))
         else:
-            line.append_text(fg("tool_output", "..."))
+            summary.append_text(fg("tool_output", "..."))
     else:
-        line.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
+        summary.append_text(fg("accent", shorten_path(raw_path, cwd=ctx.cwd)))
 
     range_text = _format_line_range(args)
     if range_text is not None:
-        line.append_text(range_text)
+        summary.append_text(range_text)
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Read", summary, style_token=style_token)
     return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
-def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
-    if not result.text:
-        return None
-    body, remaining = format_lines_block(
-        result.text,
-        expanded=ctx.expanded,
-        collapsed_max_lines=_DEFAULT_COLLAPSED_LINES,
-        style_token="error" if result.is_error else "tool_output",
-    )
-    if not body.plain:
-        return None
+def _read_count(result: ToolResultPayload) -> int:
+    message = result.details.get("message")
+    if isinstance(message, str):
+        match = _READ_COUNT_RE.search(message)
+        if match:
+            return int(match.group(1))
+    output = result.details.get("output")
+    text = output if isinstance(output, str) else result.text
+    if not text:
+        return 0
+    return text.count("\n") + (0 if text.endswith("\n") else 1)
 
-    line_count = result.text.count("\n") + (0 if result.text.endswith("\n") else 1)
+
+def _friendly_error(text: str) -> str:
+    lowered = text.lower()
+    if "does not exist" in lowered or "file not found" in lowered:
+        return "File not found"
+    if "not a file" in lowered or "invalid path" in lowered:
+        return "Invalid path"
+    if "sensitive" in lowered:
+        return "Sensitive file"
+    if text.strip():
+        return text.rstrip("\n")
+    return "Error reading file"
+
+
+def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> RenderableType | None:
+    ctx.state["__suppress_generic_expand_hint__"] = True
+    if result.is_error:
+        message = result.details.get("message")
+        error_text = message if isinstance(message, str) and message else result.text
+        return fg("error", _friendly_error(error_text))
+
+    line_count = _read_count(result)
     noun = "line" if line_count == 1 else "lines"
-    summary = fg("muted", f"Read {line_count} {noun}")
-    if remaining > 0:
-        more = fg("muted", f"... ({remaining} more lines, ctrl+e to expand)")
-        return Group(summary, body, more)
-    return Group(summary, body)
+    return fg("tool_output", f"Read {line_count} {noun}")
 
 
 READ_RENDERER = ToolRenderDefinition(

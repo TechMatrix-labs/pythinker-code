@@ -3,7 +3,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from PIL import Image
 from prompt_toolkit.key_binding import KeyPressEvent
@@ -306,6 +306,28 @@ def test_build_user_input_expands_text_placeholders_for_slash_parsing() -> None:
 
     assert user_input.command == f"/echo {token}"
     assert user_input.resolved_command == f"/echo {long_text}"
+
+
+def test_build_user_input_bang_prefix_runs_one_shell_command() -> None:
+    ps = _make_prompt_session(PromptMode.AGENT)
+
+    user_input = ps._build_user_input("! git status")
+
+    assert user_input.mode == PromptMode.SHELL
+    assert user_input.command == "git status"
+    assert user_input.resolved_command == "git status"
+    assert user_input.content == [TextPart(text="git status")]
+    assert ps._mode == PromptMode.AGENT
+
+
+def test_build_user_input_bang_prefix_is_literal_for_running_prompt() -> None:
+    ps = _make_prompt_session(PromptMode.AGENT)
+    ps._running_prompt_delegate = cast(Any, object())
+
+    user_input = ps._build_user_input("!please keep steering")
+
+    assert user_input.mode == PromptMode.AGENT
+    assert user_input.command == "!please keep steering"
 
 
 def test_handle_bracketed_paste_placeholderizes_long_text_in_agent_mode() -> None:

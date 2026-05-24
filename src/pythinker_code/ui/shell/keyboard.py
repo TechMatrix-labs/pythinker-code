@@ -20,6 +20,7 @@ class KeyEvent(Enum):
     TAB = auto()
     SPACE = auto()
     CTRL_E = auto()
+    CTRL_O = auto()
     NUM_1 = auto()
     NUM_2 = auto()
     NUM_3 = auto()
@@ -186,8 +187,10 @@ def _listen_for_keyboard_unix(
                 emit(KeyEvent.SPACE)
             elif c == b"\t":
                 emit(KeyEvent.TAB)
-            elif c == b"\x05":  # Ctrl+E
+            elif c == b"\x05":  # Ctrl+E (legacy expand shortcut)
                 emit(KeyEvent.CTRL_E)
+            elif c == b"\x0f":  # Ctrl+O
+                emit(KeyEvent.CTRL_O)
             elif c == b"1":
                 emit(KeyEvent.NUM_1)
             elif c == b"2":
@@ -256,8 +259,10 @@ def _listen_for_keyboard_windows(
                 emit(KeyEvent.SPACE)
             elif c == b"\t":
                 emit(KeyEvent.TAB)
-            elif c == b"\x05":  # Ctrl+E
+            elif c == b"\x05":  # Ctrl+E (legacy expand shortcut)
                 emit(KeyEvent.CTRL_E)
+            elif c == b"\x0f":  # Ctrl+O
+                emit(KeyEvent.CTRL_O)
             elif c == b"1":
                 emit(KeyEvent.NUM_1)
             elif c == b"2":

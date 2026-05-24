@@ -10,7 +10,7 @@ import pytest
 import pythinker_code.ui.shell as shell_module
 from pythinker_code.soul import Soul
 from pythinker_code.ui.shell.prompt import PromptMode, UserInput
-from pythinker_code.utils.slashcmd import SlashCommand
+from pythinker_code.utils.slashcmd import SlashCommand, SlashCommandCall
 from pythinker_code.wire.types import TextPart
 
 
@@ -75,6 +75,36 @@ def _make_fake_soul():
 
 def _noop(app: object, args: str) -> None:
     pass
+
+
+@pytest.mark.asyncio
+async def test_shell_slash_alias_tracks_canonical_command(monkeypatch) -> None:
+    tracked: list[tuple[str, dict[str, object]]] = []
+    called: list[str] = []
+    fake_command = SlashCommand(
+        name="help",
+        description="help command",
+        func=lambda app, args: called.append(args),
+        aliases=["h"],
+    )
+
+    monkeypatch.setattr(
+        "pythinker_code.telemetry.track",
+        lambda event, **properties: tracked.append((event, properties)),
+    )
+    monkeypatch.setattr(shell_module.shell_slash_registry, "list_commands", lambda: [fake_command])
+    monkeypatch.setattr(
+        shell_module.shell_slash_registry,
+        "find_command",
+        lambda name: fake_command if name in {"help", "h"} else None,
+    )
+
+    shell = shell_module.Shell(cast(Soul, _make_fake_soul()))
+
+    await shell._run_slash_command(SlashCommandCall(name="h", args="", raw_input="/h"))
+
+    assert called == [""]
+    assert ("input_command", {"command": "help"}) in tracked
 
 
 @pytest.fixture
@@ -302,6 +332,32 @@ async def test_shell_run_exits_immediately_for_visible_quit_command(
     shell.run_soul_command.assert_not_awaited()
     shell._run_slash_command.assert_not_awaited()
     assert printed == ["Bye!"]
+
+
+@pytest.mark.asyncio
+async def test_shell_run_uses_resolved_command_for_shell_mode(
+    monkeypatch, _patched_shell_run
+) -> None:
+    _FakePromptSession.responses = deque(
+        [
+            UserInput(
+                mode=PromptMode.SHELL,
+                command="[Pasted text #1]",
+                resolved_command="echo resolved",
+                content=[TextPart(text="echo resolved")],
+            ),
+            EOFError(),
+        ]
+    )
+    shell = shell_module.Shell(cast(Soul, _make_fake_soul()))
+    shell.run_soul_command = AsyncMock(return_value=True)
+    shell._run_shell_command = AsyncMock()
+
+    result = await shell.run()
+
+    assert result is True
+    shell._run_shell_command.assert_awaited_once_with("echo resolved")
+    shell.run_soul_command.assert_not_awaited()
 
 
 @pytest.mark.asyncio

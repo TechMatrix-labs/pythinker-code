@@ -73,7 +73,7 @@ from pythinker_code.utils.clipboard import (
 )
 from pythinker_code.utils.logging import logger
 from pythinker_code.utils.slashcmd import SlashCommand
-from pythinker_code.wire.types import ContentPart
+from pythinker_code.wire.types import ContentPart, TextPart
 
 AttachmentCache = prompt_placeholders.AttachmentCache
 CachedAttachment = prompt_placeholders.CachedAttachment
@@ -1484,17 +1484,25 @@ def _current_toast(position: Literal["left", "right"] = "left") -> _ToastEntry |
 
 
 def _build_toolbar_tips(clipboard_available: bool) -> list[str]:
+    from pythinker_code.ui.shell.keymap import key_text
+
+    def _tip(binding: str, fallback: str, description: str) -> str:
+        label = key_text(binding) or fallback
+        return f"{label}: {description}"
+
     tips = [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
+        _tip("app.prompt.help", "?", "shortcuts"),
+        _tip("app.mode.toggle", "ctrl-x", "toggle mode"),
+        _tip("app.plan.toggle", "shift-tab", "plan mode"),
+        _tip("app.shell.oneshot", "!", "shell command"),
+        _tip("app.editor.external", "ctrl-o", "editor"),
+        _tip("app.prompt.newline", "ctrl-j", "newline"),
         "/feedback: send feedback",
         "/theme: switch dark/light",
     ]
     if clipboard_available:
-        tips.append("ctrl-v: paste clipboard")
-    tips.append("@: mention files")
+        tips.append(_tip("app.clipboard.paste", "ctrl-v", "paste clipboard"))
+    tips.append(_tip("app.mention.files", "@", "mention files"))
     return tips
 
 
@@ -2253,20 +2261,35 @@ class CustomPromptSession:
 
     def _render_shortcut_help(self, columns: int) -> FormattedText:
         """Render a small Blackbox-style shortcuts popup above the prompt."""
+        from pythinker_code.ui.shell.keymap import keybinding_help
+
         side_padding = min(_card_side_padding(), max(0, (columns - 2) // 2))
         indent = " " * side_padding
         available = max(1, columns - side_padding * 2)
         width = min(88, available)
+        help_ids = {
+            "app.prompt.help",
+            "app.mode.toggle",
+            "app.plan.toggle",
+            "app.shell.oneshot",
+            "app.editor.external",
+            "app.prompt.newline",
+            "app.clipboard.paste",
+            "app.mention.files",
+            "app.command.slash",
+            "app.tools.expand",
+        }
         rows = [
-            ("Ctrl-X", "toggle agent/shell"),
-            ("Shift-Tab", "toggle plan mode"),
-            ("Ctrl-O", "open editor"),
-            ("Ctrl-J / Alt-Enter", "newline"),
-            ("Ctrl-V", "paste / images"),
-            ("@path", "mention files"),
-            ("/", "commands"),
-            ("Esc", "close this popup"),
+            (
+                "/".join(info.keys),
+                info.description
+                if info.context in {"", "prompt", "agent prompt"}
+                else f"{info.description} ({info.context})",
+            )
+            for info in keybinding_help()
+            if info.name in help_ids
         ]
+        rows.append(("esc", "close shortcuts"))
         key_width = min(20, max(get_cwidth(key) for key, _ in rows) + 1)
         tc = get_toolbar_colors()
         fragments: FormattedText = FormattedText()
@@ -2579,12 +2602,28 @@ class CustomPromptSession:
 
     def _build_user_input(self, command: str) -> UserInput:
         resolved = self._get_placeholder_manager().resolve_command(command)
+        mode = self._mode
+        display_command = resolved.display_command
+        resolved_command = resolved.resolved_text
+        content: list[ContentPart] = resolved.content
+
+        if (
+            mode == PromptMode.AGENT
+            and self._active_prompt_delegate() is None
+            and display_command.startswith("!")
+            and display_command[1:].strip()
+        ):
+            mode = PromptMode.SHELL
+            display_command = display_command[1:].lstrip()
+            if resolved_command.startswith("!"):
+                resolved_command = resolved_command[1:].lstrip()
+            content = [cast(ContentPart, TextPart(text=resolved_command))]
 
         return UserInput(
-            mode=self._mode,
-            command=resolved.display_command,
-            resolved_command=resolved.resolved_text,
-            content=resolved.content,
+            mode=mode,
+            command=display_command,
+            resolved_command=resolved_command,
+            content=content,
         )
 
     def _append_history_entry(self, text: str) -> None:

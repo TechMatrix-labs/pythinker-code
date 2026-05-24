@@ -1,8 +1,4 @@
-"""Pythinker renderer for the ``Agent`` (subagent) tool.
-
-The Agent tool is single-spawn; this renderer covers the single variant
-only (spawn, run, surface the final result).
-"""
+"""Pythinker renderer for the ``Agent`` (subagent) tool."""
 
 from __future__ import annotations
 
@@ -22,6 +18,8 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     invalid_arg,
     loading_marker,
     missing_required_arg,
+    running_spinner,
+    tool_call_header,
 )
 from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.datetime import format_elapsed
@@ -33,19 +31,8 @@ _BACKGROUND_ACTIVE_STATUSES = frozenset({"created", "starting", "running", "awai
 
 
 def _subagent_loader(_ctx: ToolRenderContext) -> Text:
-    """Return the pulsating solid-circle loader used for active subagent rows."""
+    """Return the pulsating solid-circle loader used for active subagent result rows."""
     return loading_marker(style_token="accent")
-
-
-def _with_active_loader(renderable: RenderableType, ctx: ToolRenderContext) -> RenderableType:
-    if not (ctx.execution_started and (not ctx.has_result or ctx.is_partial)):
-        return renderable
-    marker = _subagent_loader(ctx)
-    if isinstance(renderable, Text):
-        out = marker.copy()
-        out.append_text(renderable)
-        return out
-    return Group(marker, renderable)
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -63,20 +50,19 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
     run_bg = bool(args.get("run_in_background"))
     model = as_str(args.get("model"))
 
-    header = Text()
-    header.append("subagent", style=tui_rich_style("accent") + RichStyle(bold=True))
-    header.append(" ")
-    header.append_text(fg("border_accent", subagent_type))
+    summary = Text()
+    summary.append_text(fg("border_accent", subagent_type))
     if description:
-        header.append_text(fg("muted", f" [{description}]"))
+        summary.append_text(fg("muted", f" · {description}"))
     if model:
-        header.append_text(fg("dim", f" ({model})"))
+        summary.append_text(fg("dim", f" · {model}"))
     if run_bg:
-        header.append_text(fg("muted", " (background)"))
+        summary.append_text(fg("muted", " · background"))
     if resume:
-        header.append_text(fg("muted", f" (resume {resume[:8]})"))
+        summary.append_text(fg("muted", f" · resume {resume[:8]}"))
 
-    head = _with_active_loader(header, ctx)
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    header = tool_call_header("Agent", summary, style_token=style_token)
 
     missing: list[RenderableType] = []
     if description is None and ctx.has_result:
@@ -86,14 +72,19 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
             missing.append(invalid_arg())
         elif ctx.has_result:
             missing.append(missing_required_arg("prompt"))
-        if missing:
-            return Group(head, *missing)
-        return head
+        rendered = Group(header, *missing) if missing else header
+        return running_spinner(
+            rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+        )
+
     preview_line = _truncate(prompt.split("\n", 1)[0], _PROMPT_PREVIEW_CHARS)
-    body = fg("dim", f"  {preview_line}")
-    if missing:
-        return Group(head, *missing, body)
-    return Group(head, body)
+    body = Text()
+    body.append("Prompt: ", style=tui_rich_style("muted") + RichStyle(bold=True))
+    body.append(preview_line, style=tui_rich_style("dim"))
+    rendered = Group(header, *missing, body) if missing else Group(header, body)
+    return running_spinner(
+        rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+    )
 
 
 def _line_value(text: str, key: str) -> str | None:
@@ -123,9 +114,8 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
             label = f"{label}: {description}"
         line = _subagent_loader(ctx)
         line.append(label, style=tui_rich_style("accent") + RichStyle(bold=True))
-        return Group(line, fg("dim", f"  status: {background_status}"))
-    # Distinct success symbol so the eye doesn't mistake a finished subagent
-    # for a generic tool tick — heavy check on success, heavy ballot on error.
+        return Group(line, fg("dim", f"status: {background_status}"))
+
     icon = fg("error", "✘") if result.is_error else fg("success", "✔")
     body, remaining = format_lines_block(
         result.text,
@@ -136,7 +126,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     head = Text()
     head.append_text(icon)
     head.append(" ")
-    head.append("subagent finished", style=tui_rich_style("muted") + RichStyle(bold=True))
+    head.append("Agent finished", style=tui_rich_style("muted") + RichStyle(bold=True))
     if ctx.elapsed_s is not None:
         head.append(
             f" · Crunched for {format_elapsed(ctx.elapsed_s)}", style=tui_rich_style("muted")
@@ -144,7 +134,7 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     if not body.plain:
         return head
     if remaining > 0:
-        more = fg("muted", f"... ({remaining} more lines, ctrl+e to expand)")
+        more = fg("muted", f"... ({remaining} more lines, ctrl+o to expand)")
         return Group(head, body, more)
     return Group(head, body)
 

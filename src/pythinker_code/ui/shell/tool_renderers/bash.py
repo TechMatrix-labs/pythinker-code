@@ -12,15 +12,15 @@ Param mapping: Pythinker has ``command``, ``timeout``, ``run_in_background``,
 
 from __future__ import annotations
 
+from typing import cast
+
 from rich.console import RenderableType
-from rich.style import Style as RichStyle
 from rich.text import Text
 
 from pythinker_code.ui.shell.components.bash_execution import (
     BashExecutionState,
     BashStatus,
     format_bash_command_for_header,
-    render_bash_execution,
     render_bash_result_output,
 )
 from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
@@ -35,8 +35,8 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     invalid_arg,
     missing_required_arg,
     running_spinner,
+    tool_call_header,
 )
-from pythinker_code.ui.theme import tui_rich_style
 
 _TOOL_NAME = "Shell"
 
@@ -48,29 +48,27 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
     timeout = args.get("timeout")
     run_in_background = bool(args.get("run_in_background"))
 
-    bash_mode = tui_rich_style("bash_mode")
-    line = Text("$ ", style=bash_mode + RichStyle(bold=True))
+    summary = Text()
     if command is None:
         if "command" in args:
-            line.append_text(invalid_arg())
+            summary.append_text(invalid_arg())
         elif ctx.has_result:
-            line.append_text(missing_required_arg("command"))
+            summary.append_text(missing_required_arg("command"))
         else:
-            line.append_text(fg("tool_output", "..."))
+            summary.append_text(fg("tool_output", "..."))
     else:
-        line.append(
-            format_bash_command_for_header(command, expanded=ctx.expanded),
-            style=bash_mode + RichStyle(bold=True),
+        summary.append_text(
+            fg("tool_output", format_bash_command_for_header(command, expanded=ctx.expanded))
         )
 
     if isinstance(timeout, int) and timeout != 60:
-        line.append_text(fg("muted", f" (timeout {timeout}s)"))
+        summary.append_text(fg("muted", f" (timeout {timeout}s)"))
     if run_in_background:
         description = as_str(args.get("description"))
         suffix = f" (background: {description})" if description else " (background)"
-        line.append_text(fg("muted", suffix))
-    if ctx.has_result and command:
-        return None
+        summary.append_text(fg("muted", suffix))
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    line = tool_call_header("Bash", summary, style_token=style_token)
     return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
 
@@ -89,46 +87,38 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
         description = as_str(args.get("description"))
         suffix_parts.append(f" (background: {description})" if description else " (background)")
 
-    status: BashStatus = "error" if result.is_error else "complete"
+    extras_raw = result.details.get("extras")
+    extras = cast("dict[str, object]", extras_raw) if isinstance(extras_raw, dict) else {}
+    status_value = extras.get("status")
+    status: BashStatus
+    if status_value == "cancelled":
+        status = "cancelled"
+    else:
+        status = "error" if result.is_error else "complete"
+
+    output = result.details.get("output")
+    output_text = output if isinstance(output, str) and output else result.text or ""
+    if output_text.count("\n") > 4 or len(output_text) > 240:
+        ctx.state["__suppress_generic_expand_hint__"] = True
+
+    exit_code_raw = extras.get("exit_code")
+    exit_code = exit_code_raw if status == "error" and isinstance(exit_code_raw, int) else None
+
     bash_state = BashExecutionState(
         command=command,
-        output=sanitize_ansi(result.text or ""),
+        output=sanitize_ansi(output_text),
         status=status,
-        exit_code=None if not result.is_error else 1,
+        exit_code=exit_code,
         expanded=ctx.expanded,
         header_suffix="".join(suffix_parts),
     )
-    if _is_short_inline_output(bash_state.output):
-        return _render_inline_completed_result(bash_state, is_error=result.is_error)
-    if ctx.has_result:
-        return render_bash_execution(bash_state, width=ctx.width)
     return render_bash_result_output(bash_state, width=ctx.width)
-
-
-def _is_short_inline_output(output: str) -> bool:
-    text = output.strip()
-    return bool(text) and "\n" not in text and len(text) <= 80
-
-
-def _render_inline_completed_result(state: BashExecutionState, *, is_error: bool) -> Text:
-    status_style = tui_rich_style("error" if is_error else "success")
-    line = Text("✘ " if is_error else "✔ ", style=status_style)
-    line.append("$ ", style=tui_rich_style("bash_mode") + RichStyle(bold=True))
-    line.append(
-        format_bash_command_for_header(state.command, expanded=state.expanded),
-        style=tui_rich_style("bash_mode") + RichStyle(bold=True),
-    )
-    if state.header_suffix:
-        line.append(state.header_suffix, style=tui_rich_style("muted"))
-    line.append(" · ", style=tui_rich_style("muted"))
-    line.append(state.output.strip(), style=tui_rich_style("error" if is_error else "muted"))
-    return line
 
 
 SHELL_RENDERER = ToolRenderDefinition(
     name=_TOOL_NAME,
     label="bash",
-    render_shell="self",
+    render_shell="default",
     render_call=_render_call,
     render_result=_render_result,
 )
