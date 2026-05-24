@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import aiofiles
+import yaml
 from pythinker_core.message import Message
 from pythinker_host.path import HostPath
 
@@ -285,6 +286,64 @@ def build_export_markdown(
     return "\n".join(lines)
 
 
+def _compact_message_record(msg: Message) -> dict[str, object]:
+    record: dict[str, object] = {"role": msg.role}
+    text = "\n".join(_format_content_part_md(part) for part in msg.content).strip()
+    if text:
+        record["text"] = shorten(text, width=2000)
+    if msg.tool_call_id:
+        record["tool_call_id"] = msg.tool_call_id
+    if msg.tool_calls:
+        calls: list[dict[str, object]] = []
+        for call in msg.tool_calls:
+            args_raw = call.function.arguments or "{}"
+            call_record: dict[str, object] = {
+                "id": call.id,
+                "name": call.function.name,
+            }
+            hint = _extract_tool_call_hint(args_raw)
+            if hint:
+                call_record["hint"] = hint
+            try:
+                call_record["arguments"] = json.loads(args_raw, strict=False)
+            except (json.JSONDecodeError, TypeError):
+                call_record["arguments"] = args_raw
+            calls.append(call_record)
+        record["tool_calls"] = calls
+    return record
+
+
+def build_export_yaml(
+    session_id: str,
+    work_dir: str,
+    history: Sequence[Message],
+    token_count: int,
+    now: datetime,
+) -> str:
+    """Build a compact YAML transcript for agent handoff and debugging.
+
+    Unlike the markdown export, this preserves tool-call structure in a compact,
+    machine-readable form while still omitting internal checkpoint/reminder noise.
+    """
+    turns = _group_into_turns(history)
+    payload: dict[str, object] = {
+        "session_id": session_id,
+        "exported_at": now.isoformat(timespec="seconds"),
+        "work_dir": work_dir,
+        "message_count": len(history),
+        "token_count": token_count,
+        "turn_count": len(turns),
+        "turns": [
+            {
+                "turn": idx,
+                "messages": [_compact_message_record(message) for message in turn],
+            }
+            for idx, turn in enumerate(turns, start=1)
+        ],
+    }
+    return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+
+
 # ---------------------------------------------------------------------------
 # Import helpers
 # ---------------------------------------------------------------------------
@@ -490,13 +549,22 @@ async def perform_export(
     else:
         output = default_dir / default_name
 
-    content = build_export_markdown(
-        session_id=session_id,
-        work_dir=work_dir,
-        history=history,
-        token_count=token_count,
-        now=now,
-    )
+    if output.suffix.lower() in {".yaml", ".yml"}:
+        content = build_export_yaml(
+            session_id=session_id,
+            work_dir=work_dir,
+            history=history,
+            token_count=token_count,
+            now=now,
+        )
+    else:
+        content = build_export_markdown(
+            session_id=session_id,
+            work_dir=work_dir,
+            history=history,
+            token_count=token_count,
+            now=now,
+        )
 
     try:
         output.parent.mkdir(parents=True, exist_ok=True)

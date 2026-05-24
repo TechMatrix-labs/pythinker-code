@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import yaml
 from pythinker_core.message import Message
 
 from pythinker_code.soul.message import system, system_reminder
@@ -19,6 +20,7 @@ from pythinker_code.utils.export import (
     _stringify_content_parts,
     _stringify_tool_calls,
     build_export_markdown,
+    build_export_yaml,
     build_import_message,
     is_importable_file,
     perform_export,
@@ -776,6 +778,61 @@ class TestBuildExportMarkdown:
 
 
 # ---------------------------------------------------------------------------
+# build_export_yaml
+# ---------------------------------------------------------------------------
+
+
+class TestBuildExportYaml:
+    def test_compact_yaml_preserves_tool_structure(self) -> None:
+        tc = _make_tool_call(call_id="c1", name="bash", arguments='{"command": "echo hi"}')
+        history = [
+            Message(role="user", content=[TextPart(text="Run echo hi")]),
+            Message(role="assistant", content=[TextPart(text="Running")], tool_calls=[tc]),
+            Message(role="tool", content=[TextPart(text="hi")], tool_call_id="c1"),
+        ]
+
+        result = build_export_yaml(
+            session_id="s1",
+            work_dir="/w",
+            history=history,
+            token_count=123,
+            now=datetime(2026, 1, 1),
+        )
+        parsed = yaml.safe_load(result)
+
+        assert parsed["session_id"] == "s1"
+        assert parsed["turn_count"] == 1
+        messages = parsed["turns"][0]["messages"]
+        assert messages[0] == {"role": "user", "text": "Run echo hi"}
+        assert messages[1]["tool_calls"] == [
+            {
+                "id": "c1",
+                "name": "bash",
+                "hint": "echo hi",
+                "arguments": {"command": "echo hi"},
+            }
+        ]
+        assert messages[2] == {"role": "tool", "text": "hi", "tool_call_id": "c1"}
+
+    def test_compact_yaml_omits_internal_messages(self) -> None:
+        history = [
+            _make_system_reminder_message("Never show this reminder."),
+            Message(role="user", content=[TextPart(text="Real question")]),
+        ]
+
+        result = build_export_yaml(
+            session_id="s1",
+            work_dir="/w",
+            history=history,
+            token_count=1,
+            now=datetime(2026, 1, 1),
+        )
+
+        assert "Never show this reminder" not in result
+        assert "Real question" in result
+
+
+# ---------------------------------------------------------------------------
 # is_importable_file
 # ---------------------------------------------------------------------------
 
@@ -856,6 +913,22 @@ class TestPerformExport:
         content = output.read_text()
         assert "# Pythinker Session Export" in content
         assert "Hello" in content
+
+    async def test_writes_yaml_when_output_has_yaml_suffix(self, tmp_path: Path) -> None:
+        output = tmp_path / "my-export.yaml"
+        result = await perform_export(
+            history=_SIMPLE_HISTORY,
+            session_id="abc12345",
+            work_dir="/tmp",
+            token_count=100,
+            args=str(output),
+            default_dir=tmp_path,
+        )
+
+        assert isinstance(result, tuple)
+        parsed = yaml.safe_load(output.read_text())
+        assert parsed["session_id"] == "abc12345"
+        assert parsed["turns"][0]["messages"][0] == {"role": "user", "text": "Hello"}
 
     async def test_uses_default_dir_when_no_args(self, tmp_path: Path) -> None:
         result = await perform_export(
