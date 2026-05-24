@@ -80,11 +80,14 @@ lets the edge cache the script to keep origin load low.
 > **404s any host other than `pythinker.com`**, so `dl` would need a VPS-side
 > vhost change (no SSH available); (2) the same-zone-fetch rule already routes
 > the apex subrequest to origin without recursion, making a second hostname
-> unnecessary. **Accepted regression:** a same-zone subrequest may bypass the CDN
-> cache, so `stale-if-error=86400` is not guaranteed. During a simultaneous VPS
-> outage + cache miss, users get a clean `503` (`exit 1` shellscript) instead of
-> last-good bytes — a small, graceful degradation (never a 1101 error page).
-> Verify actual cache behavior post-deploy via `cf-cache-status` (see plan).
+> unnecessary. **Confirmed regression (post-deploy `cf-cache-status: DYNAMIC`):**
+> same-zone subrequests are **not** edge-cached, so each install fetch reaches the
+> VPS (previously `install.sh` was edge-cached) and `stale-if-error=86400` no
+> longer applies. At install-script volume the extra origin load is negligible.
+> During a VPS outage users get a clean `503` (`exit 1` shellscript) instead of
+> last-good bytes — a small, graceful degradation (never a 1101 error page). If
+> origin load ever matters, recover caching with the Workers Cache API
+> (`caches.default`) — deferred (YAGNI).
 
 ## Components
 
