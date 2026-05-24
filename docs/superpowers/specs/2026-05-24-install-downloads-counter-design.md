@@ -26,6 +26,28 @@ fetch count**, surfaced as a **README badge** and a **raw JSON API endpoint**.
   is accepted as a vanity/marketing number, not a tamper-resistant metric. This
   limitation is intentional and documented.
 
+## Alternatives considered (hosted platforms)
+
+There is **no passive "pepy for install scripts"**: pepy works only because PyPI
+centralizes downloads in public BigQuery logs. Shell-script installs have no
+central registry, so no hosted service can observe the count without us capturing
+it at our own edge. Edge caching also means VPS/origin-log-based tools undercount.
+So the Worker (edge capture + bot filter) is required regardless; the only thing
+a hosted platform could replace is the **storage/badge layer**:
+
+- **Abacus** (CountAPI successor) / CounterAPI — free counter APIs with native
+  shields badges. Rejected as the primary store: a free hobby counter
+  disappearing (as CountAPI did) would silently break a flagship README badge,
+  and it moves the number off our infra.
+- **GoatCounter / Plausible** — full privacy analytics; overkill for one number
+  and heavier to operate.
+- **Cloudflare Workers Analytics Engine** — already considered as "Approach B"
+  (rolling-window, not cumulative).
+
+**Decision: own the number in D1.** For a permanent headline metric, data
+ownership and no third-party dependency outweigh the zero-ops appeal of a free
+hosted counter. D1's hot-row caveat does not bite at install-script volume.
+
 ## Chosen approach
 
 A Cloudflare Worker bound to the install + API routes increments an atomic D1
