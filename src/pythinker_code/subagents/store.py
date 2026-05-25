@@ -21,6 +21,7 @@ class _AgentLaunchSpecPayload(BaseModel):
     effective_model: str | None
     thinking: bool | None = None
     variant: str | None = None
+    parent_agent_id: str | None = None
     created_at: float
 
 
@@ -60,6 +61,7 @@ def _record_from_dict(data: dict[str, Any]) -> AgentInstanceRecord:
             effective_model=payload.launch_spec.effective_model,
             thinking=payload.launch_spec.thinking,
             variant=payload.launch_spec.variant,
+            parent_agent_id=payload.launch_spec.parent_agent_id,
             created_at=payload.launch_spec.created_at,
         ),
     )

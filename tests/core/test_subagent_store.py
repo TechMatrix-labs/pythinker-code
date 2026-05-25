@@ -158,6 +158,56 @@ def test_get_instance_allows_missing_last_task_id_for_legacy_meta(session) -> No
     assert record.last_task_id is None
 
 
+def test_agent_launch_spec_round_trips_parent_agent_id(session) -> None:
+    """parent_agent_id survives JSON serialization and deserialization."""
+    store = SubagentStore(session)
+    spec = AgentLaunchSpec(
+        agent_id="achild",
+        subagent_type="coder",
+        model_override=None,
+        effective_model=None,
+        parent_agent_id="aparent",
+    )
+    store.create_instance(
+        agent_id="achild",
+        description="test",
+        launch_spec=spec,
+    )
+    loaded = store.require_instance("achild")
+    assert loaded.launch_spec.parent_agent_id == "aparent"
+
+
+def test_agent_launch_spec_parent_agent_id_defaults_none(session) -> None:
+    """Existing records without parent_agent_id deserialize with None (backwards compat)."""
+    store = SubagentStore(session)
+    legacy_dir = store.instance_dir("alegacy1", create=True)
+    (legacy_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "agent_id": "alegacy1",
+                "subagent_type": "coder",
+                "status": "idle",
+                "description": "legacy task",
+                "created_at": 1.0,
+                "updated_at": 2.0,
+                "launch_spec": {
+                    "agent_id": "alegacy1",
+                    "subagent_type": "coder",
+                    "model_override": None,
+                    "effective_model": None,
+                    "created_at": 1.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = store.get_instance("alegacy1")
+
+    assert loaded is not None
+    assert loaded.launch_spec.parent_agent_id is None
+
+
 def test_list_instances_skips_meta_with_invalid_field_types(session) -> None:
     store = SubagentStore(session)
     store.create_instance(

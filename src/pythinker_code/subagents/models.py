@@ -41,6 +41,7 @@ class AgentLaunchSpec:
     effective_model: str | None
     thinking: bool | None = None
     variant: str | None = None
+    parent_agent_id: str | None = None
     created_at: float = field(default_factory=time.time)
 
 
