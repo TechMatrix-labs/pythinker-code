@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from rich.color import Color
 from rich.console import Console
 from rich.style import Style
 
@@ -26,6 +27,13 @@ def _style_for(renderable, text: str) -> Style:
     return Style.parse(span.style) if isinstance(span.style, str) else span.style
 
 
+def _color_hex(color: Color | None) -> str:
+    assert color is not None
+    triplet = color.triplet
+    assert triplet is not None
+    return triplet.hex.lower()
+
+
 def _span_colors_for(renderable, text: str) -> set[str]:
     start = renderable.plain.index(text)
     end = start + len(text)
@@ -35,7 +43,7 @@ def _span_colors_for(renderable, text: str) -> set[str]:
             continue
         style = Style.parse(span.style) if isinstance(span.style, str) else span.style
         if style.color is not None:
-            colors.add(style.color.triplet.hex.lower())
+            colors.add(_color_hex(style.color))
     return colors
 
 
@@ -90,7 +98,7 @@ def test_activity_status_line_uses_silver_spinner_and_shimmering_verb():
     later_sheen = activity_status_line(ActivitySnapshot(label="Cultivating", elapsed_s=1.10))
 
     base_style = Style.parse(start.style) if isinstance(start.style, str) else start.style
-    assert base_style.color.triplet.hex.lower() == "#c0c0c0"
+    assert _color_hex(base_style.color) == "#c0c0c0"
     assert _span_colors_for(sheen, "Cultivating") >= {"#ee9983", "#f2a892", "#ffd5c7"}
     assert _span_colors_for(later_sheen, "Cultivating") >= {"#ee9983", "#f2a892", "#ffd5c7"}
     assert "Cultivating…" in _plain(start)

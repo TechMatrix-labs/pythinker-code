@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from rich.color import Color
 from rich.console import Console
+from rich.style import Style
 
 from pythinker_code.ui.shell.components.render_utils import cell_width
 from pythinker_code.ui.shell.design_system import (
@@ -18,6 +20,14 @@ def _plain(renderable, *, width: int = 80) -> str:
     console = Console(record=True, width=width, color_system=None)
     console.print(renderable)
     return console.export_text()
+
+
+def _color_hex(style: Style) -> str:
+    color: Color | None = style.color
+    assert color is not None
+    triplet = color.triplet
+    assert triplet is not None
+    return triplet.hex.lower()
 
 
 def test_status_icon_names_are_stable():
@@ -64,10 +74,10 @@ def test_shell_style_resolves_brand_tokens_and_switches_theme():
     from pythinker_code.ui.theme import set_active_theme
 
     set_active_theme("dark")
-    assert shell_style(ShellTone.ACCENT).color.triplet.hex.lower() == "#5ea7e8"
-    assert shell_style(ShellTone.SUCCESS).color.triplet.hex.lower() == "#7bc97f"
+    assert _color_hex(shell_style(ShellTone.ACCENT)) == "#5ea7e8"
+    assert _color_hex(shell_style(ShellTone.SUCCESS)) == "#7bc97f"
     set_active_theme("light")
-    assert shell_style(ShellTone.ACCENT).color.triplet.hex.lower() == "#256ea8"
+    assert _color_hex(shell_style(ShellTone.ACCENT)) == "#256ea8"
     set_active_theme("dark")
 
 
@@ -76,4 +86,4 @@ def test_verb_spinner_stays_orange_independent_of_accent_token():
     from pythinker_code.ui.theme import set_active_theme
 
     set_active_theme("dark")
-    assert verb_spinner_style().color.triplet.hex.lower() == "#ee9983"
+    assert _color_hex(verb_spinner_style()) == "#ee9983"
