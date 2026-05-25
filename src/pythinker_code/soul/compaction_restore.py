@@ -192,8 +192,8 @@ def _extract_path_values(value: Any, *, parent_key: str = "", depth: int = 0) ->
     if depth > 4:
         return
     if isinstance(value, dict):
-        for key, child in cast(dict[str, Any], value).items():
-            key_str = str(key)
+        for key, child in cast(dict[str, Any], value).items():  # pyright: ignore[reportUnknownVariableType]
+            key_str = str(key)  # pyright: ignore[reportUnknownArgumentType]
             if key_str in _PATH_KEYS:
                 yield from _string_values(child)
             elif isinstance(child, dict | list | tuple):
@@ -207,7 +207,7 @@ def _string_values(value: Any) -> Iterable[str]:
     if isinstance(value, str):
         yield value
     elif isinstance(value, list | tuple):
-        for item in cast(list[Any], value):
+        for item in cast(list[Any], value):  # pyright: ignore[reportUnknownVariableType]
             if isinstance(item, str):
                 yield item
 
