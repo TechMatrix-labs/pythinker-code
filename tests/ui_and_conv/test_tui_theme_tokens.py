@@ -37,7 +37,7 @@ def test_dark_tokens_have_brand_values():
     assert t.info == "#AFE3F1"  # cyan
     assert t.success == "#7BC97F"
     assert t.error == "#EF5E62"
-    assert t.thinking_text == "#8A8A8A"  # neutral grey, not purple-tinted muted
+    assert t.thinking_text == "#C0C0C0"  # lighter neutral grey, not purple-tinted muted
     assert t.thinking_text != t.muted
     assert t.tool_title == t.activity_label
     assert t.tool_pending_bg == "#1B2230"
@@ -51,7 +51,7 @@ def test_light_tokens_have_brand_values():
     assert t.info == "#176B7E"  # text-safe cyan
     assert t.text == "#213853"  # navy text
     assert t.error == "#C0392B"
-    assert t.thinking_text == "#6B6B6B"  # neutral grey, not blue/purple muted
+    assert t.thinking_text == "#7A7A7A"  # lighter neutral grey, not blue/purple muted
     assert t.thinking_text != t.muted
     assert t.tool_title == t.activity_label
     assert t.tool_pending_bg == "#EFE7E8"

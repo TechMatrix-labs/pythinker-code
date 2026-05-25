@@ -135,12 +135,13 @@ def test_working_indicator_pins_todos_under_spinner(monkeypatch):
     now = 1060.0
     rendered = _render(view._working_indicator())
 
-    assert "⎿  todos(2/8 done · 1 active · 5 pending)" in rendered
-    assert "├─ ● Gather requirements" in rendered
-    assert "├─ ● Inspect UI" in rendered
+    assert "Explore project context — blogs page and image components…" in rendered
     assert "├─ ■ Explore project context" in rendered
     assert "├─ □ Ask clarifying questions one at a time" in rendered
-    assert "└─ □ Run final checks" in rendered
+    assert "├─ □ Run final checks" in rendered
+    assert "├─ ✓ Gather requirements" in rendered
+    assert "└─ ✓ Inspect UI" in rendered
+    assert "todos(" not in rendered
     assert "Tip:" not in rendered
 
 
@@ -156,8 +157,8 @@ def test_working_indicator_keeps_done_todos_pinned(monkeypatch):
 
     rendered = _render(view._working_indicator())
 
-    assert "⎿  todos(1/1 done)" in rendered
-    assert "└─ ● Done task" in rendered
+    assert "todos(" not in rendered
+    assert "└─ ✓ Done task" in rendered
     assert "■" not in rendered
     assert "□" not in rendered
 

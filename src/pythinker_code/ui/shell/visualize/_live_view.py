@@ -100,7 +100,8 @@ _ACTION_SPACER = BLANK_ROW
 # Show the rotating feature tip under the spinner only once a turn has been
 # running long enough that a quick turn won't flash it.
 _WORKING_TIP_MIN_ELAPSED_S = 4.0
-_MAX_PINNED_TODO_LINES = 12
+_MAX_PINNED_TODO_ROWS = 8
+_MAX_PINNED_COMPLETED_ROWS = 4
 
 
 def _append_action_block(
@@ -494,8 +495,10 @@ class _LiveView:
         now = time.monotonic()
         elapsed = 0.0 if self._turn_start_time is None else now - self._turn_start_time
         width = current_console_width()
+        pinned_todos_visible = getattr(self, "_pinned_todos_visible", True)
+        active_title = self._active_todo_title() if pinned_todos_visible else None
         line = activity_status_line(
-            ActivitySnapshot(label=spinner_message(now), elapsed_s=elapsed),
+            ActivitySnapshot(label=active_title or spinner_message(now), elapsed_s=elapsed),
             width=width,
         )
         todo_block = self._pinned_todo_block(width=width)
@@ -509,8 +512,14 @@ class _LiveView:
         tip.append(current_tip(now), style=tui_rich_style("dim"))
         return Group(line, tip)
 
+    def _active_todo_title(self) -> str | None:
+        for todo in getattr(self, "_latest_todos", ()):
+            if todo.status == "in_progress" and todo.title.strip():
+                return todo.title.strip()
+        return None
+
     def _pinned_todo_block(self, *, width: int) -> RenderableType | None:
-        """Render the single todo source of truth under the pinned verb spinner."""
+        """Render the single todo source of truth under the pinned activity line."""
         if not getattr(self, "_pinned_todos_visible", True):
             return None
         todos = tuple(
@@ -521,66 +530,62 @@ class _LiveView:
         if not todos:
             return None
 
-        visible = todos[:_MAX_PINNED_TODO_LINES]
-        hidden = todos[_MAX_PINNED_TODO_LINES:]
-        rows: list[Text] = [self._pinned_todo_header(todos, width=width)]
-        has_continuation = bool(hidden)
+        active = [todo for todo in todos if todo.status == "in_progress"]
+        pending = [todo for todo in todos if todo.status == "pending"]
+        completed = [todo for todo in todos if todo.status == "done"]
+
+        rows_to_show = _MAX_PINNED_TODO_ROWS
+        visible_incomplete = [*active, *pending][:rows_to_show]
+        rows_to_show -= len(visible_incomplete)
+        visible_completed = completed[: min(_MAX_PINNED_COMPLETED_ROWS, rows_to_show)]
+        visible = [*visible_incomplete, *visible_completed]
+        hidden_incomplete = max(0, len(active) + len(pending) - len(visible_incomplete))
+        hidden_completed = max(0, len(completed) - len(visible_completed))
+        has_continuation = hidden_incomplete > 0 or hidden_completed > 0
+
+        rows: list[Text] = []
         for index, todo in enumerate(visible):
             is_last_visible = index == len(visible) - 1
             branch = "└─" if is_last_visible and not has_continuation else "├─"
-            if todo.status == "done":
-                icon = "●"
-                icon_token = "success"
-                title_token = "muted"
-            elif todo.status == "in_progress":
-                icon = "■"
-                icon_token = "accent"
-                title_token = "activity_label"
-            else:
-                icon = "□"
-                icon_token = "muted"
-                title_token = "tool_output"
-            title_style = tui_rich_style(title_token)
-            if todo.status == "in_progress":
-                title_style += Style(bold=True)
-            prefix = f"     {branch} "
-            title_budget = max(1, width - len(prefix) - 2)
-            title = truncate_to_width(todo.title.strip(), title_budget)
-            row = Text(prefix, style=tui_rich_style("muted"))
-            row.append(icon, style=tui_rich_style(icon_token))
-            row.append(" ")
-            row.append(title, style=title_style)
-            rows.append(row)
+            rows.append(self._pinned_todo_row(todo, branch=branch, width=width))
 
-        if hidden:
-            hidden_pending = sum(1 for todo in hidden if todo.status == "pending")
-            label = "pending" if hidden_pending == len(hidden) else "more"
-            row = Text("     └─ ", style=tui_rich_style("muted"))
-            row.append(f"… +{len(hidden)} {label}", style=tui_rich_style("muted"))
+        if hidden_incomplete:
+            row = Text("     … ", style=tui_rich_style("muted"))
+            row.append(f"+{hidden_incomplete} more", style=tui_rich_style("muted"))
+            rows.append(row)
+        elif hidden_completed:
+            row = Text("     … ", style=tui_rich_style("muted"))
+            row.append(f"+{hidden_completed} completed", style=tui_rich_style("muted"))
             rows.append(row)
         return Group(*rows)
+
+    def _pinned_todo_row(self, todo: TodoDisplayItem, *, branch: str, width: int) -> Text:
+        if todo.status == "done":
+            icon = "✓"
+            icon_token = "success"
+            title_style = tui_rich_style("muted") + Style(strike=True)
+        elif todo.status == "in_progress":
+            icon = "■"
+            icon_token = "accent"
+            title_style = tui_rich_style("activity_label") + Style(bold=True)
+        else:
+            icon = "□"
+            icon_token = "muted"
+            title_style = tui_rich_style("tool_output")
+        prefix = f"     {branch} "
+        title_budget = max(1, width - len(prefix) - 2)
+        title = truncate_to_width(todo.title.strip(), title_budget)
+        row = Text(prefix, style=tui_rich_style("muted"))
+        row.append(icon, style=tui_rich_style(icon_token))
+        row.append(" ")
+        row.append(title, style=title_style)
+        return row
 
     def toggle_pinned_todos(self) -> bool:
         """Toggle visibility of the pinned todo list and return the new state."""
         self._pinned_todos_visible = not getattr(self, "_pinned_todos_visible", True)
         self.refresh_soon()
         return self._pinned_todos_visible
-
-    def _pinned_todo_header(self, todos: tuple[TodoDisplayItem, ...], *, width: int) -> Text:
-        """Render the pinned todo summary line with the same counts as the todo card."""
-        total = len(todos)
-        done = sum(1 for todo in todos if todo.status == "done")
-        active = sum(1 for todo in todos if todo.status == "in_progress")
-        pending = sum(1 for todo in todos if todo.status == "pending")
-        parts = [f"{done}/{total} done"]
-        if active:
-            parts.append(f"{active} active")
-        if pending:
-            parts.append(f"{pending} pending")
-        summary = f"todos({' · '.join(parts)})"
-        row = Text("  ⎿  ", style=tui_rich_style("muted"))
-        row.append(truncate_to_width(summary, max(1, width - 5)), style=tui_rich_style("muted"))
-        return row
 
     def compose(self, *, include_status: bool = True) -> RenderableType:
         """Compose the full live view display content.
