@@ -1846,3 +1846,52 @@ async def test_background_agent_marks_killed_when_run_cancelled(agent_tool, runt
 
     record = runtime.subagent_store.require_instance(agent_id)
     assert record.status == "killed"
+
+
+# ---------------------------------------------------------------------------
+# parent_agent_id propagation
+# ---------------------------------------------------------------------------
+
+
+async def test_agent_tool_records_parent_agent_id_as_none_for_root(
+    agent_tool, runtime, monkeypatch
+):
+    """When the root agent launches a subagent, parent_agent_id is None (root has no ID)."""
+    runtime.labor_market.add_builtin_type(
+        AgentTypeDefinition(
+            name="coder",
+            description="Good at general software engineering tasks.",
+            agent_file=runtime.subagent_store.root / "coder.yaml",
+            tool_policy=ToolPolicy(mode="inherit"),
+        )
+    )
+
+    async def fake_load_agent(agent_file, runtime, *, mcp_configs, start_mcp_loading=True):
+        return SoulAgent(
+            name=agent_file.stem,
+            system_prompt="Subagent system prompt",
+            toolset=EmptyToolset(),
+            runtime=runtime,
+        )
+
+    async def fake_run_soul(
+        soul, user_input, ui_loop_fn, cancel_event, wire_file=None, runtime=None
+    ):
+        await soul.context.append_message(
+            Message(role="assistant", content=[TextPart(text="done")])
+        )
+
+    monkeypatch.setattr("pythinker_code.subagents.builder.load_agent", fake_load_agent)
+    monkeypatch.setattr("pythinker_code.subagents.runner.run_soul", fake_run_soul)
+
+    # Root agent has subagent_id=None
+    assert runtime.subagent_id is None
+
+    result = await agent_tool(
+        agent_tool.params(description="task", prompt="do it")
+    )
+
+    assert not result.is_error
+    agent_id = _extract_agent_id(result.output)
+    record = runtime.subagent_store.require_instance(agent_id)
+    assert record.launch_spec.parent_agent_id is None
