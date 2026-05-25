@@ -10,6 +10,7 @@ from rich.style import Style
 from rich.text import Text
 
 from pythinker_code.ui.shell.components.render_utils import cell_width, truncate_to_width
+from pythinker_code.ui.theme import tui_rich_style
 
 
 class ShellTone(StrEnum):
@@ -34,14 +35,14 @@ StatusName = Literal[
 ]
 
 
-_TONE_STYLES: dict[ShellTone, Style] = {
-    ShellTone.NORMAL: Style(color="default"),
-    ShellTone.MUTED: Style(color="#8b90a8"),
-    ShellTone.ACCENT: Style(color="#9CA3AF"),
-    ShellTone.SUCCESS: Style(color="#A6E3A1"),
-    ShellTone.WARNING: Style(color="#F2CC60"),
-    ShellTone.ERROR: Style(color="#F38BA8"),
-    ShellTone.INFO: Style(color="#B8D7FF"),
+_TONE_TOKEN: dict[ShellTone, str] = {
+    ShellTone.NORMAL: "text",
+    ShellTone.MUTED: "muted",
+    ShellTone.ACCENT: "accent",
+    ShellTone.SUCCESS: "success",
+    ShellTone.WARNING: "warning",
+    ShellTone.ERROR: "error",
+    ShellTone.INFO: "info",
 }
 
 _STATUS: dict[StatusName, tuple[str, ShellTone]] = {
@@ -57,7 +58,14 @@ _STATUS: dict[StatusName, tuple[str, ShellTone]] = {
 
 
 def shell_style(tone: ShellTone) -> Style:
-    return _TONE_STYLES[tone]
+    """Resolve a ShellTone to a Rich Style via the active theme tokens.
+
+    NORMAL maps to the ``text`` token, which is empty (terminal default) in
+    dark mode and yields ``Style(color="default")`` so existing behavior is
+    preserved.
+    """
+    style = tui_rich_style(_TONE_TOKEN[tone])
+    return style if style.color is not None else Style(color="default")
 
 
 def status_icon(name: StatusName) -> Text:

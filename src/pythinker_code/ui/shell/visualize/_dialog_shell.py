@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from rich import box
 from rich.console import Group, RenderableType
 from rich.panel import Panel
+from rich.style import StyleType
 from rich.text import Text
 
 from pythinker_code.ui.shell.design_system import dialog_title
 from pythinker_code.ui.shell.spacing import DIALOG_PANEL_PADDING, blank_row
+from pythinker_code.ui.theme import tui_rich_style
 
 DialogKind = Literal["approval", "question", "warning", "info"]
 
@@ -24,9 +27,15 @@ class DialogOption:
 
 
 def _render_option(option: DialogOption) -> Text:
+    from rich.style import Style as _RStyle
+
     prefix = "→" if option.selected else " "
     key = f"[{option.key}] " if option.key else ""
-    style = "cyan bold" if option.selected else "grey50"
+    style = (
+        tui_rich_style("accent") + _RStyle(bold=True)
+        if option.selected
+        else tui_rich_style("muted")
+    )
     text = Text(f"{prefix} {key}{option.label}", style=style)
     if option.description:
         text.append(f"  {option.description}", style="dim")
@@ -40,9 +49,11 @@ def render_dialog(
     body: list[RenderableType],
     options: list[DialogOption],
     footer: RenderableType | None = None,
-    border_style: str = "grey50",
+    border_style: StyleType | None = None,
     width: int | None = None,
 ) -> RenderableType:
+    if border_style is None:
+        border_style = tui_rich_style("border_muted")
     lines: list[RenderableType] = []
     lines.extend(body)
     if body and options:
@@ -56,6 +67,7 @@ def render_dialog(
         title=dialog_title("approval" if kind == "approval" else "question", title),
         title_align="left",
         border_style=border_style,
+        box=box.ROUNDED,
         padding=DIALOG_PANEL_PADDING,
         width=width,
     )

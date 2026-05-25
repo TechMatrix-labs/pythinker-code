@@ -19,6 +19,18 @@ from pythinker_code.utils.rich.diff_render import (
     render_diff_preview,
 )
 
+
+@pytest.fixture(autouse=True)
+def _restore_active_theme():
+    from pythinker_code.ui.theme import get_active_theme, set_active_theme
+
+    saved = get_active_theme()
+    try:
+        yield
+    finally:
+        set_active_theme(saved)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -553,6 +565,52 @@ class TestLineNumberOffsets:
         # Second block starts later — NOT at 1
         assert b1.old_start > 1
         assert b1.new_start > 1
+
+
+# ---------------------------------------------------------------------------
+# Marker colors — match the reference terminal ANSI green/red styling
+# ---------------------------------------------------------------------------
+
+
+def _render_with_color(renderable) -> str:
+    """Render to ANSI string with truecolor enabled."""
+    console = Console(width=120, force_terminal=True, color_system="truecolor")
+    with console.capture() as cap:
+        console.print(renderable, end="")
+    return cap.get()
+
+
+class TestDiffMarkerReferenceColors:
+    def test_panel_markers_use_reference_ansi_green_red(self) -> None:
+        """Full diff markers must keep reference-style ANSI green/red, even in panels."""
+        from pythinker_code.ui.theme import set_active_theme
+
+        set_active_theme("dark")
+        hunks, a, r = _collect("old_line", "new_line")
+        ansi_out = _render_with_color(render_diff_panel("test.py", hunks, a, r))
+        assert "\x1b[32;" in ansi_out
+        assert "\x1b[31;" in ansi_out
+
+    def test_header_stats_use_bold_reference_ansi_colors(self) -> None:
+        """Header +N/-N stats match Rich's bold green/red reference styling."""
+        from pythinker_code.ui.theme import set_active_theme
+
+        set_active_theme("dark")
+        hunks, a, r = _collect("old_line", "new_line")
+        ansi_out = _render_with_color(render_diff_panel("test.py", hunks, a, r))
+        assert "\x1b[1;32m" in ansi_out
+        assert "\x1b[1;31m" in ansi_out
+
+    def test_preview_markers_use_reference_ansi_colors(self) -> None:
+        """render_diff_preview markers must use the same ANSI colors as the full panel."""
+        from pythinker_code.ui.theme import set_active_theme
+
+        set_active_theme("dark")
+        hunks, a, r = _collect("old_line", "new_line")
+        renderables, _ = render_diff_preview("test.py", hunks, a, r)
+        ansi_out = "".join(_render_with_color(renderable) for renderable in renderables)
+        assert "\x1b[32m" in ansi_out
+        assert "\x1b[31m" in ansi_out
 
 
 # ---------------------------------------------------------------------------

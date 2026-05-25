@@ -42,7 +42,10 @@ def _rich_escape(value: object) -> str:
 
 def ensure_pythinker_soul(app: Shell) -> PythinkerSoul | None:
     if not isinstance(app.soul, PythinkerSoul):
-        console.print("[red]PythinkerSoul required[/red]")
+        from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens_local
+
+        _t = _get_tui_tokens_local()
+        console.print(f"[{_t.error}]PythinkerSoul required[/]")
         return None
     return app.soul
 
@@ -75,7 +78,10 @@ def help(app: Shell, args: str):
     from rich.console import Group, RenderableType
     from rich.text import Text
 
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
     from pythinker_code.utils.rich.columns import BulletColumns
+
+    _tok = get_tui_tokens()
 
     def section(title: str, items: list[tuple[str, str]], color: str) -> BulletColumns:
         lines: list[RenderableType] = [Text.from_markup(f"[bold]{_rich_escape(title)}:[/bold]")]
@@ -83,8 +89,7 @@ def help(app: Shell, args: str):
             lines.append(
                 BulletColumns(
                     Text.from_markup(
-                        f"[{color}]{_rich_escape(name)}[/{color}]: "
-                        f"[grey50]{_rich_escape(desc)}[/grey50]"
+                        f"[{color}]{_rich_escape(name)}[/]: [{_tok.muted}]{_rich_escape(desc)}[/]"
                     ),
                     bullet_style=color,
                 )
@@ -95,11 +100,13 @@ def help(app: Shell, args: str):
     renderables.append(
         BulletColumns(
             Group(
-                Text.from_markup("[grey50]Help! I need somebody. Help! Not just anybody.[/grey50]"),
-                Text.from_markup("[grey50]Help! You know I need someone. Help![/grey50]"),
-                Text.from_markup("[grey50]\u2015 The Beatles, [italic]Help![/italic][/grey50]"),
+                Text.from_markup(
+                    f"[{_tok.muted}]Help! I need somebody. Help! Not just anybody.[/]"
+                ),
+                Text.from_markup(f"[{_tok.muted}]Help! You know I need someone. Help![/]"),
+                Text.from_markup(f"[{_tok.muted}]\u2015 The Beatles, [italic]Help![/italic][/]"),
             ),
-            bullet_style="grey50",
+            bullet_style=tui_rich_style("muted"),
         )
     )
     renderables.append(
@@ -119,12 +126,12 @@ def help(app: Shell, args: str):
         else:
             commands.append(cmd)
 
-    renderables.append(section("Keyboard shortcuts", _KEYBOARD_SHORTCUTS, "yellow"))
+    renderables.append(section("Keyboard shortcuts", _KEYBOARD_SHORTCUTS, _tok.warning))
     renderables.append(
         section(
             "Slash commands",
             [(c.slash_name(), c.description) for c in sorted(commands, key=lambda c: c.name)],
-            "blue",
+            "blue",  # needs-human: blue has no exact brand token equivalent
         )
     )
     if skills:
@@ -132,7 +139,7 @@ def help(app: Shell, args: str):
             section(
                 "Skills",
                 [(c.slash_name(), c.description) for c in sorted(skills, key=lambda c: c.name)],
-                "cyan",
+                _tok.info,
             )
         )
 
@@ -165,8 +172,12 @@ def agents(app: Shell, args: str):
     labor_market = getattr(soul.runtime, "labor_market", None)
     builtin_types = getattr(labor_market, "builtin_types", {}) or {}
     type_defs = sorted(builtin_types.values(), key=lambda item: item.name)
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
+
+    _tok = get_tui_tokens()
+
     if not type_defs:
-        console.print("[yellow]No subagents are registered for this agent.[/yellow]")
+        console.print(f"[{_tok.warning}]No subagents are registered for this agent.[/]")
         return
 
     table = Table.grid(expand=True)
@@ -174,8 +185,10 @@ def agents(app: Shell, args: str):
     table.add_column(ratio=4)
     table.add_column(ratio=1, no_wrap=True)
     table.add_column(ratio=2, no_wrap=True)
+    from rich.style import Style as _RichStyle
+
     table.add_row(
-        Text("agent", style="bold cyan"),
+        Text("agent", style=tui_rich_style("info") + _RichStyle(bold=True)),
         Text("when to use", style="bold"),
         Text("model", style="bold"),
         Text("tools", style="bold"),
@@ -188,20 +201,22 @@ def agents(app: Shell, args: str):
             else "inherit"
         )
         table.add_row(
-            Text(type_def.name, style="cyan"),
-            Text(type_def.when_to_use or type_def.description or "—", style="grey70"),
-            Text(type_def.default_model or "inherit", style="grey58"),
-            Text(tool_label, style="grey58"),
+            Text(type_def.name, style=tui_rich_style("info")),
+            Text(
+                type_def.when_to_use or type_def.description or "—", style=tui_rich_style("muted")
+            ),
+            Text(type_def.default_model or "inherit", style=tui_rich_style("dim")),
+            Text(tool_label, style=tui_rich_style("dim")),
         )
 
     footer = Text("Use the Agent tool with subagent_type=<agent>, or ask Pythinker to delegate.")
-    footer.stylize("grey58")
+    footer.stylize(tui_rich_style("dim"))
     console.print(
         Panel(
             table,
-            title="[bold cyan]Agents[/bold cyan]",
+            title=f"[bold {_tok.info}]Agents[/]",
             subtitle=footer,
-            border_style="cyan",
+            border_style=tui_rich_style("border"),
             box=box.ROUNDED,
         )
     )
@@ -211,6 +226,9 @@ def agents(app: Shell, args: str):
 async def model(app: Shell, args: str):
     """Switch LLM model or thinking mode"""
     from pythinker_code.llm import derive_model_capabilities
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok
+
+    _t = _get_tok()
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
@@ -220,13 +238,13 @@ async def model(app: Shell, args: str):
     await refresh_managed_models(config)
 
     if not config.models:
-        console.print('[yellow]No models configured, send "/login" to login.[/yellow]')
+        console.print(f'[{_t.warning}]No models configured, send "/login" to login.[/]')
         return
 
     if not config.is_from_default_location:
         console.print(
-            "[yellow]Model switching requires the default config file; "
-            "restart without --config/--config-file.[/yellow]"
+            f"[{_t.warning}]Model switching requires the default config file; "
+            f"restart without --config/--config-file.[/]"
         )
         return
 
@@ -257,7 +275,9 @@ async def model(app: Shell, args: str):
     selected_model_cfg = config.models[selected_model_name]
     selected_provider = config.providers.get(selected_model_cfg.provider)
     if selected_provider is None:
-        console.print(f"[red]Provider not found: {_rich_escape(selected_model_cfg.provider)}[/red]")
+        console.print(
+            f"[{_t.error}]Provider not found: {_rich_escape(selected_model_cfg.provider)}[/]"
+        )
         return
 
     # Step 2: Determine thinking mode
@@ -288,8 +308,8 @@ async def model(app: Shell, args: str):
 
     if not model_changed and not thinking_changed:
         console.print(
-            f"[yellow]Already using {_rich_escape(selected_display)} "
-            f"with thinking {'on' if new_thinking else 'off'}.[/yellow]"
+            f"[{_t.warning}]Already using {_rich_escape(selected_display)} "
+            f"with thinking {'on' if new_thinking else 'off'}.[/]"
         )
         return
 
@@ -306,7 +326,7 @@ async def model(app: Shell, args: str):
     except (ConfigError, OSError) as exc:
         config.default_model = prev_model
         config.default_thinking = prev_thinking
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     from pythinker_code.telemetry import track
@@ -316,9 +336,9 @@ async def model(app: Shell, args: str):
     if thinking_changed:
         track("thinking_toggle", enabled=new_thinking)
     console.print(
-        f"[green]Switched to {selected_display} "
+        f"[{_t.success}]Switched to {selected_display} "
         f"with thinking {'on' if new_thinking else 'off'}. "
-        "Reloading...[/green]"
+        "Reloading...[/]"
     )
 
     # Pre-load LM Studio models so the user doesn't hit a 10-60s wait on
@@ -354,6 +374,9 @@ async def _preload_lm_studio_model(provider: Any, model_id: str) -> None:
     from rich.status import Status
 
     from pythinker_code.auth.lm_studio import request_lm_studio_load
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_lms
+
+    _t_lms = _get_tok_lms()
 
     base_url = provider.base_url
     api_key = provider.api_key.get_secret_value()
@@ -370,7 +393,7 @@ async def _preload_lm_studio_model(provider: Any, model_id: str) -> None:
     except Exception as exc:
         status.stop()
         console.print(
-            f"[yellow]LM Studio pre-load failed for {model_id}: {exc}[/yellow]\n"
+            f"[{_t_lms.warning}]LM Studio pre-load failed for {model_id}: {exc}[/]\n"
             "[dim]The chat will still try the model on first message.[/dim]"
         )
 
@@ -379,7 +402,10 @@ async def _preload_lm_studio_model(provider: Any, model_id: str) -> None:
 @shell_mode_registry.command
 async def editor(app: Shell, args: str):
     """Set default external editor for Ctrl-O"""
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_editor
     from pythinker_code.utils.editor import get_editor_command
+
+    _t_ed = _get_tok_editor()
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
@@ -388,8 +414,8 @@ async def editor(app: Shell, args: str):
     config_file = config.source_file
     if config_file is None:
         console.print(
-            "[yellow]Editor switching is unavailable with inline --config; "
-            "use --config-file to persist this setting.[/yellow]"
+            f"[{_t_ed.warning}]Editor switching is unavailable with inline --config; "
+            f"use --config-file to persist this setting.[/]"
         )
         return
 
@@ -438,19 +464,19 @@ async def editor(app: Shell, args: str):
         try:
             parts = shlex.split(new_editor)
         except ValueError:
-            console.print(f"[red]Invalid editor command: {_rich_escape(new_editor)}[/red]")
+            console.print(f"[{_t_ed.error}]Invalid editor command: {_rich_escape(new_editor)}[/]")
             return
 
         binary = parts[0]
         if not shutil.which(binary):
             console.print(
-                f"[yellow]Warning: '{_rich_escape(binary)}' not found in PATH. "
-                f"Saving anyway — make sure it's installed before using Ctrl-O.[/yellow]"
+                f"[{_t_ed.warning}]Warning: '{_rich_escape(binary)}' not found in PATH. "
+                f"Saving anyway — make sure it's installed before using Ctrl-O.[/]"
             )
 
     if new_editor == current_editor:
         editor_label = _rich_escape(new_editor or "auto-detect")
-        console.print(f"[yellow]Editor is already set to: {editor_label}[/yellow]")
+        console.print(f"[{_t_ed.warning}]Editor is already set to: {editor_label}[/]")
         return
 
     # Save to disk
@@ -459,18 +485,20 @@ async def editor(app: Shell, args: str):
         config_for_save.default_editor = new_editor
         save_config(config_for_save, config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_ed.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     # Sync in-memory config so Ctrl-O picks it up immediately
     config.default_editor = new_editor
 
     if new_editor:
-        console.print(f"[green]Editor set to: {_rich_escape(new_editor)}[/green]")
+        console.print(f"[{_t_ed.success}]Editor set to: {_rich_escape(new_editor)}[/]")
     else:
         resolved = get_editor_command()
         label = " ".join(resolved) if resolved else "none"
-        console.print(f"[green]Editor set to auto-detect (resolved: {_rich_escape(label)})[/green]")
+        console.print(
+            f"[{_t_ed.success}]Editor set to auto-detect (resolved: {_rich_escape(label)})[/]"
+        )
 
 
 @registry.command(aliases=["release-notes"])
@@ -480,8 +508,10 @@ def changelog(app: Shell, args: str):
     from rich.console import Group, RenderableType
     from rich.text import Text
 
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
     from pythinker_code.utils.rich.columns import BulletColumns
 
+    _tok = get_tui_tokens()
     renderables: list[RenderableType] = []
     for ver, entry in CHANGELOG.items():
         title = f"[bold]{_rich_escape(ver)}[/bold]"
@@ -494,8 +524,8 @@ def changelog(app: Shell, args: str):
                 continue
             lines.append(
                 BulletColumns(
-                    Text.from_markup(f"[grey50]{_rich_escape(item)}[/grey50]"),
-                    bullet_style="grey50",
+                    Text.from_markup(f"[{_tok.muted}]{_rich_escape(item)}[/]"),
+                    bullet_style=tui_rich_style("muted"),
                 ),
             )
         renderables.append(BulletColumns(Group(*lines)))
@@ -597,7 +627,10 @@ async def feedback(app: Shell, args: str):
 
     from pythinker_code.constant import VERSION
     from pythinker_code.ui.shell.oauth import current_model_key
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_fb
     from pythinker_code.utils.aiohttp import new_client_session
+
+    _t_fb = _get_tok_fb()
 
     ISSUE_URL = "https://github.com/mohamed-elkholy95/Pythinker-Code/issues"
 
@@ -622,12 +655,12 @@ async def feedback(app: Shell, args: str):
     try:
         content = await prompt_session.prompt_async("Enter your feedback: ")
     except (EOFError, KeyboardInterrupt):
-        console.print("[grey50]Feedback cancelled.[/grey50]")
+        console.print(f"[{_t_fb.muted}]Feedback cancelled.[/]")
         return
 
     content = content.strip()
     if not content:
-        console.print("[yellow]Feedback cannot be empty.[/yellow]")
+        console.print(f"[{_t_fb.warning}]Feedback cannot be empty.[/]")
         return
 
     payload = {
@@ -651,22 +684,24 @@ async def feedback(app: Shell, args: str):
         try:
             token = load_github_feedback_token()
             if token is None:
-                console.print("[cyan]GitHub login required to create the issue as you.[/cyan]")
+                console.print(f"[{_t_fb.info}]GitHub login required to create the issue as you.[/]")
                 async for event in login_github_feedback(client_id):
                     if event.type == "waiting":
                         console.print(event.message, markup=False)
                     elif event.type in {"verification_url", "success", "error"}:
-                        style = None
+                        from rich.style import Style as _RichStyleFb
+
+                        _style_fb = None
                         if event.type == "success":
-                            style = "green"
+                            _style_fb = _RichStyleFb(color=_t_fb.success)
                         elif event.type == "error":
-                            style = "red"
-                        console.print(event.message, markup=False, style=style)
+                            _style_fb = _RichStyleFb(color=_t_fb.error)
+                        console.print(event.message, markup=False, style=_style_fb)
                 token = load_github_feedback_token()
             if token is None:
-                console.print("[red]GitHub login did not produce a usable token.[/red]")
+                console.print(f"[{_t_fb.error}]GitHub login did not produce a usable token.[/]")
                 return
-            with console.status("[cyan]Creating GitHub issue...[/cyan]"):
+            with console.status(f"[{_t_fb.info}]Creating GitHub issue...[/]"):
                 issue = await create_github_issue(
                     repo,
                     token,
@@ -678,9 +713,9 @@ async def feedback(app: Shell, args: str):
             track("feedback_submitted", destination="github")
             if issue.html_url:
                 issue_url = _rich_escape(issue.html_url)
-                console.print(f"[green]GitHub issue created:[/green] {issue_url}")
+                console.print(f"[{_t_fb.success}]GitHub issue created:[/] {issue_url}")
             else:
-                console.print("[green]GitHub issue created.[/green]")
+                console.print(f"[{_t_fb.success}]GitHub issue created.[/]")
 
             try:
                 star_answer = await prompt_session.prompt_async(
@@ -690,21 +725,21 @@ async def feedback(app: Shell, args: str):
                 star_answer = ""
             if star_answer.strip().lower() in {"y", "yes"}:
                 try:
-                    with console.status("[cyan]Starring GitHub repo...[/cyan]"):
+                    with console.status(f"[{_t_fb.info}]Starring GitHub repo...[/]"):
                         await star_github_repo(repo, token)
                     track("github_repo_starred")
-                    console.print("[green]Thanks for starring the repo![/green]")
+                    console.print(f"[{_t_fb.success}]Thanks for starring the repo![/]")
                 except (GitHubFeedbackError, TimeoutError, aiohttp.ClientError) as e:
-                    console.print(f"[yellow]Could not star the repo: {_rich_escape(e)}[/yellow]")
+                    console.print(f"[{_t_fb.warning}]Could not star the repo: {_rich_escape(e)}[/]")
         except (GitHubFeedbackError, TimeoutError, aiohttp.ClientError) as e:
-            console.print(f"[red]Failed to create GitHub issue: {_rich_escape(e)}[/red]")
+            console.print(f"[{_t_fb.error}]Failed to create GitHub issue: {_rich_escape(e)}[/]")
             _fallback_to_issues()
         return
 
     assert destination is not None
     feedback_url, headers = destination
 
-    with console.status("[cyan]Submitting feedback...[/cyan]"):
+    with console.status(f"[{_t_fb.info}]Submitting feedback...[/]"):
         try:
             async with (
                 new_client_session() as session,
@@ -721,10 +756,11 @@ async def feedback(app: Shell, args: str):
 
             track("feedback_submitted")
             console.print(
-                f"[green]Feedback submitted, thank you! Your session ID is: {session_id}[/green]"
+                f"[{_t_fb.success}]Feedback submitted, thank you! "
+                f"Your session ID is: {session_id}[/]"
             )
         except TimeoutError:
-            console.print("[red]Feedback submission timed out.[/red]")
+            console.print(f"[{_t_fb.error}]Feedback submission timed out.[/]")
             _fallback_to_issues()
         except aiohttp.ClientError as e:
             status = getattr(e, "status", None)
@@ -732,7 +768,7 @@ async def feedback(app: Shell, args: str):
                 msg = f"Failed to submit feedback (HTTP {status})."
             else:
                 msg = "Network error, failed to submit feedback."
-            console.print(f"[red]{msg}[/red]")
+            console.print(f"[{_t_fb.error}]{msg}[/]")
             _fallback_to_issues()
 
 
@@ -748,7 +784,10 @@ async def report_error(app: Shell, args: str):
     from pythinker_code.constant import VERSION
     from pythinker_code.telemetry.errors import clear_recent_errors, recent_errors
     from pythinker_code.ui.shell.oauth import current_model_key
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_re
     from pythinker_code.utils.aiohttp import new_client_session
+
+    _t_re = _get_tok_re()
 
     ISSUE_URL = "https://github.com/mohamed-elkholy95/Pythinker-Code/issues"
 
@@ -773,13 +812,13 @@ async def report_error(app: Shell, args: str):
         for i, err in enumerate(errors, start=1):
             tool_part = f" (tool={_rich_escape(err.tool)})" if err.tool else ""
             console.print(
-                f"  [dim]{i}.[/dim] [cyan]{_rich_escape(err.site)}[/cyan]"
+                f"  [dim]{i}.[/dim] [{_t_re.info}]{_rich_escape(err.site)}[/]"
                 f"{tool_part}: {_rich_escape(err.exc_class)}"
             )
     else:
         console.print(
-            "[grey50]No errors recorded this session. "
-            "You can still attach a comment describing what went wrong.[/grey50]"
+            f"[{_t_re.muted}]No errors recorded this session. "
+            f"You can still attach a comment describing what went wrong.[/]"
         )
 
     from prompt_toolkit import PromptSession
@@ -788,12 +827,12 @@ async def report_error(app: Shell, args: str):
     try:
         comment = await prompt_session.prompt_async("Describe what went wrong (Ctrl-C to cancel): ")
     except (EOFError, KeyboardInterrupt):
-        console.print("[grey50]Report cancelled.[/grey50]")
+        console.print(f"[{_t_re.muted}]Report cancelled.[/]")
         return
 
     comment = comment.strip()
     if not comment and not errors:
-        console.print("[yellow]Nothing to report. Cancelled.[/yellow]")
+        console.print(f"[{_t_re.warning}]Nothing to report. Cancelled.[/]")
         return
 
     payload = {
@@ -815,7 +854,7 @@ async def report_error(app: Shell, args: str):
         ],
     }
 
-    with console.status("[cyan]Submitting error report...[/cyan]"):
+    with console.status(f"[{_t_re.info}]Submitting error report...[/]"):
         try:
             async with (
                 new_client_session() as session,
@@ -832,10 +871,10 @@ async def report_error(app: Shell, args: str):
             track("error_report_submitted", error_count=len(errors), has_comment=bool(comment))
             clear_recent_errors()
             console.print(
-                f"[green]Error report submitted. Session ID: {soul.runtime.session.id}[/green]"
+                f"[{_t_re.success}]Error report submitted. Session ID: {soul.runtime.session.id}[/]"
             )
         except TimeoutError:
-            console.print("[red]Submission timed out.[/red]")
+            console.print(f"[{_t_re.error}]Submission timed out.[/]")
             _fallback_to_issues()
         except aiohttp.ClientError as e:
             status = getattr(e, "status", None)
@@ -844,7 +883,7 @@ async def report_error(app: Shell, args: str):
                 if status
                 else "Network error, failed to submit error report."
             )
-            console.print(f"[red]{msg}[/red]")
+            console.print(f"[{_t_re.error}]{msg}[/]")
             _fallback_to_issues()
 
 
@@ -877,7 +916,9 @@ async def new(app: Shell, args: str):
     from pythinker_code.telemetry import track
 
     track("session_new")
-    console.print("[green]New session created. Switching...[/green]")
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_new
+
+    console.print(f"[{_get_tok_new().success}]New session created. Switching...[/]")
     raise Reload(session_id=session.id)
 
 
@@ -903,7 +944,9 @@ async def title(app: Shell, args: str):
     session.state.custom_title = new_title
     session.state.title_generated = True
     session.title = new_title
-    console.print(f"[green]Session title set to: {_rich_escape(new_title)}[/green]")
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_title
+
+    console.print(f"[{_get_tok_title().success}]Session title set to: {_rich_escape(new_title)}[/]")
 
 
 @registry.command(name="sessions", aliases=["resume", "session"])
@@ -928,21 +971,25 @@ async def list_sessions(app: Shell, args: str):
 
     selection, selected_work_dir = result
 
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_sess
+
+    _t_sess = _get_tok_sess()
     if selection == current_session.id:
-        console.print("[yellow]You are already in this session.[/yellow]")
+        console.print(f"[{_t_sess.warning}]You are already in this session.[/]")
         return
 
     if selected_work_dir != current_session.work_dir:
         cmd = f"pythinker --work-dir {shlex.quote(str(selected_work_dir))} --session {selection}"
         console.print(
-            f"[yellow]Session is in a different directory. Run:[/yellow]\n  {_rich_escape(cmd)}"
+            f"[{_t_sess.warning}]Session is in a different directory. Run:[/]\n"
+            f"  {_rich_escape(cmd)}"
         )
         return
 
     from pythinker_code.telemetry import track
 
     track("session_resume")
-    console.print(f"[green]Switching to session {_rich_escape(selection)}...[/green]")
+    console.print(f"[{_t_sess.success}]Switching to session {_rich_escape(selection)}...[/]")
     raise Reload(session_id=selection)
 
 
@@ -953,11 +1000,16 @@ async def task(app: Shell, args: str):
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_task
+
+    _t_task = _get_tok_task()
     if args.strip():
-        console.print('[yellow]Usage: "/task" opens the interactive task browser.[/yellow]')
+        console.print(f'[{_t_task.warning}]Usage: "/task" opens the interactive task browser.[/]')
         return
     if soul.runtime.role != "root":
-        console.print("[yellow]Background tasks are only available from the root agent.[/yellow]")
+        console.print(
+            f"[{_t_task.warning}]Background tasks are only available from the root agent.[/]"
+        )
         return
 
     await TaskBrowserApp(soul).run()
@@ -968,11 +1020,13 @@ async def task(app: Shell, args: str):
 async def theme(app: Shell, args: str) -> None:
     """Switch terminal color theme — interactive picker when no args given"""
     from pythinker_code.ui.theme import get_active_theme
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_theme
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
 
+    _t_theme = _get_tok_theme()
     current = get_active_theme()
     arg = args.strip().lower()
 
@@ -988,18 +1042,20 @@ async def theme(app: Shell, args: str) -> None:
         arg = chosen
 
     if arg not in ("dark", "light"):
-        console.print(f"[red]Unknown theme: {_rich_escape(arg)}. Use 'dark' or 'light'.[/red]")
+        console.print(
+            f"[{_t_theme.error}]Unknown theme: {_rich_escape(arg)}. Use 'dark' or 'light'.[/]"
+        )
         return
 
     if arg == current:
-        console.print(f"[yellow]Already using {_rich_escape(arg)} theme.[/yellow]")
+        console.print(f"[{_t_theme.warning}]Already using {_rich_escape(arg)} theme.[/]")
         return
 
     config_file = soul.runtime.config.source_file
     if config_file is None:
         console.print(
-            "[yellow]Theme switching requires a config file; "
-            "restart without --config to persist this setting.[/yellow]"
+            f"[{_t_theme.warning}]Theme switching requires a config file; "
+            f"restart without --config to persist this setting.[/]"
         )
         return
 
@@ -1008,13 +1064,13 @@ async def theme(app: Shell, args: str) -> None:
         config_for_save.theme = arg  # type: ignore[assignment]
         save_config(config_for_save, config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_theme.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     from pythinker_code.telemetry import track
 
     track("theme_switch", theme=arg)
-    console.print(f"[green]Switched to {_rich_escape(arg)} theme. Reloading...[/green]")
+    console.print(f"[{_t_theme.success}]Switched to {_rich_escape(arg)} theme. Reloading...[/]")
     raise Reload(session_id=soul.runtime.session.id)
 
 
@@ -1027,6 +1083,9 @@ async def thinking(app: Shell, args: str) -> None:
         return
 
     from pythinker_code.ui.shell.selectors.thinking import ThinkingLevel, run_thinking_selector
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_think
+
+    _t_think = _get_tok_think()
 
     curr_level: ThinkingLevel = "high" if soul.thinking else "off"
     level = await run_thinking_selector(
@@ -1038,14 +1097,14 @@ async def thinking(app: Shell, args: str) -> None:
 
     new_thinking = level != "off"
     if new_thinking == soul.thinking:
-        console.print("[yellow]Thinking setting unchanged.[/yellow]")
+        console.print(f"[{_t_think.warning}]Thinking setting unchanged.[/]")
         return
 
     config_file = soul.runtime.config.source_file
     if config_file is None:
         console.print(
-            "[yellow]Thinking requires a config file; "
-            "restart without --config to persist this setting.[/yellow]"
+            f"[{_t_think.warning}]Thinking requires a config file; "
+            f"restart without --config to persist this setting.[/]"
         )
         return
 
@@ -1054,14 +1113,14 @@ async def thinking(app: Shell, args: str) -> None:
         config_for_save.default_thinking = new_thinking
         save_config(config_for_save, config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_think.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     from pythinker_code.telemetry import track
 
     track("thinking_toggle", enabled=new_thinking)
     console.print(
-        f"[green]Thinking {'enabled' if new_thinking else 'disabled'}. Reloading...[/green]"
+        f"[{_t_think.success}]Thinking {'enabled' if new_thinking else 'disabled'}. Reloading...[/]"
     )
     raise Reload(session_id=soul.runtime.session.id)
 
@@ -1075,15 +1134,17 @@ def keys(app: Shell, args: str):
     from rich.text import Text
 
     from pythinker_code.ui.shell.keymap import keybinding_help
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
 
+    _tok = get_tui_tokens()
     bindings = keybinding_help()
     if not bindings:
-        console.print("[yellow]No keybindings registered.[/yellow]")
+        console.print(f"[{_tok.warning}]No keybindings registered.[/]")
         return
 
     table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
     table.add_column("Shortcut", style="bold", no_wrap=True)
-    table.add_column("Action", style="cyan")
+    table.add_column("Action", style=tui_rich_style("info"))
     table.add_column("Where", style="dim", no_wrap=True)
 
     for binding in bindings:
@@ -1093,7 +1154,7 @@ def keys(app: Shell, args: str):
         Text.from_markup("[bold]Keyboard shortcuts[/bold]"),
         table,
         Text.from_markup(
-            "[grey50]Tip: press ? on an empty prompt for the compact overlay.[/grey50]"
+            f"[{_tok.muted}]Tip: press ? on an empty prompt for the compact overlay.[/]"
         ),
     ]
     console.print(Group(*blocks))
@@ -1103,7 +1164,10 @@ def keys(app: Shell, args: str):
 @shell_mode_registry.command
 def tui(app: Shell, args: str):
     """Show or set the TUI style: card or pythinker"""
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_tui
     from pythinker_code.ui.tui_config import get_active_tui_style, set_active_tui_style
+
+    _t_tui = _get_tok_tui()
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
@@ -1120,16 +1184,18 @@ def tui(app: Shell, args: str):
 
     if not target:
         console.print(f"Current TUI style: [bold]{_rich_escape(current)}[/bold]")
-        console.print("[grey50]Usage: /tui card | /tui pythinker[/grey50]")
+        console.print(f"[{_t_tui.muted}]Usage: /tui card | /tui pythinker[/]")
         return
 
     if target not in ("card", "pythinker"):
         target_label = _rich_escape(target)
-        console.print(f"[red]Unknown style: {target_label}. Use 'card' or 'pythinker'.[/red]")
+        console.print(
+            f"[{_t_tui.error}]Unknown style: {target_label}. Use 'card' or 'pythinker'.[/]"
+        )
         return
 
     if target == current:
-        console.print(f"[yellow]Already using {_rich_escape(target)} style.[/yellow]")
+        console.print(f"[{_t_tui.warning}]Already using {_rich_escape(target)} style.[/]")
         return
 
     config_file = soul.runtime.config.source_file
@@ -1137,8 +1203,8 @@ def tui(app: Shell, args: str):
         # Apply in-memory only — useful for one-off testing without a persisted config.
         set_active_tui_style(target)
         console.print(
-            f"[green]Switched to {target} style for this session "
-            "(no config file to persist).[/green]"
+            f"[{_t_tui.success}]Switched to {target} style for this session "
+            "(no config file to persist).[/]"
         )
         return
 
@@ -1147,7 +1213,7 @@ def tui(app: Shell, args: str):
         config_for_save.tui.style = target  # type: ignore[assignment]
         save_config(config_for_save, config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_tui.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     set_active_tui_style(target)
@@ -1160,7 +1226,7 @@ def tui(app: Shell, args: str):
     from pythinker_code.telemetry import track
 
     track("tui_style_switch", style=target)
-    console.print(f"[green]Switched to {_rich_escape(target)} style. Reloading...[/green]")
+    console.print(f"[{_t_tui.success}]Switched to {_rich_escape(target)} style. Reloading...[/]")
     raise Reload(session_id=soul.runtime.session.id)
 
 
@@ -1172,8 +1238,11 @@ async def settings(app: Shell, args: str):
     from rich.table import Table
     from rich.text import Text
 
-    from pythinker_code.ui.theme import get_active_theme
+    from pythinker_code.ui.theme import get_active_theme, tui_rich_style
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_set
     from pythinker_code.ui.tui_config import get_active_tui_style
+
+    _t_set = _get_tok_set()
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
@@ -1184,7 +1253,7 @@ async def settings(app: Shell, args: str):
 
     def print_settings_table() -> None:
         table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column(style="cyan", no_wrap=True)
+        table.add_column(style=tui_rich_style("info"), no_wrap=True)
         table.add_column()
 
         table.add_row("Theme", get_active_theme())
@@ -1203,23 +1272,23 @@ async def settings(app: Shell, args: str):
         blocks: list[RenderableType] = [Text.from_markup("[bold]Settings[/bold]"), table]
         console.print(Group(*blocks))
         console.print(
-            "[grey50]Tip: /settings opens the interactive panel; "
-            "/theme, /tui, /model, /keys for related controls.[/grey50]"
+            f"[{_t_set.muted}]Tip: /settings opens the interactive panel; "
+            f"/theme, /tui, /model, /keys for related controls.[/]"
         )
 
     if mode in {"show", "list", "view"}:
         print_settings_table()
         return
     if mode:
-        console.print("[yellow]Usage: /settings [show|list][/yellow]")
+        console.print(f"[{_t_set.warning}]Usage: /settings [show|list][/]")
         return
 
     config_file = config.source_file
     if config_file is None:
         print_settings_table()
         console.print(
-            "[yellow]Interactive settings require a config file; "
-            "restart without --config text to persist settings.[/yellow]"
+            f"[{_t_set.warning}]Interactive settings require a config file; "
+            f"restart without --config text to persist settings.[/]"
         )
         return
 
@@ -1231,7 +1300,7 @@ async def settings(app: Shell, args: str):
     try:
         config_for_save = load_config(config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to load config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_set.error}]Failed to load config: {_rich_escape(exc)}[/]")
         return
 
     changes = await run_settings_selector(config_for_save)
@@ -1240,19 +1309,19 @@ async def settings(app: Shell, args: str):
 
     changed_ids = apply_settings_changes(config_for_save, changes)
     if not changed_ids:
-        console.print("[yellow]Settings unchanged.[/yellow]")
+        console.print(f"[{_t_set.warning}]Settings unchanged.[/]")
         return
 
     try:
         save_config(config_for_save, config_file)
     except (ConfigError, OSError) as exc:
-        console.print(f"[red]Failed to save config: {_rich_escape(exc)}[/red]")
+        console.print(f"[{_t_set.error}]Failed to save config: {_rich_escape(exc)}[/]")
         return
 
     from pythinker_code.telemetry import track
 
     track("settings_update", changed=",".join(changed_ids), count=len(changed_ids))
-    console.print(f"[green]Updated {len(changed_ids)} setting(s). Reloading...[/green]")
+    console.print(f"[{_t_set.success}]Updated {len(changed_ids)} setting(s). Reloading...[/]")
     raise Reload(session_id=soul.runtime.session.id)
 
 
@@ -1266,7 +1335,9 @@ def restore(app: Shell, args: str) -> None:
         list_file_restore_points,
         restore_file_restore_point,
     )
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
 
+    _tok = get_tui_tokens()
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
@@ -1276,10 +1347,10 @@ def restore(app: Shell, args: str) -> None:
     if not arg:
         points = list_file_restore_points(session, limit=20)
         if not points:
-            console.print("[yellow]No file restore points in this session.[/yellow]")
+            console.print(f"[{_tok.warning}]No file restore points in this session.[/]")
             return
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-        table.add_column("ID", style="cyan", no_wrap=True)
+        table.add_column("ID", style=tui_rich_style("info"), no_wrap=True)
         table.add_column("Tool", no_wrap=True)
         table.add_column("Path")
         table.add_column("State", no_wrap=True)
@@ -1287,13 +1358,13 @@ def restore(app: Shell, args: str) -> None:
             state = "modified" if point.existed else "created"
             table.add_row(point.id, point.tool_name, str(point.path), state)
         console.print(table)
-        console.print("[grey50]Run /restore <id> or /restore latest.[/grey50]")
+        console.print(f"[{_tok.muted}]Run /restore <id> or /restore latest.[/]")
         return
 
     if arg == "latest":
         points = list_file_restore_points(session, limit=1)
         if not points:
-            console.print("[yellow]No file restore points in this session.[/yellow]")
+            console.print(f"[{_tok.warning}]No file restore points in this session.[/]")
             return
         restore_id = points[0].id
     else:
@@ -1302,18 +1373,18 @@ def restore(app: Shell, args: str) -> None:
     try:
         point = restore_file_restore_point(session, restore_id)
     except FileNotFoundError:
-        console.print(f"[red]Restore point not found: {_rich_escape(restore_id)}[/red]")
+        console.print(f"[{_tok.error}]Restore point not found: {_rich_escape(restore_id)}[/]")
         return
     except OSError as exc:
         console.print(
-            f"[red]Failed to restore {_rich_escape(restore_id)}: {_rich_escape(exc)}[/red]"
+            f"[{_tok.error}]Failed to restore {_rich_escape(restore_id)}: {_rich_escape(exc)}[/]"
         )
         return
 
     action = "restored" if point.existed else "removed"
     console.print(
-        f"[green]File {action} from restore point {_rich_escape(point.id)}: "
-        f"{_rich_escape(point.path)}[/green]"
+        f"[{_tok.success}]File {action} from restore point {_rich_escape(point.id)}: "
+        f"{_rich_escape(point.path)}[/]"
     )
 
 
@@ -1321,10 +1392,13 @@ def restore(app: Shell, args: str) -> None:
 @shell_mode_registry.command
 def trust(app: Shell, args: str) -> None:
     """Show or update workspace trust safe mode"""
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_trust
+
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
 
+    _t_trust = _get_tok_trust()
     state = soul.runtime.session.state.trust
     mode = args.strip().lower()
     if mode in {"on", "yes", "trust"}:
@@ -1332,7 +1406,9 @@ def trust(app: Shell, args: str) -> None:
         state.safe_mode = False
         soul.runtime.approval.set_safe_mode(False)
         soul.runtime.session.save_state()
-        console.print("[green]Workspace trusted. Safe mode disabled for this session.[/green]")
+        console.print(
+            f"[{_t_trust.success}]Workspace trusted. Safe mode disabled for this session.[/]"
+        )
         return
     if mode in {"off", "no", "untrust", "safe"}:
         state.trusted = False
@@ -1343,11 +1419,12 @@ def trust(app: Shell, args: str) -> None:
         soul.runtime.session.state.approval.auto_approve_actions.clear()
         soul.runtime.session.save_state()
         console.print(
-            "[yellow]Workspace untrusted. Safe mode enabled; auto-approval is disabled.[/yellow]"
+            f"[{_t_trust.warning}]Workspace untrusted. Safe mode enabled; "
+            "auto-approval is disabled.[/]"
         )
         return
     if mode:
-        console.print("[yellow]Usage: /trust [on|off][/yellow]")
+        console.print(f"[{_t_trust.warning}]Usage: /trust [on|off][/]")
         return
 
     status = "trusted" if state.trusted else "untrusted"
@@ -1378,23 +1455,27 @@ async def worklog(app: Shell, args: str) -> None:
     except FileNotFoundError:
         pass
 
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
+
+    _tok = get_tui_tokens()
+
     table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    table.add_column("Signal", style="cyan")
+    table.add_column("Signal", style=tui_rich_style("info"))
     table.add_column("Count", justify="right")
     for key in sorted(counts):
         table.add_row(key, str(counts[key]))
     if counts:
         console.print(table)
-        console.print(f"[grey50]Recent: {_rich_escape(' -> '.join(recent))}[/grey50]")
+        console.print(f"[{_tok.muted}]Recent: {_rich_escape(' -> '.join(recent))}[/]")
     else:
-        console.print("[yellow]No worklog events recorded yet.[/yellow]")
+        console.print(f"[{_tok.warning}]No worklog events recorded yet.[/]")
 
     restore_points = list_file_restore_points(soul.runtime.session, limit=5)
     if restore_points:
         console.print("[bold]Recent restore points:[/bold]")
         for point in restore_points:
             console.print(
-                f"  [cyan]{_rich_escape(point.id)}[/cyan] "
+                f"  [{_tok.info}]{_rich_escape(point.id)}[/] "
                 f"{_rich_escape(point.tool_name)} {_rich_escape(point.path)}"
             )
 
@@ -1409,9 +1490,13 @@ def context(app: Shell, args: str) -> None:
     if soul is None:
         return
 
+    from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
+
+    _tok = get_tui_tokens()
+
     status = soul.status
     table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column(style="cyan", no_wrap=True)
+    table.add_column(style=tui_rich_style("info"), no_wrap=True)
     table.add_column()
     table.add_row("Tokens", str(status.context_tokens or 0))
     table.add_row("Window", str(status.max_context_tokens or 0))
@@ -1421,7 +1506,7 @@ def context(app: Shell, args: str) -> None:
     table.add_row("Plan mode", "on" if soul.plan_mode else "off")
     table.add_row("Context file", str(soul.runtime.session.context_file))
     console.print(table)
-    console.print("[grey50]Use /compact [focus] to summarize old context.[/grey50]")
+    console.print(f"[{_tok.muted}]Use /compact [focus] to summarize old context.[/]")
 
 
 @registry.command
@@ -1431,6 +1516,7 @@ def tools(app: Shell, args: str) -> None:
     from rich.table import Table
 
     from pythinker_code.soul.permission import permission_profile_for_runtime
+    from pythinker_code.ui.theme import tui_rich_style
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
@@ -1444,7 +1530,7 @@ def tools(app: Shell, args: str) -> None:
     )
 
     table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    table.add_column("Tool", style="cyan", no_wrap=True)
+    table.add_column("Tool", style=tui_rich_style("info"), no_wrap=True)
     table.add_column("Description")
     for tool in sorted(soul.agent.toolset.tools, key=lambda item: item.name):
         desc = " ".join((tool.description or "").split())
@@ -1453,9 +1539,12 @@ def tools(app: Shell, args: str) -> None:
         table.add_row(tool.name, desc)
     console.print(table)
     if args.strip().lower() == "audit":
+        from pythinker_code.ui.theme import get_tui_tokens as _get_tok_tools
+
+        _t_tools = _get_tok_tools()
         console.print(
-            "[grey50]Audit: external MCP/wire/plugin tools are blocked in read-only, "
-            "plan, review, and verify profiles unless their side effects are known.[/grey50]"
+            f"[{_t_tools.muted}]Audit: external MCP/wire/plugin tools are blocked in read-only, "
+            f"plan, review, and verify profiles unless their side effects are known.[/]"
         )
 
 
@@ -1463,9 +1552,13 @@ def tools(app: Shell, args: str) -> None:
 @shell_mode_registry.command(aliases=["a11y"])
 def accessibility(app: Shell, args: str) -> None:
     """Show or update accessibility/plain-output preferences"""
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_a11y
+
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
+
+    _t_a11y = _get_tok_a11y()
 
     state = soul.runtime.session.state.accessibility
     mode = args.strip().lower()
@@ -1486,8 +1579,8 @@ def accessibility(app: Shell, args: str) -> None:
             pass
         case _:
             console.print(
-                "[yellow]Usage: /accessibility "
-                "[plain|rich|no-animation|animation|ascii|unicode][/yellow]"
+                f"[{_t_a11y.warning}]Usage: /accessibility "
+                "[plain|rich|no-animation|animation|ascii|unicode][/]"
             )
             return
     if mode:
@@ -1533,7 +1626,9 @@ async def mcp(app: Shell, args: str):
     await soul.start_background_mcp_loading()
     snapshot = soul.status.mcp_status
     if snapshot is None:
-        console.print("[yellow]No MCP servers configured.[/yellow]")
+        from pythinker_code.ui.theme import get_tui_tokens as _get_tok_mcp
+
+        console.print(f"[{_get_tok_mcp().warning}]No MCP servers configured.[/]")
         return
 
     if not snapshot.loading:
@@ -1567,15 +1662,18 @@ async def mcp(app: Shell, args: str):
 @shell_mode_registry.command
 def hooks(app: Shell, args: str):
     """List configured hooks"""
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_hooks
+
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
 
+    _t_hooks = _get_tok_hooks()
     engine = soul.hook_engine
     if not engine.summary:
         console.print(
-            "[yellow]No hooks configured. "
-            "Add [[hooks]] sections to your config.toml to set up hooks.[/yellow]"
+            f"[{_t_hooks.warning}]No hooks configured. "
+            f"Add [[hooks]] sections to your config.toml to set up hooks.[/]"
         )
         return
 
@@ -1584,7 +1682,7 @@ def hooks(app: Shell, args: str):
     console.print()
 
     for event, entries in engine.details().items():
-        console.print(f"  [cyan]{_rich_escape(event)}[/cyan]: {len(entries)} hook(s)")
+        console.print(f"  [{_t_hooks.info}]{_rich_escape(event)}[/]: {len(entries)} hook(s)")
         for entry in entries:
             source_tag = (
                 f" [dim]({_rich_escape(entry['source'])})[/dim]"
@@ -1603,18 +1701,20 @@ def hooks(app: Shell, args: str):
 async def undo(app: Shell, args: str):
     """Undo: fork the session at a previous turn and retry"""
     from pythinker_code.session_fork import enumerate_turns, fork_session
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_undo
     from pythinker_code.utils.string import shorten
 
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
 
+    _t_undo = _get_tok_undo()
     session = soul.runtime.session
     wire_path = session.dir / "wire.jsonl"
     turns = enumerate_turns(wire_path)
 
     if not turns:
-        console.print("[yellow]No turns found in this session.[/yellow]")
+        console.print(f"[{_t_undo.warning}]No turns found in this session.[/]")
         return
 
     # Build choices: each turn's first line, truncated
@@ -1664,7 +1764,7 @@ async def undo(app: Shell, args: str):
     from pythinker_code.telemetry import track
 
     track("undo")
-    console.print(f"[green]Forked at turn {turn_index}. Switching to new session...[/green]")
+    console.print(f"[{_t_undo.success}]Forked at turn {turn_index}. Switching to new session...[/]")
     raise Reload(session_id=new_session_id, prefill_text=user_text)
 
 
@@ -1689,7 +1789,9 @@ async def fork(app: Shell, args: str):
     from pythinker_code.telemetry import track
 
     track("session_fork")
-    console.print("[green]Session forked. Switching to new session...[/green]")
+    from pythinker_code.ui.theme import get_tui_tokens as _get_tok_fork
+
+    console.print(f"[{_get_tok_fork().success}]Session forked. Switching to new session...[/]")
     raise Reload(session_id=new_session_id)
 
 

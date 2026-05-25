@@ -159,7 +159,7 @@ def _make_toolbar_session(*, model_name: str | None = None, tips: list[str] | No
     return prompt_session
 
 
-def _render_toolbar_lines(
+def _render_toolbar_fragments(
     prompt_session: Any,
     width: int,
     monkeypatch: Any,
@@ -168,8 +168,8 @@ def _render_toolbar_lines(
     git_status_result: tuple[bool, int, int] = (False, 0, 0),
     cwd: str = "~/proj",
     before_render: Callable[[], None] | None = None,
-) -> list[str]:
-    """Patch the environment, optionally run setup, render the toolbar, return lines."""
+) -> list[tuple[str, str]]:
+    """Patch the environment, optionally run setup, render the toolbar fragments."""
 
     class _DummyOutput:
         @staticmethod
@@ -188,7 +188,29 @@ def _render_toolbar_lines(
     if before_render is not None:
         before_render()
 
-    rendered = prompt_session._render_bottom_toolbar()
+    return list(prompt_session._render_bottom_toolbar())
+
+
+def _render_toolbar_lines(
+    prompt_session: Any,
+    width: int,
+    monkeypatch: Any,
+    *,
+    git_branch: str | None = None,
+    git_status_result: tuple[bool, int, int] = (False, 0, 0),
+    cwd: str = "~/proj",
+    before_render: Callable[[], None] | None = None,
+) -> list[str]:
+    """Patch the environment, optionally run setup, render the toolbar, return lines."""
+    rendered = _render_toolbar_fragments(
+        prompt_session,
+        width,
+        monkeypatch,
+        git_branch=git_branch,
+        git_status_result=git_status_result,
+        cwd=cwd,
+        before_render=before_render,
+    )
     plain = "".join(fragment[1] for fragment in rendered)
     return cast(list[str], plain.split("\n"))
 
@@ -203,6 +225,7 @@ def test_build_toolbar_tips_without_clipboard() -> None:
         "shift+tab: plan mode",
         "!: shell command",
         "ctrl+o: editor",
+        "ctrl+t: toggle todos",
         "ctrl+j/alt+enter: newline",
         "/feedback: send feedback",
         "/theme: switch dark/light",
@@ -217,6 +240,7 @@ def test_build_toolbar_tips_with_clipboard() -> None:
         "shift+tab: plan mode",
         "!: shell command",
         "ctrl+o: editor",
+        "ctrl+t: toggle todos",
         "ctrl+j/alt+enter: newline",
         "/feedback: send feedback",
         "/theme: switch dark/light",
@@ -485,6 +509,32 @@ def test_card_toolbar_shows_codex_style_background_task_summary(monkeypatch: Any
     assert "/task list" not in plain
 
 
+def test_card_toolbar_agent_label_is_light_and_context_is_muted(monkeypatch: Any) -> None:
+    from pythinker_code.ui.theme import get_tui_tokens, set_active_theme
+
+    prompt_session = _make_toolbar_session(model_name="fast-model", tips=[])
+
+    class _DummyOutput:
+        @staticmethod
+        def get_size() -> Any:
+            return SimpleNamespace(columns=120)
+
+    set_active_theme("dark")
+    tokens = get_tui_tokens("dark")
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "card")
+    monkeypatch.setattr(
+        shell_prompt, "get_app_or_none", lambda: SimpleNamespace(output=_DummyOutput())
+    )
+    monkeypatch.setattr(shell_prompt, "_get_git_branch", lambda: None)
+    monkeypatch.setattr(shell_prompt, "_shorten_cwd", lambda _: "~/proj")
+    monkeypatch.setattr("pythinker_code.extensions.footer_statuses", lambda: {})
+
+    fragments = list(prompt_session._render_bottom_toolbar())
+
+    assert (f"fg:{tokens.muted}", "context: 0.0%") in fragments
+    assert (f"fg:{tokens.text or tokens.activity_label}", "agent fast-model ○") in fragments
+
+
 def test_bottom_toolbar_drops_agent_badge_before_bash_when_narrow(monkeypatch: Any) -> None:
     # With only ~width budget for one badge after CWD/mode, keeping bash and
     # dropping agent is the documented priority.
@@ -509,6 +559,19 @@ def test_mode_shows_full_with_model_name_on_wide_terminal(monkeypatch: Any) -> N
     lines = _render_toolbar_lines(session, 80, monkeypatch)
     assert "fast-model" in lines[1], f"model name missing on wide terminal: {lines[1]!r}"
     assert "○" in lines[1], f"thinking dot missing on wide terminal: {lines[1]!r}"
+
+
+def test_toolbar_mode_is_light_and_secondary_text_is_muted(monkeypatch: Any) -> None:
+    from pythinker_code.ui.theme import get_tui_tokens, set_active_theme
+
+    set_active_theme("dark")
+    tokens = get_tui_tokens("dark")
+    session = _make_toolbar_session(model_name="fast-model", tips=["?: shortcuts"])
+    fragments = _render_toolbar_fragments(session, 120, monkeypatch)
+
+    assert (f"fg:{tokens.text or tokens.activity_label}", "agent (fast-model ○)") in fragments
+    assert (f"fg:{tokens.muted} bold", "?") in fragments
+    assert (f"fg:{tokens.muted}", ": shortcuts") in fragments
 
 
 def test_mode_drops_model_name_on_narrow_terminal(monkeypatch: Any) -> None:

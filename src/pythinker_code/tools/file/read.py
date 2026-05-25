@@ -10,7 +10,7 @@ from pythinker_code.soul.agent import Runtime
 from pythinker_code.tools.file.utils import MEDIA_SNIFF_BYTES, detect_file_type
 from pythinker_code.tools.utils import load_desc, truncate_line
 from pythinker_code.utils.logging import logger
-from pythinker_code.utils.path import is_within_workspace
+from pythinker_code.utils.path import is_within_workspace, list_directory
 from pythinker_code.utils.sensitive import is_sensitive_file
 
 MAX_LINES = 1000
@@ -125,6 +125,15 @@ class ReadFile(CallableTool2[Params]):
                 return ToolError(
                     message=f"`{params.path}` does not exist.",
                     brief="File not found",
+                )
+            if await p.is_dir():
+                return ToolOk(
+                    output=await list_directory(p),
+                    message=(
+                        f"Directory listing for `{params.path}`. "
+                        "Use ReadFile on a file path to read file contents."
+                    ),
+                    brief="Listed directory",
                 )
             if not await p.is_file():
                 return ToolError(

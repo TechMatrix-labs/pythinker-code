@@ -76,7 +76,7 @@ def _ansi(renderable: RenderableType, *, width: int = 60) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_pending_card_uses_tool_pending_bg():
+def test_pending_card_renders_without_background_tint():
     comp = ToolExecutionComponent(
         "ReadFile",
         "t1",
@@ -90,8 +90,8 @@ def test_pending_card_uses_tool_pending_bg():
     assert "src/foo.py" in text
 
     coloured = _ansi(comp.render(), width=60)
-    # Default dark theme tool_pending_bg = #282a3a -> rgb(40,42,58).
-    assert "48;2;40;42;58" in coloured
+    # Blackbox-style pending/running tool rows sit on the terminal background.
+    assert "48;2;27;34;48" not in coloured
 
 
 def test_success_card_renders_compact_without_success_bg():
@@ -107,7 +107,7 @@ def test_success_card_renders_compact_without_success_bg():
     assert comp.status == ToolExecutionStatus.SUCCESS
     coloured = _ansi(comp.render(), width=60)
     # Compact cards no longer paint a full success background.
-    assert "48;2;40;50;40" not in coloured
+    assert "48;2;22;39;28" not in coloured
 
     text = render_plain(comp.render(), width=60)
     assert "2 lines" in text
@@ -124,8 +124,8 @@ def test_error_card_uses_tool_error_bg():
 
     assert comp.status == ToolExecutionStatus.ERROR
     coloured = _ansi(comp.render(), width=60)
-    # Default dark theme tool_error_bg = #3a2632 -> rgb(58,38,50).
-    assert "48;2;58;38;50" in coloured
+    # Default dark theme tool_error_bg = #2E1D24 -> rgb(46,29,36).
+    assert "48;2;46;29;36" in coloured
 
 
 def test_denied_card_uses_error_bg():
@@ -137,7 +137,7 @@ def test_denied_card_uses_error_bg():
     comp.set_status(ToolExecutionStatus.DENIED)
     coloured = _ansi(comp.render(), width=60)
     # Denied also uses error background.
-    assert "48;2;58;38;50" in coloured
+    assert "48;2;46;29;36" in coloured
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ def test_self_shell_skips_padding():
     comp = ToolExecutionComponent("Self", "t1", definition=defn)
     coloured = _ansi(comp.render(), width=40)
     # No tool_pending_bg fill should be applied when render_shell == "self".
-    assert "48;2;40;40;50" not in coloured
+    assert "48;2;27;34;48" not in coloured
 
 
 # ---------------------------------------------------------------------------

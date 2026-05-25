@@ -334,6 +334,13 @@ async def test_shell_startup_initializes_theme_from_config(
 # ---------------------------------------------------------------------------
 
 
+def test_prompt_glyph_is_light_text_dark():
+    set_active_theme("dark")
+    from pythinker_code.ui.theme import _PROMPT_STYLE_DARK, get_tui_tokens
+
+    assert get_tui_tokens("dark").activity_label in _PROMPT_STYLE_DARK["compact-input.prompt"]
+
+
 def test_render_diff_panel_both_themes():
     from rich.console import Console
 

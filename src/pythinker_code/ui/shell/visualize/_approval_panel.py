@@ -11,6 +11,7 @@ from prompt_toolkit.key_binding import KeyPressEvent
 from rich.console import Group, RenderableType
 from rich.markup import escape
 from rich.padding import Padding
+from rich.style import Style as RichStyle
 from rich.text import Text
 
 from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
@@ -19,6 +20,8 @@ from pythinker_code.ui.shell.keyboard import KeyEvent
 from pythinker_code.ui.shell.keymap import key_text
 from pythinker_code.ui.shell.spacing import blank_row
 from pythinker_code.ui.shell.visualize._dialog_shell import DialogOption, render_dialog
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.rich.diff_render import (
     collect_diff_hunks,
     render_diff_panel,
@@ -60,7 +63,7 @@ class ApprovalContentBlock(NamedTuple):
 
     text: str
     lines: int
-    style: str = ""
+    style: str | RichStyle = ""
     lexer: str = ""
 
 
@@ -172,14 +175,14 @@ class ApprovalRequestPanel:
                 text = _safe_display_text(block.text)
                 line_count = text.count("\n") + 1
                 self._content_blocks.append(
-                    ApprovalContentBlock(text=text, lines=line_count, style="grey50")
+                    ApprovalContentBlock(text=text, lines=line_count, style=tui_rich_style("muted"))
                 )
                 if non_diff_budget > 0:
                     truncated = text
                     if line_count > non_diff_budget:
                         truncated = "\n".join(text.split("\n")[:non_diff_budget])
                         self._non_diff_truncated = True
-                    self._preview_renderables.append(Text(truncated, style="grey50"))
+                    self._preview_renderables.append(Text(truncated, style=tui_rich_style("muted")))
                     non_diff_budget -= min(line_count, non_diff_budget)
                 else:
                     self._non_diff_truncated = True
@@ -199,11 +202,12 @@ class ApprovalRequestPanel:
         width: int | None = None,
     ) -> RenderableType:
         """Render the approval menu as a bordered panel."""
+        _t = _get_tui_tokens()
         content_lines: list[RenderableType] = [
             Text.from_markup(
-                "[yellow]"
+                f"[{_t.warning}]"
                 f"{_safe_markup_text(self.request.sender)} is requesting approval to "
-                f"{_safe_markup_text(self.request.action)}:[/yellow]"
+                f"{_safe_markup_text(self.request.action)}:[/]"
             )
         ]
         content_lines.extend(self._render_source_metadata_lines())
@@ -245,13 +249,15 @@ class ApprovalRequestPanel:
                         Text.assemble(
                             Text(f"\u2192 [{num}] Reject: "),
                             input_display,
-                            style="cyan",
+                            style=tui_rich_style("accent"),
                         )
                     )
                 elif i == self.selected_index:
-                    lines.append(Text(f"\u2192 [{num}] {option_text}", style="cyan"))
+                    lines.append(
+                        Text(f"\u2192 [{num}] {option_text}", style=tui_rich_style("accent"))
+                    )
                 else:
-                    lines.append(Text(f"  [{num}] {option_text}", style="grey50"))
+                    lines.append(Text(f"  [{num}] {option_text}", style=tui_rich_style("muted")))
             dialog_options: list[DialogOption] = []
             footer = Text(
                 "Type your feedback, then press Enter to reject; Esc rejects without feedback.",
@@ -277,7 +283,7 @@ class ApprovalRequestPanel:
             body=lines,
             options=dialog_options,
             footer=footer,
-            border_style="yellow",
+            border_style=tui_rich_style("warning"),
             width=width,
         )
 
@@ -307,10 +313,17 @@ class ApprovalRequestPanel:
             else:
                 assert self.request.agent_id is not None
                 subagent_text = self.request.agent_id
-            lines.append(Text(f"Subagent: {_safe_display_text(subagent_text)}", style="grey50"))
+            lines.append(
+                Text(
+                    f"Subagent: {_safe_display_text(subagent_text)}", style=tui_rich_style("muted")
+                )
+            )
         if self.request.source_description:
             lines.append(
-                Text(f"Task: {_safe_display_text(self.request.source_description)}", style="grey50")
+                Text(
+                    f"Task: {_safe_display_text(self.request.source_description)}",
+                    style=tui_rich_style("muted"),
+                )
             )
         return lines
 
@@ -334,11 +347,14 @@ class ApprovalRequestPanel:
 def show_approval_in_pager(panel: ApprovalRequestPanel) -> None:
     """Show the full approval request content in a pager."""
     with console.screen(), console.pager(styles=True):
+        from pythinker_code.ui.theme import get_tui_tokens
+
+        _tokens = get_tui_tokens()
         console.print(
             Text.from_markup(
-                "[yellow]⚠ "
+                f"[{_tokens.warning}]⚠ "
                 f"{_safe_markup_text(panel.request.sender)} is requesting approval to "
-                f"{_safe_markup_text(panel.request.action)}:[/yellow]"
+                f"{_safe_markup_text(panel.request.action)}:[/]"
             )
         )
         console.print()
@@ -371,7 +387,7 @@ def show_approval_in_pager(panel: ApprovalRequestPanel) -> None:
                 rendered_any = True
                 idx += 1
             elif isinstance(block, BriefDisplayBlock) and block.text:
-                console.print(Text(_safe_display_text(block.text), style="grey50"))
+                console.print(Text(_safe_display_text(block.text), style=tui_rich_style("muted")))
                 rendered_any = True
                 idx += 1
             else:

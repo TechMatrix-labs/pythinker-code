@@ -10,6 +10,8 @@ from rich.console import Console, Group, RenderableType
 from rich.table import Table
 from rich.text import Text
 
+from pythinker_code.ui.theme import tui_rich_style
+
 _ELLIPSIS = "…"
 _ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -153,7 +155,7 @@ def render_message_response(renderable: RenderableType) -> RenderableType:
     table = Table.grid(padding=0)
     table.add_column(width=5, no_wrap=True)
     table.add_column(ratio=1)
-    table.add_row(Text("  ⎿  ", style="grey50"), renderable)
+    table.add_row(Text("  ⎿  ", style=tui_rich_style("muted")), renderable)
     return Group(table)
 
 
@@ -161,9 +163,9 @@ def dim(text: str | Text) -> Text:
     """Return *text* styled as dim grey ("muted") output."""
     if isinstance(text, Text):
         copy = text.copy()
-        copy.stylize("grey50")
+        copy.stylize(tui_rich_style("muted"))
         return copy
-    return Text(text, style="grey50")
+    return Text(text, style=tui_rich_style("muted"))
 
 
 def sanitize_ansi(text: str) -> str:

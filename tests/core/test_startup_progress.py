@@ -7,6 +7,7 @@ import pytest
 
 import pythinker_code.app as app_module
 import pythinker_code.ui.shell.startup as startup_module
+import pythinker_code.ui.theme as theme_module
 from pythinker_code.app import PythinkerCLI
 from pythinker_code.ui.shell.startup import ShellStartupProgress
 
@@ -30,6 +31,7 @@ def test_shell_startup_progress_starts_once_and_updates_messages(monkeypatch) ->
         return FakeStatus()
 
     monkeypatch.setattr(startup_module.console, "status", fake_status)
+    monkeypatch.setattr(theme_module, "get_tui_tokens", lambda: SimpleNamespace(accent=None))
 
     progress = ShellStartupProgress(enabled=True)
     progress.update("Preparing session...")

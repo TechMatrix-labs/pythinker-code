@@ -114,6 +114,10 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
         error_text = message if isinstance(message, str) and message else result.text
         return fg("error", _friendly_error(error_text))
 
+    message = result.details.get("message")
+    if isinstance(message, str) and message.startswith("Directory listing for `"):
+        return fg("tool_output", "Listed directory")
+
     line_count = _read_count(result)
     noun = "line" if line_count == 1 else "lines"
     return fg("tool_output", f"Read {line_count} {noun}")

@@ -186,10 +186,11 @@ def _output_block(display: list[str]) -> Text | None:
     return body
 
 
-def _result_output_block(display: list[str]) -> Text | None:
+def _result_output_block(display: list[str], *, status: BashStatus) -> Text | None:
     if not display:
         return None
-    body = Text(style=tui_rich_style("muted"))
+    body_style = tui_rich_style("error") if status == "error" else tui_rich_style("muted")
+    body = Text(style=body_style)
     for index, line in enumerate(display):
         if index:
             body.append("\n")
@@ -230,7 +231,7 @@ def render_bash_result_output(state: BashExecutionState, *, width: int = 100) ->
     display, hidden = _display_output_lines(state, width=width)
     total_output_lines = len(_output_lines(state.output))
     children: list[RenderableType] = []
-    output = _result_output_block(display)
+    output = _result_output_block(display, status=state.status)
     if output is not None:
         children.append(output)
     elif state.status not in ("pending", "running"):

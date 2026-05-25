@@ -2,6 +2,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from pythinker_code.ui.shell.visualize import _live_view
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.wire.types import PlanDisplay, StatusUpdate
 
 
@@ -30,7 +31,7 @@ def test_plan_display_uses_worklog_plan_title(monkeypatch):
 
     assert card_call["title"] == "Plan"
     assert card_call["subtitle"] == "plans/one.md"
-    assert card_call["border_style"] == "cyan"
+    assert card_call["border_style"] == tui_rich_style("border")
     assert printed == [card_call["panel"]]
 
     console = Console(record=True, width=120, color_system=None)

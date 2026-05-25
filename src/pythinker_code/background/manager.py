@@ -94,6 +94,14 @@ class BackgroundTaskManager:
             1 for view in self._store.list_views() if not is_terminal_status(view.runtime.status)
         )
 
+    def active_task_count(self) -> int:
+        """Return the number of non-terminal background tasks."""
+        return self._active_task_count()
+
+    def available_task_slots(self) -> int:
+        """Return how many new background tasks can be started right now."""
+        return max(0, self._config.max_running_tasks - self._active_task_count())
+
     def has_active_tasks(self) -> bool:
         """Return True if any background tasks are in a non-terminal status.
 

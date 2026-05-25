@@ -18,17 +18,24 @@ from rich.table import Table
 from rich.text import Text
 
 from pythinker_code.tools.display import DiffDisplayBlock
-from pythinker_code.ui.shell.render_constants import (
-    DIFF_CONTEXT_LINES,
-    DIFF_LINE_NUMBER_MIN_WIDTH,
-    expand_hint,
-)
-from pythinker_code.ui.theme import get_diff_colors
+from pythinker_code.ui.theme import get_diff_colors, tui_rich_style
 from pythinker_code.utils.rich.syntax import PythinkerSyntax
 
 _INLINE_DIFF_MIN_RATIO = 0.5  # skip inline diff when lines are too dissimilar
 
+DIFF_CONTEXT_LINES = 3
+DIFF_LINE_NUMBER_MIN_WIDTH = 2
 MAX_PREVIEW_CHANGED_LINES = 6
+
+
+def _expand_hint(remaining: int) -> str:
+    """Return the shell's canonical expand hint without importing shell at module load."""
+    try:
+        from pythinker_code.ui.shell.render_constants import expand_hint
+    except ImportError:
+        plural = "s" if remaining != 1 else ""
+        return f"… {remaining} more line{plural} (ctrl+o to expand)"
+    return expand_hint(remaining)
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +377,7 @@ def render_diff_panel(
         table,
         title=title,
         title_align="left",
-        border_style="dim",
+        border_style=tui_rich_style("border_muted"),
         padding=(0, 1),
     )
 
@@ -429,7 +436,7 @@ def render_diff_preview(
         result.append(line)
 
     if remaining > 0:
-        result.append(Text(expand_hint(remaining), style="dim italic"))
+        result.append(Text(_expand_hint(remaining), style="dim italic"))
 
     return result, remaining
 
@@ -468,7 +475,7 @@ def render_diff_summary_panel(
         body,
         title=title,
         title_align="left",
-        border_style="dim",
+        border_style=tui_rich_style("border_muted"),
         padding=(1, 2),
     )
 

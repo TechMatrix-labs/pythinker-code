@@ -1,14 +1,12 @@
 """Pythinker tool execution card.
 
-Wraps a registered :class:`ToolRenderDefinition` and renders it as a card
-with a status-tinted background. Mirrors
-
-in the  codebase.
+Wraps a registered :class:`ToolRenderDefinition` and renders it as a compact
+Blackbox-style tool row.
 
 The card lifecycle:
 
-* arguments stream in        → status = ``PENDING``,  bg = ``tool_pending_bg``
-* execution starts           → status = ``RUNNING``,  bg = ``tool_pending_bg``
+* arguments stream in        → status = ``PENDING``,  no background tint
+* execution starts           → status = ``RUNNING``,  no background tint
 * result arrives, no error   → status = ``SUCCESS``,  no background tint
 * result arrives, error      → status = ``ERROR``,    bg = ``tool_error_bg``
 * user cancels / denies      → status = ``CANCELLED`` / ``DENIED``
@@ -50,8 +48,6 @@ class ToolExecutionStatus(Enum):
     DENIED = "denied"
     CANCELLED = "cancelled"
 
-
-_PENDING_LIKE = frozenset({ToolExecutionStatus.PENDING, ToolExecutionStatus.RUNNING})
 
 _MAX_RESULT_LINES = 60
 _MAX_RESULT_CHARS = 4000
@@ -218,10 +214,9 @@ class ToolExecutionComponent:
         bg_style = self._background_style()
         if bg_style is None:
             return body
-        # Padding with style fills the padded area with the tint, giving the
-        # "content box" feel without an extra border character. Vertical padding
-        # stays 0 — the live stream owns the gap between cards (see spacing.py),
-        # so a tinted card spans the same rows as an untinted one.
+        # Error/denied rows retain a subtle tint. Normal pending/running rows
+        # intentionally do not: Blackbox renders tool rows directly on the
+        # terminal background unless a message is selected.
         return Padding(body, TINTED_CARD_PADDING, style=bg_style)
 
     # -- Internals -----------------------------------------------------------
@@ -250,8 +245,6 @@ class ToolExecutionComponent:
         return None
 
     def _background_style(self) -> Style | None:
-        if self._status in _PENDING_LIKE:
-            return tui_rich_style("tool_pending_bg")
         if self._status in (ToolExecutionStatus.ERROR, ToolExecutionStatus.DENIED):
             return tui_rich_style("tool_error_bg")
         return None

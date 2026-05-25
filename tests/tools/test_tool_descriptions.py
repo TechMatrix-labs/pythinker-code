@@ -48,7 +48,7 @@ instance can preserve previous findings and work.
 - Provide the subagent all required context and success criteria. New subagents do not inherit your transcript automatically.
 - Brief the agent like a capable teammate joining mid-task: state the goal, why it matters, what you already learned or ruled out, exact paths/commands when known, and the output format you need.
 - Do not delegate synthesis with vague prompts such as "based on your findings, fix it". First understand the finding yourself, then give the subagent a concrete scoped task.
-- Spawn multiple subagents in the same turn when they can investigate independent regions concurrently.
+- Spawn multiple subagents in the same turn when they can investigate independent regions concurrently, but keep background launches within available task slots.
 - Cross-check at least one load-bearing subagent finding before making changes from it.
 - The subagent result is only visible to you. If the user should see it, summarize it yourself.
 
@@ -67,7 +67,7 @@ Recommended workflows:
 
 - Scout → Plan → Implement: run `explore`, then `plan` with the explorer's findings, then `implementer` or `coder` with the plan.
 - Implement → Review → Fix → Verify: run `implementer`, then `review`, then resume/launch `implementer` to apply feedback, then `verifier` for the relevant gate.
-- Parallel scouting: launch multiple `explore` agents for independent questions, then synthesize their findings before editing.
+- Parallel scouting: launch multiple `explore` agents for independent questions, then synthesize their findings before editing. If running them in the background, split batches that would exceed available background task slots.
 - Parallel review/verification: when review and tests do not depend on each other, run `review` and `verifier` concurrently.
 
 When chaining manually, include the previous agent's summary in the next agent prompt. Newly-created
@@ -265,7 +265,7 @@ Read text content from a file.
 - A `<system>` tag will be given before the read file content.
 - The system will notify you when there is anything wrong when reading the file.
 - This tool is a tool that you typically want to use in parallel. Always read multiple files in one response when possible.
-- This tool can only read text files. To read images or videos, use the ReadMediaFile tool. To list directories, use the Glob tool or `ls` command via the Shell tool. To read other file types, use appropriate commands via the Shell tool.
+- This tool can read text files and returns a compact tree listing when `path` is a directory. To read images or videos, use the ReadMediaFile tool. To read other file types, use appropriate commands via the Shell tool.
 - If the file doesn't exist or path is invalid, an error will be returned.
 - If you want to search for a certain content/pattern, prefer Grep tool over ReadFile.
 - Content will be returned with a line number before each line like `cat -n` format.

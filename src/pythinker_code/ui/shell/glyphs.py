@@ -11,14 +11,14 @@ from typing import Final
 
 #: Braille dotted spinner frames, rendered left-to-right per tick.
 SPINNER_FRAMES: Final = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-#: Solid animated shape frames — the filled glyph morphs circle → diamond →
-#: cube → diamond for the Composing / Thinking activity lines instead of the
-#: dotted braille spinner. Filled, single-cell glyphs so the label never shifts.
-SHAPE_FRAMES: Final = ("●", "◆", "■", "◆")
+#: Solid dot pulse for the Composing / Thinking activity lines instead of the
+#: dotted braille spinner. The blank frame keeps the label column stable while
+#: making the dot appear and disappear.
+SHAPE_FRAMES: Final = ("●", " ")
 #: Seconds each braille spinner frame stays on screen.
 SPINNER_FRAME_INTERVAL_S: Final = 0.08
-#: Seconds each shape frame stays on screen — slower, calmer morph.
-SHAPE_FRAME_INTERVAL_S: Final = 0.3
+#: Seconds each solid-dot pulse frame stays on screen.
+SHAPE_FRAME_INTERVAL_S: Final = 0.45
 #: Static stand-in used when motion is disabled.
 REDUCED_MOTION_GLYPH: Final = "●"
 

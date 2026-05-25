@@ -33,7 +33,10 @@ def test_tool_style_maps_common_tools_to_professional_labels():
     assert tool_style("TodoWrite").label == "Todo"
     assert tool_style("Agent").label == "Subagent"
     assert tool_style("Agent").icon == "●"
-    assert tool_style("Agent").style == "#9CA3AF"
+    from pythinker_code.ui.theme import get_tui_tokens, set_active_theme
+
+    set_active_theme("dark")
+    assert tool_style("Agent").style == get_tui_tokens("dark").muted
     assert tool_style("AskUser").label == "Ask"
     assert tool_style("UnknownTool").label == "UnknownTool"
 

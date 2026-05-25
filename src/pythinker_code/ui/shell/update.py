@@ -27,6 +27,7 @@ from pythinker_code.native import (
 )
 from pythinker_code.share import get_share_dir
 from pythinker_code.ui.shell.console import console
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
 from pythinker_code.utils.aiohttp import new_client_session
 from pythinker_code.utils.logging import logger
 
@@ -246,8 +247,9 @@ async def _await_exit_acknowledgment() -> None:
     close on its own and read as a crash. Runs ``input`` off the event loop;
     EOF/Ctrl-C just proceed to exit.
     """
+    _t = _get_tui_tokens()
     console.print(
-        "\n[grey50]Press Enter to close Pythinker, then relaunch to use the new version.[/grey50]"
+        f"\n[{_t.muted}]Press Enter to close Pythinker, then relaunch to use the new version.[/]"
     )
     loop = asyncio.get_running_loop()
     try:
@@ -292,13 +294,14 @@ def _update_prompt_text(current_version: str, latest_version: str) -> Text:
         update_method = "downloads the native updater automatically"
     else:
         update_method = _format_upgrade_command(upgrade_command)
+    _t = _get_tui_tokens()
     return Text.assemble(
-        ("\n  ✨ ", "bold cyan"),
+        ("\n  ✨ ", f"bold {_t.accent}"),
         ("Update available!", "bold"),
-        (f" {current_version} -> {latest_version}", "grey50"),
-        ("\n  Release notes: ", "grey50"),
-        (CHANGELOG_URL_EN, "grey50 underline"),
-        ("\n  Update method: ", "grey50"),
+        (f" {current_version} -> {latest_version}", _t.muted),
+        ("\n  Release notes: ", _t.muted),
+        (CHANGELOG_URL_EN, f"{_t.muted} underline"),
+        ("\n  Update method: ", _t.muted),
         (update_method, "bold"),
         ("\n", ""),
     )
@@ -470,6 +473,8 @@ async def do_update(*, print: bool = True, check_only: bool = False) -> UpdateRe
 async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
     from pythinker_code.constant import VERSION as current_version
 
+    _t = _get_tui_tokens()
+
     def _print(message: str) -> None:
         if print:
             console.print(message)
@@ -480,7 +485,7 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         _print("Checking for updates...")
         latest_version = await _get_latest_version(session)
         if not latest_version:
-            _print("[red]Failed to check for updates.[/red]")
+            _print(f"[{_t.error}]Failed to check for updates.[/]")
             return UpdateResult.FAILED
 
     logger.debug("Latest version: {latest_version}", latest_version=latest_version)
@@ -491,7 +496,7 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
 
     if semver_tuple(current_version) >= semver_tuple(latest_version):
         logger.debug("Already up to date: {current_version}", current_version=current_version)
-        _print("[green]Already up to date.[/green]")
+        _print(f"[{_t.success}]Already up to date.[/]")
         return UpdateResult.UP_TO_DATE
 
     if check_only:
@@ -500,7 +505,7 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
             current_version=current_version,
             latest_version=latest_version,
         )
-        _print(f"[yellow]Update available: {latest_version}[/yellow]")
+        _print(f"[{_t.warning}]Update available: {latest_version}[/]")
         return UpdateResult.UPDATE_AVAILABLE
 
     upgrade_command = _detect_upgrade_command()
@@ -513,24 +518,26 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
     )
     _print(f"Updating pythinker-code {current_version} → {latest_version}...")
     if upgrade_command != [NATIVE_INSTALLER_MARKER]:
-        _print(f"[grey50]Running: {upgrade_command_text}[/grey50]")
+        _print(f"[{_t.muted}]Running: {upgrade_command_text}[/]")
 
     if upgrade_command == [NATIVE_INSTALLER_MARKER]:
-        _print("[grey50]Downloading native updater...[/grey50]")
+        _print(f"[{_t.muted}]Downloading native updater...[/]")
         native_result = await _maybe_run_native_update(latest_version)
         if native_result is UpdateResult.UPDATE_AVAILABLE:
             _print(
-                "[yellow]Auto-update disabled. "
+                f"[{_t.warning}]Auto-update disabled. "
                 "Download the new installer manually from "
-                "https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest[/yellow]"
+                "https://github.com/mohamed-elkholy95/Pythinker-Code/releases/latest[/]"
             )
             return UpdateResult.UPDATE_AVAILABLE
         if native_result is UpdateResult.FAILED:
-            _print("[red]Native update failed. Download manually from the releases page.[/red]")
+            _print(
+                f"[{_t.error}]Native update failed. Download manually from the releases page.[/]"
+            )
             return UpdateResult.FAILED
         if native_result is UpdateResult.UPDATED:
-            _print("[green]Updated successfully![/green]")
-            _print("[yellow]Restart Pythinker CLI to use the new version.[/yellow]")
+            _print(f"[{_t.success}]Updated successfully![/]")
+            _print(f"[{_t.warning}]Restart Pythinker CLI to use the new version.[/]")
         return native_result
 
     # On Windows, the running pythinker.exe holds an exclusive lock on its own
@@ -539,9 +546,9 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
     # that waits a few seconds, then exit so the lock releases first.
     if _is_windows() and _spawn_detached_windows_upgrade(upgrade_command):
         _print(
-            "[yellow]Pythinker will exit so Windows can release the running executable.[/yellow]"
+            f"[{_t.warning}]Pythinker will exit so Windows can release the running executable.[/]"
         )
-        _print("[grey50]The upgrade will continue in a new console window.[/grey50]")
+        _print(f"[{_t.muted}]The upgrade will continue in a new console window.[/]")
         # Brief pause so the user can read the banner before the process dies.
         await asyncio.sleep(1.0)
         sys.exit(0)
@@ -550,14 +557,14 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         result = subprocess.run(upgrade_command)
     except OSError as e:
         logger.exception("Upgrade failed:")
-        _print(f"[red]Upgrade failed:[/red] {e}")
+        _print(f"[{_t.error}]Upgrade failed:[/] {e}")
         _print(f"Please run manually: {upgrade_command_text}")
         return UpdateResult.FAILED
 
     if result.returncode == 0:
-        _print("[green]Updated successfully![/green]")
-        _print("[yellow]Restart Pythinker CLI to use the new version.[/yellow]")
+        _print(f"[{_t.success}]Updated successfully![/]")
+        _print(f"[{_t.warning}]Restart Pythinker CLI to use the new version.[/]")
         return UpdateResult.UPDATED
-    _print("[red]Upgrade failed. Please try running manually:[/red]")
+    _print(f"[{_t.error}]Upgrade failed. Please try running manually:[/]")
     _print(f"  {upgrade_command_text}")
     return UpdateResult.FAILED

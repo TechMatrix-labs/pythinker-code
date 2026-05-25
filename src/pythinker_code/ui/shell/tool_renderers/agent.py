@@ -50,19 +50,22 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
     run_bg = bool(args.get("run_in_background"))
     model = as_str(args.get("model"))
 
+    secondary_token = "thinking_text"
     summary = Text()
     summary.append_text(fg("border_accent", subagent_type))
     if description:
-        summary.append_text(fg("muted", f" · {description}"))
+        summary.append_text(fg(secondary_token, f" · {description}"))
     if model:
         summary.append_text(fg("dim", f" · {model}"))
     if run_bg:
-        summary.append_text(fg("muted", " · background"))
+        summary.append_text(fg(secondary_token, " · background"))
     if resume:
-        summary.append_text(fg("muted", f" · resume {resume[:8]}"))
+        summary.append_text(fg(secondary_token, f" · resume {resume[:8]}"))
 
-    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
-    header = tool_call_header("Agent", summary, style_token=style_token)
+    style_token = "error" if ctx.is_error else "success" if ctx.has_result else secondary_token
+    header = tool_call_header(
+        "Agent", summary, style_token=style_token, paren_style_token=secondary_token
+    )
 
     missing: list[RenderableType] = []
     if description is None and ctx.has_result:
@@ -74,16 +77,22 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType:
             missing.append(missing_required_arg("prompt"))
         rendered = Group(header, *missing) if missing else header
         return running_spinner(
-            rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+            rendered,
+            execution_started=ctx.execution_started,
+            has_result=ctx.has_result,
+            marker_style_token=secondary_token,
         )
 
     preview_line = _truncate(prompt.split("\n", 1)[0], _PROMPT_PREVIEW_CHARS)
     body = Text()
-    body.append("Prompt: ", style=tui_rich_style("muted") + RichStyle(bold=True))
-    body.append(preview_line, style=tui_rich_style("dim"))
+    body.append("Prompt: ", style=tui_rich_style(secondary_token) + RichStyle(bold=True))
+    body.append(preview_line, style=tui_rich_style(secondary_token))
     rendered = Group(header, *missing, body) if missing else Group(header, body)
     return running_spinner(
-        rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
+        rendered,
+        execution_started=ctx.execution_started,
+        has_result=ctx.has_result,
+        marker_style_token=secondary_token,
     )
 
 
@@ -126,10 +135,11 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     head = Text()
     head.append_text(icon)
     head.append(" ")
-    head.append("Agent finished", style=tui_rich_style("muted") + RichStyle(bold=True))
+    head.append("Agent finished", style=tui_rich_style("thinking_text") + RichStyle(bold=True))
     if ctx.elapsed_s is not None:
         head.append(
-            f" · Crunched for {format_elapsed(ctx.elapsed_s)}", style=tui_rich_style("muted")
+            f" · Crunched for {format_elapsed(ctx.elapsed_s)}",
+            style=tui_rich_style("thinking_text"),
         )
     if not body.plain:
         return head

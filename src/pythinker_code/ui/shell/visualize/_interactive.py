@@ -34,6 +34,7 @@ from pythinker_code.ui.shell.visualize._question_panel import (
     QuestionPromptDelegate,
     QuestionRequestPanel,
 )
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.aioqueue import QueueShutDown
 from pythinker_code.wire import WireUISide
 from pythinker_code.wire.types import (
@@ -404,8 +405,10 @@ class _PromptLiveView(_LiveView):
             return ANSI("")
 
         blocks: list[RenderableType] = []
+        from rich.style import Style as _RStyle
+
         for qi in self._queued_messages:
-            blocks.append(Text(f"❯ {qi.command}", style="dim cyan"))
+            blocks.append(Text(f"❯ {qi.command}", style=tui_rich_style("info") + _RStyle(dim=True)))
         blocks.append(Text("↑ to edit · ctrl-s to send immediately", style="dim"))
 
         body = render_to_ansi(Group(*blocks), columns=columns).rstrip("\n")
@@ -444,6 +447,8 @@ class _PromptLiveView(_LiveView):
             return False
         if key == "escape":
             return self._cancel_event is not None
+        if key == "c-t":
+            return bool(getattr(self, "_latest_todos", ()))
         # ↑ on empty buffer: recall last queued message.
         # Only intercept when buffer is empty — otherwise let prompt_toolkit
         # handle ↑ for cursor movement / history navigation.
@@ -459,6 +464,11 @@ class _PromptLiveView(_LiveView):
                 event.app.create_background_task(self._show_panel_in_pager())
             elif self._toggle_latest_tool_card():
                 self._flush_prompt_refresh()
+            return
+
+        if key == "c-t":
+            self.toggle_pinned_todos()
+            self._flush_prompt_refresh()
             return
 
         # ↑ on empty buffer: pop last queued message back to input for editing.

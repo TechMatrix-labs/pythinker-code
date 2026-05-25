@@ -241,7 +241,7 @@ def test_card_style_running_subagent_marker_pulses(_force_card_style, monkeypatc
     assert "Agent(" in first
     assert "●" in first
     assert "Agent(" in second
-    assert "•" in second
+    assert "•" not in second
 
 
 def test_card_style_background_subagent_result_keeps_solid_circle(_force_card_style, monkeypatch):
@@ -309,7 +309,7 @@ def test_card_style_background_subagent_marker_pulses(_force_card_style, monkeyp
     assert "background subagent working" in first
     assert "●" in first
     assert "background subagent working" in second
-    assert "•" in second
+    assert "•" not in second
 
 
 def test_card_style_lifecycle_marks_execution_started(_force_card_style):

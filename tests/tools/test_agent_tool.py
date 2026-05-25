@@ -561,6 +561,120 @@ async def test_run_agents_launches_background_children_with_base_prompt(runtime,
     ]
 
 
+async def test_run_agents_rejects_background_batch_over_available_slots(runtime, monkeypatch):
+    runtime.labor_market.add_builtin_type(
+        AgentTypeDefinition(
+            name="explore",
+            description="Read-only exploration.",
+            agent_file=runtime.subagent_store.root / "explore.yaml",
+            tool_policy=ToolPolicy(mode="inherit"),
+        )
+    )
+    created: list[dict[str, object]] = []
+    approval_requests = 0
+
+    async def fake_request(*args, **kwargs):
+        nonlocal approval_requests
+        approval_requests += 1
+        return ApprovalResult(approved=True)
+
+    def fake_create_agent_task(**kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(
+            spec=SimpleNamespace(
+                id=f"task-{len(created)}",
+                kind="agent",
+                description=kwargs["description"],
+            ),
+            runtime=SimpleNamespace(status="starting"),
+        )
+
+    monkeypatch.setattr(runtime.approval, "request", fake_request)
+    monkeypatch.setattr(runtime.background_tasks, "create_agent_task", fake_create_agent_task)
+    tool = RunAgents(runtime)
+
+    with tool_call_context("RunAgents"):
+        result = await tool(
+            tool.params(
+                summary="oversized scouting",
+                base_prompt="Shared context",
+                agents=[
+                    AgentRunConfig(
+                        name=f"scout-{idx}",
+                        title=f"Scout {idx}",
+                        subagent_type="explore",
+                        prompt=f"Find area {idx}",
+                    )
+                    for idx in range(5)
+                ],
+            )
+        )
+
+    assert result.is_error
+    assert result.brief == "Background task limit"
+    assert "RunAgents requested 5 background agent(s)" in result.message
+    assert "only 4 background task slot(s) are available" in result.message
+    assert "reason: background_task_limit" in result.output
+    assert created == []
+    assert approval_requests == 0
+
+
+async def test_run_agents_rejects_background_batch_when_existing_tasks_fill_slots(
+    runtime, monkeypatch
+):
+    runtime.labor_market.add_builtin_type(
+        AgentTypeDefinition(
+            name="explore",
+            description="Read-only exploration.",
+            agent_file=runtime.subagent_store.root / "explore.yaml",
+            tool_policy=ToolPolicy(mode="inherit"),
+        )
+    )
+    created: list[dict[str, object]] = []
+
+    def fake_create_agent_task(**kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(
+            spec=SimpleNamespace(
+                id=f"task-{len(created)}",
+                kind="agent",
+                description=kwargs["description"],
+            ),
+            runtime=SimpleNamespace(status="starting"),
+        )
+
+    monkeypatch.setattr(runtime.background_tasks, "active_task_count", lambda: 3)
+    monkeypatch.setattr(runtime.background_tasks, "create_agent_task", fake_create_agent_task)
+    tool = RunAgents(runtime)
+
+    with tool_call_context("RunAgents"):
+        result = await tool(
+            tool.params(
+                summary="capacity-aware scouting",
+                agents=[
+                    AgentRunConfig(
+                        name="api-scout",
+                        title="API scout",
+                        subagent_type="explore",
+                        prompt="Find API files",
+                    ),
+                    AgentRunConfig(
+                        name="test-scout",
+                        title="Test scout",
+                        subagent_type="explore",
+                        prompt="Find tests",
+                    ),
+                ],
+            )
+        )
+
+    assert result.is_error
+    assert result.brief == "Background task limit"
+    assert "only 1 background task slot(s) are available" in result.message
+    assert "active_background_tasks: 3" in result.output
+    assert created == []
+
+
 async def test_run_agents_reuses_approved_orchestration_fingerprint(runtime, monkeypatch):
     runtime.approval.set_yolo(False)
     runtime.labor_market.add_builtin_type(

@@ -59,6 +59,7 @@ from pythinker_code.ui.shell.selectors.oauth import (
     run_oauth_selector,
 )
 from pythinker_code.ui.shell.slash import ensure_pythinker_soul, registry
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
 
 if TYPE_CHECKING:
     from pythinker_code.soul.pythinkersoul import PythinkerSoul
@@ -66,26 +67,29 @@ if TYPE_CHECKING:
 
 
 async def _render_oauth_events(events: AsyncIterator[OAuthEvent]) -> bool:
+    _t = _get_tui_tokens()
     status: Status | None = None
     ok = True
     try:
         async for event in events:
             if event.type == "waiting":
                 if status is None:
-                    status = console.status("[cyan]Waiting for OpenAI authorization.[/cyan]")
+                    status = console.status(f"[{_t.info}]Waiting for OpenAI authorization.[/]")
                     status.start()
                 continue
             if status is not None:
                 status.stop()
                 status = None
+            from rich.style import Style as _RStyle
+
             match event.type:
                 case "error":
-                    style = "red"
+                    _style: _RStyle | None = _RStyle(color=_t.error)
                 case "success":
-                    style = "green"
+                    _style = _RStyle(color=_t.success)
                 case _:
-                    style = None
-            console.print(event.message, markup=False, style=style)
+                    _style = None
+            console.print(event.message, markup=False, style=_style)
             if event.type == "error":
                 ok = False
     finally:
@@ -148,6 +152,7 @@ async def login(app: Shell, args: str) -> None:
             return
         mode = chosen
 
+    _t = _get_tui_tokens()
     if mode == "browser":
         ok = await _render_oauth_events(login_openai_browser(soul.runtime.config))
         provider = "openai-chatgpt"
@@ -157,42 +162,42 @@ async def login(app: Shell, args: str) -> None:
     elif mode in ("api-key", "apikey", "api"):
         api_key = await _prompt_api_key("OpenAI")
         if not api_key:
-            console.print("[red]No OpenAI API key entered.[/red]")
+            console.print(f"[{_t.error}]No OpenAI API key entered.[/]")
             return
         ok = await _render_oauth_events(login_openai_api_key(soul.runtime.config, api_key))
         provider = "openai"
     elif mode in ("opencode-go", "opencode", "go"):
         api_key = await _prompt_api_key("OpenCode Go")
         if not api_key:
-            console.print("[red]No OpenCode Go API key entered.[/red]")
+            console.print(f"[{_t.error}]No OpenCode Go API key entered.[/]")
             return
         ok = await _render_oauth_events(login_opencode_go_api_key(soul.runtime.config, api_key))
         provider = OPENCODE_GO_PLATFORM_ID
     elif mode == "minimax":
         api_key = await _prompt_api_key("MiniMax")
         if not api_key:
-            console.print("[red]No MiniMax API key entered.[/red]")
+            console.print(f"[{_t.error}]No MiniMax API key entered.[/]")
             return
         ok = await _render_oauth_events(login_minimax_api_key(soul.runtime.config, api_key))
         provider = MINIMAX_PLATFORM_ID
     elif mode == "deepseek":
         api_key = await _prompt_api_key("DeepSeek")
         if not api_key:
-            console.print("[red]No DeepSeek API key entered.[/red]")
+            console.print(f"[{_t.error}]No DeepSeek API key entered.[/]")
             return
         ok = await _render_oauth_events(login_deepseek_api_key(soul.runtime.config, api_key))
         provider = DEEPSEEK_PLATFORM_ID
     elif mode == "anthropic":
         api_key = await _prompt_api_key("Anthropic")
         if not api_key:
-            console.print("[red]No Anthropic API key entered.[/red]")
+            console.print(f"[{_t.error}]No Anthropic API key entered.[/]")
             return
         ok = await _render_oauth_events(login_anthropic_api_key(soul.runtime.config, api_key))
         provider = ANTHROPIC_PLATFORM_ID
     elif mode == "openrouter":
         api_key = await _prompt_api_key("OpenRouter")
         if not api_key:
-            console.print("[red]No OpenRouter API key entered.[/red]")
+            console.print(f"[{_t.error}]No OpenRouter API key entered.[/]")
             return
         ok = await _render_oauth_events(login_openrouter_api_key(soul.runtime.config, api_key))
         provider = OPENROUTER_PLATFORM_ID
@@ -204,9 +209,9 @@ async def login(app: Shell, args: str) -> None:
         provider = OLLAMA_PLATFORM_ID
     else:
         console.print(
-            "[red]Usage: /login "
+            f"[{_t.error}]Usage: /login "
             "[browser|headless|api-key|opencode-go|minimax|deepseek|anthropic|openrouter|"
-            "lm-studio|ollama][/red]"
+            "lm-studio|ollama][/]"
         )
         return
     if not ok:
@@ -226,10 +231,11 @@ async def logout(app: Shell, args: str) -> None:
     if soul is None:
         return
     config = soul.runtime.config
+    _t = _get_tui_tokens()
     if not config.is_from_default_location:
         console.print(
-            "[red]Logout requires the default config file; "
-            "restart without --config/--config-file.[/red]"
+            f"[{_t.error}]Logout requires the default config file; "
+            f"restart without --config/--config-file.[/]"
         )
         return
     mode = args.strip().lower()
@@ -251,15 +257,15 @@ async def logout(app: Shell, args: str) -> None:
         from pythinker_code.auth.github_feedback import delete_github_feedback_token
 
         delete_github_feedback_token()
-        console.print("[green]Logged out of GitHub feedback.[/green]")
+        console.print(f"[{_t.success}]Logged out of GitHub feedback.[/]")
         ok = True
     elif mode == "":
         ok = await _render_oauth_events(logout_openai(config))
     else:
         console.print(
-            "[red]Usage: /logout "
+            f"[{_t.error}]Usage: /logout "
             "[opencode-go|minimax|deepseek|anthropic|openrouter|lm-studio|ollama|"
-            "github-feedback][/red]"
+            "github-feedback][/]"
         )
         return
     if not ok:

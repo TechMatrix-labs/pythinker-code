@@ -21,6 +21,7 @@ class KeyEvent(Enum):
     SPACE = auto()
     CTRL_E = auto()
     CTRL_O = auto()
+    CTRL_T = auto()
     NUM_1 = auto()
     NUM_2 = auto()
     NUM_3 = auto()
@@ -191,6 +192,8 @@ def _listen_for_keyboard_unix(
                 emit(KeyEvent.CTRL_E)
             elif c == b"\x0f":  # Ctrl+O
                 emit(KeyEvent.CTRL_O)
+            elif c == b"\x14":  # Ctrl+T
+                emit(KeyEvent.CTRL_T)
             elif c == b"1":
                 emit(KeyEvent.NUM_1)
             elif c == b"2":
@@ -263,6 +266,8 @@ def _listen_for_keyboard_windows(
                 emit(KeyEvent.CTRL_E)
             elif c == b"\x0f":  # Ctrl+O
                 emit(KeyEvent.CTRL_O)
+            elif c == b"\x14":  # Ctrl+T
+                emit(KeyEvent.CTRL_T)
             elif c == b"1":
                 emit(KeyEvent.NUM_1)
             elif c == b"2":

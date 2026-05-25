@@ -7,6 +7,7 @@ from pythinker_host.path import HostPath
 
 from pythinker_code.ui.shell.console import console
 from pythinker_code.ui.shell.slash import ensure_pythinker_soul, registry, shell_mode_registry
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
 from pythinker_code.utils.export import is_sensitive_file
 from pythinker_code.utils.path import sanitize_cli_path, shorten_home
 from pythinker_code.wire.types import TurnBegin, TurnEnd
@@ -39,8 +40,9 @@ async def export(app: Shell, args: str):
         args=args,
         default_dir=Path(str(session.work_dir)),
     )
+    _t = _get_tui_tokens()
     if isinstance(result, str):
-        console.print(f"[yellow]{result}[/yellow]")
+        console.print(f"[{_t.warning}]{result}[/]")
         return
 
     output, count = result
@@ -48,10 +50,10 @@ async def export(app: Shell, args: str):
 
     track("export")
     display = shorten_home(HostPath(str(output)))
-    console.print(f"[green]Exported {count} messages to {display}[/green]")
+    console.print(f"[{_t.success}]Exported {count} messages to {display}[/]")
     console.print(
-        "[yellow]Note: The exported file may contain sensitive information. "
-        "Please be cautious when sharing it externally.[/yellow]"
+        f"[{_t.warning}]Note: The exported file may contain sensitive information. "
+        f"Please be cautious when sharing it externally.[/]"
     )
 
 
@@ -71,8 +73,9 @@ async def import_context(app: Shell, args: str):
         return
 
     target = sanitize_cli_path(args)
+    _t = _get_tui_tokens()
     if not target:
-        console.print("[yellow]Usage: /import <file_path or session_id>[/yellow]")
+        console.print(f"[{_t.warning}]Usage: /import <file_path or session_id>[/]")
         return
 
     session = soul.runtime.session
@@ -92,7 +95,7 @@ async def import_context(app: Shell, args: str):
         max_context_size=max_context_size,
     )
     if isinstance(result, str):
-        console.print(f"[red]{result}[/red]")
+        console.print(f"[{_t.error}]{result}[/]")
         return
 
     source_desc, content_len = result
@@ -107,11 +110,12 @@ async def import_context(app: Shell, args: str):
     await soul.wire_file.append_message(TurnEnd())
 
     console.print(
-        f"[green]Imported context from {source_desc} "
-        f"({content_len} chars) into current session.[/green]"
+        f"[{_t.success}]Imported context from {source_desc} "
+        f"({content_len} chars) into current session.[/]"
     )
     if source_desc.startswith("file") and is_sensitive_file(Path(target).name):
         console.print(
-            "[yellow]Warning: This file may contain secrets (API keys, tokens, credentials). "
-            "The content is now part of your session context.[/yellow]"
+            f"[{_t.warning}]Warning: This file may contain secrets "
+            "(API keys, tokens, credentials). "
+            "The content is now part of your session context.[/]"
         )

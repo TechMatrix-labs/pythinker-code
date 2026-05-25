@@ -105,7 +105,11 @@ class RunAgentsParams(BaseModel):
         description="Shared context prepended to every child prompt.",
     )
     agents: list[AgentRunConfig] = Field(
-        description="Child agents to launch with shared base_prompt plus their own prompt.",
+        description=(
+            "Child agents to launch with shared base_prompt plus their own prompt. "
+            "For background runs, the batch must fit available background task slots; "
+            "split larger maps into smaller batches."
+        ),
         min_length=1,
         max_length=8,
     )
@@ -420,17 +424,54 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
     params: type[RunAgentsParams] = RunAgentsParams
 
     def __init__(self, runtime: Runtime):
+        max_background = runtime.config.background.max_running_tasks
         super().__init__(
             description=(
                 "Launch a bounded group of focused child agents that share context. "
                 "Use this for scout/plan/implement/review/verify workflows when multiple "
                 "subtasks can be delegated together. Each child receives base_prompt, then "
                 "its own prompt. Background mode returns task IDs immediately; foreground "
-                "mode runs children sequentially and returns their summaries."
+                "mode runs children sequentially and returns their summaries. Background "
+                f"batches share the session background-task limit ({max_background} total "
+                "slots, including running shell/background tasks); split larger maps into "
+                "batches or set run_in_background=false."
             )
         )
         self._runtime = runtime
         self._agent_tool = AgentTool(runtime)
+
+    def _background_capacity_error(self, params: RunAgentsParams) -> ToolError | None:
+        if not params.run_in_background:
+            return None
+
+        requested = len(params.agents)
+        max_running = self._runtime.config.background.max_running_tasks
+        active = self._runtime.background_tasks.active_task_count()
+        available = max(0, max_running - active)
+        if requested <= available:
+            return None
+
+        message = (
+            f"RunAgents requested {requested} background agent(s), but only {available} "
+            f"background task slot(s) are available (active={active}, max={max_running}). "
+            "Launch fewer background agents, wait for existing tasks to finish, or set "
+            "run_in_background=false for sequential foreground execution."
+        )
+        output = "\n".join(
+            [
+                tool_status_line(ToolResultStatus.failure),
+                "reason: background_task_limit",
+                f"requested_agents: {requested}",
+                f"active_background_tasks: {active}",
+                f"max_background_tasks: {max_running}",
+                f"available_background_slots: {available}",
+                (
+                    "next_step: Reduce the background batch size, wait for active tasks to "
+                    "finish, or use run_in_background=false to run children sequentially."
+                ),
+            ]
+        )
+        return ToolError(message=message, brief="Background task limit", output=output)
 
     @override
     async def __call__(self, params: RunAgentsParams) -> ToolReturnValue:
@@ -448,6 +489,8 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
             requested_type = child.subagent_type or "coder"
             if err := self._agent_tool.check_execution_policy(requested_type):
                 return err
+        if err := self._background_capacity_error(params):
+            return err
 
         fingerprint = _run_agents_fingerprint(params)
         if self._runtime.approval.is_orchestration_approved(fingerprint):
@@ -465,6 +508,12 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
                 return approval.rejection_error()
             self._runtime.approval.approve_orchestration(fingerprint)
             orchestration_approval = "requested"
+
+        # Capacity can change while the human is considering the orchestration approval.
+        # Re-check immediately before launching children so RunAgents fails cleanly instead
+        # of partially launching a batch and then reporting a late task-limit error.
+        if err := self._background_capacity_error(params):
+            return err
 
         results: list[tuple[AgentRunConfig, ToolReturnValue]] = []
         for child in params.agents:

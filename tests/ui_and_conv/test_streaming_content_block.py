@@ -242,17 +242,19 @@ def _style_for(renderable: Text, text: str) -> Style:
     return Style.parse(span.style) if isinstance(span.style, str) else span.style
 
 
-def test_composing_and_thinking_labels_are_muted_grey():
-    # Both Composing and Thinking read as muted grey (thinking_text), never the
-    # bright activity-label white.
-    muted = tui_rich_style("thinking_text").color
+def test_composing_and_thinking_labels_are_neutral_grey():
+    # Both Composing and Thinking read as neutral thinking grey, never the
+    # bright activity-label white or purple-tinted muted color.
+    thinking_grey = tui_rich_style("thinking_text").color
+    muted = tui_rich_style("muted").color
     bright = tui_rich_style("activity_label").color
 
     composing = _ContentBlock(is_think=False)
     composing.append("hello")
     composing_renderable = composing.compose()
     assert isinstance(composing_renderable, Text)
-    assert _style_for(composing_renderable, "Composing").color == muted
+    assert _style_for(composing_renderable, "Composing").color == thinking_grey
+    assert _style_for(composing_renderable, "Composing").color != muted
     assert _style_for(composing_renderable, "Composing").color != bright
 
     thinking = _ContentBlock(is_think=True)
@@ -260,7 +262,8 @@ def test_composing_and_thinking_labels_are_muted_grey():
     thinking_renderable = thinking.compose()
     assert isinstance(thinking_renderable, Text)
     thinking_style = _style_for(thinking_renderable, "Thinking")
-    assert thinking_style.color == muted
+    assert thinking_style.color == thinking_grey
+    assert thinking_style.color != muted
     assert thinking_style.color != bright
     assert thinking_style.italic
 

@@ -7,6 +7,7 @@ from rich.segment import Segment
 from pythinker_code.ui.shell.usage_adapters.base import UsageRow
 from pythinker_code.ui.shell.usage_adapters.pythinker import _to_int
 from pythinker_code.ui.shell.usage_render import _format_row, _ratio_color, _remaining_quota
+from pythinker_code.ui.theme import tui_rich_style
 
 
 def _render_segments(row: UsageRow, label_width: int = 6) -> list[Segment]:
@@ -29,19 +30,21 @@ def _filled_bar_segments(segments: list[Segment]) -> list[Segment]:
 
 
 @pytest.mark.parametrize(
-    ("remaining_ratio", "expected"),
+    ("remaining_ratio", "expected_token"),
     [
-        (1.0, "green"),
-        (0.31, "green"),
-        (0.3, "yellow"),
-        (0.11, "yellow"),
-        (0.1, "red"),
-        (0.0, "red"),
-        (-0.1, "red"),
+        (1.0, "success"),
+        (0.31, "success"),
+        (0.3, "warning"),
+        (0.11, "warning"),
+        (0.1, "error"),
+        (0.0, "error"),
+        (-0.1, "error"),
     ],
 )
-def test_ratio_color_uses_remaining_quota_ratio(remaining_ratio: float, expected: str) -> None:
-    assert _ratio_color(remaining_ratio) == expected
+def test_ratio_color_uses_remaining_quota_ratio(
+    remaining_ratio: float, expected_token: str
+) -> None:
+    assert _ratio_color(remaining_ratio) == tui_rich_style(expected_token)
 
 
 @pytest.mark.parametrize(
@@ -75,19 +78,19 @@ def test_remaining_quota_clamps_unusual_api_values(
 
 
 @pytest.mark.parametrize(
-    ("used", "limit", "expected_bar_width", "expected_color", "expected_text"),
+    ("used", "limit", "expected_bar_width", "expected_token", "expected_text"),
     [
-        (0, 100, 20, "green", "100% left"),
-        (30, 100, 14, "green", "70% left"),
-        (70, 100, 6, "yellow", "30% left"),
-        (90, 100, 2, "red", "10% left"),
+        (0, 100, 20, "success", "100% left"),
+        (30, 100, 14, "success", "70% left"),
+        (70, 100, 6, "warning", "30% left"),
+        (90, 100, 2, "error", "10% left"),
     ],
 )
 def test_format_row_renders_remaining_quota(
     used: int,
     limit: int,
     expected_bar_width: int,
-    expected_color: str,
+    expected_token: str,
     expected_text: str,
 ) -> None:
     segments = _render_segments(UsageRow(label="Weekly", used=used, limit=limit))
@@ -97,7 +100,7 @@ def test_format_row_renders_remaining_quota(
     assert expected_text in _plain_text(segments)
     assert len(bar_segments) == 1
     assert bar_segments[0].text == "━" * expected_bar_width
-    assert str(bar_segments[0].style) == expected_color
+    assert str(bar_segments[0].style) == str(tui_rich_style(expected_token))
 
 
 @pytest.mark.parametrize(("used", "limit"), [(0, 0), (0, -10), (100, 100), (150, 100)])

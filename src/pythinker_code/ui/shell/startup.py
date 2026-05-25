@@ -15,13 +15,14 @@ class ShellStartupProgress:
     def update(self, message: str) -> None:
         if not self._enabled:
             return
+        from pythinker_code.ui.theme import get_tui_tokens
 
-        status_message = f"[cyan]{message}[/cyan]"
+        accent = get_tui_tokens().accent or "cyan"
+        status_message = f"[{accent}]{message}[/{accent}]"
         if self._status is None:
             self._status = console.status(status_message, spinner="dots")
             self._status.start()
             return
-
         self._status.update(status_message)
 
     def stop(self) -> None:

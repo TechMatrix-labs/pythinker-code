@@ -147,6 +147,29 @@ def test_read_error_prefers_structured_message():
     assert "File not found" in rendered
 
 
+def test_read_directory_result_says_listed_directory():
+    defn = get_tool_renderer("ReadFile")
+    assert defn is not None
+    comp = ToolExecutionComponent("ReadFile", "tc-1", definition=defn, cwd="/repo")
+    comp.update_args({"path": "/repo/.pythinker-review/security-scan/data/project"})
+    comp.mark_execution_started()
+    comp.set_args_complete()
+    comp.set_result(
+        ToolResultPayload(
+            text="├── project.json\n└── runs/",
+            is_error=False,
+            details={
+                "message": "Directory listing for `/repo/.pythinker-review/security-scan/data/project`. Use ReadFile on a file path to read file contents.",
+                "output": "├── project.json\n└── runs/",
+            },
+        )
+    )
+
+    rendered = render_plain(comp.render(), width=100)
+    assert "Listed directory" in rendered
+    assert "Read 2 lines" not in rendered
+
+
 # ---------------------------------------------------------------------------
 # write
 # ---------------------------------------------------------------------------

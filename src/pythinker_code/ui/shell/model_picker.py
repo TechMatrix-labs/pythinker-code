@@ -273,19 +273,20 @@ class ModelPickerApp:
 def _model_picker_style():
     from prompt_toolkit.styles import Style as PTKStyle
 
-    from pythinker_code.ui.theme import get_task_browser_style
+    from pythinker_code.ui.theme import get_task_browser_style, get_tui_tokens
 
     base = get_task_browser_style()
+    tokens = get_tui_tokens()
     extra = PTKStyle.from_dict(
         {
-            "provider-header": "#9CA3AF bold",
-            "selected-row": "bg:#164e63 #ecfeff bold",
+            "provider-header": f"{tokens.muted} bold",
+            "selected-row": f"bg:{tokens.selected_bg} {tokens.info} bold",
             "option": "",
-            "filter": "bg:#0f172a",
-            "filter.label": "bg:#0f172a #cbd5e1",
-            "filter.text": "bg:#0f172a #ecfeff bold",
-            "filter.cursor": "bg:#0f172a #9CA3AF",
-            "filter.hint": "bg:#0f172a #64748b italic",
+            "filter": f"bg:{tokens.tool_pending_bg}",
+            "filter.label": f"bg:{tokens.tool_pending_bg} {tokens.muted}",
+            "filter.text": f"bg:{tokens.tool_pending_bg} {tokens.info} bold",
+            "filter.cursor": f"bg:{tokens.tool_pending_bg} {tokens.accent}",
+            "filter.hint": f"bg:{tokens.tool_pending_bg} {tokens.dim} italic",
         }
     )
     return PTKStyle([*base.style_rules, *extra.style_rules])

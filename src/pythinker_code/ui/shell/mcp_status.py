@@ -9,7 +9,7 @@ from rich.text import Text
 
 from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
 from pythinker_code.ui.shell.motion import reduced_motion_enabled
-from pythinker_code.ui.theme import get_mcp_prompt_colors
+from pythinker_code.ui.theme import get_mcp_prompt_colors, tui_rich_style
 from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.wire.types import MCPServerSnapshot, MCPStatusSnapshot
 
@@ -25,7 +25,7 @@ def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
     )
     if snapshot.loading:
         glyph = "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
-        header = Text(f"{glyph} ", style=Style(color="grey50"))
+        header = Text(f"{glyph} ", style=tui_rich_style("muted"))
         header.append_text(header_text)
     else:
         header = header_text
@@ -39,17 +39,17 @@ def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
         if server.status == "unauthorized":
             server_line.append(
                 f" (unauthorized - run: pythinker mcp auth {server_name})",
-                style="grey50",
+                style=tui_rich_style("muted"),
             )
         elif server.status != "connected":
-            server_line.append(f" ({server_status})", style="grey50")
+            server_line.append(f" ({server_status})", style=tui_rich_style("muted"))
 
         lines: list[RenderableType] = [server_line]
         for tool_name in server.tools:
             lines.append(
                 BulletColumns(
-                    Text(_safe_text(tool_name), style="grey50"),
-                    bullet_style="grey50",
+                    Text(_safe_text(tool_name), style=tui_rich_style("muted")),
+                    bullet_style=tui_rich_style("muted"),
                 )
             )
         renderables.append(BulletColumns(Group(*lines), bullet_style=color))
@@ -86,14 +86,14 @@ def render_mcp_prompt(snapshot: MCPStatusSnapshot, *, now: float | None = None) 
     return FormattedText(fragments)
 
 
-def _status_color(status: str) -> str:
+def _status_color(status: str) -> Style:
     return {
-        "connected": "green",
-        "connecting": "cyan",
-        "pending": "yellow",
-        "failed": "red",
-        "unauthorized": "red",
-    }.get(status, "red")
+        "connected": tui_rich_style("success"),
+        "connecting": tui_rich_style("info"),
+        "pending": tui_rich_style("warning"),
+        "failed": tui_rich_style("error"),
+        "unauthorized": tui_rich_style("error"),
+    }.get(status, tui_rich_style("error"))
 
 
 def _prompt_status_style(status: str) -> str:

@@ -24,6 +24,7 @@ from pythinker_code.ui.shell.tool_renderers._render_utils import (
     running_spinner,
     tool_call_header,
 )
+from pythinker_code.ui.theme import tui_rich_style
 
 _GENERIC_TOOL_NAME = "__generic__"
 """Sentinel name used to register the fallback. Tools without their own
@@ -48,7 +49,7 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
         body = json.dumps(ctx.args, indent=2, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError):
         body = repr(ctx.args)
-    rendered = Group(header, Text(body, style="grey50"))
+    rendered = Group(header, Text(body, style=tui_rich_style("muted")))
     return running_spinner(
         rendered, execution_started=ctx.execution_started, has_result=ctx.has_result
     )

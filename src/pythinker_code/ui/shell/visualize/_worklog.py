@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from enum import Enum
 
 from pythinker_core.tooling import BriefDisplayBlock, DisplayBlock
+from rich import box
 from rich.console import Group, RenderableType
 from rich.panel import Panel
-from rich.style import Style
+from rich.style import Style, StyleType
 from rich.text import Text
 
 from pythinker_code.tools.display import (
@@ -19,6 +20,7 @@ from pythinker_code.ui.shell.components.markdown import PythinkerMarkdown as Mar
 from pythinker_code.ui.shell.design_system import ShellTone, StatusName, shell_style, status_icon
 from pythinker_code.ui.shell.motion import reduced_motion_enabled
 from pythinker_code.ui.shell.spacing import WORKLOG_PANEL_PADDING
+from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
 from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.utils.rich.diff_render import (
     collect_diff_hunks,
@@ -43,25 +45,25 @@ class ToolStyle:
 
 
 _TOOL_STYLES: dict[str, ToolStyle] = {
-    "Read": ToolStyle("Read", "->", "cyan"),
-    "ReadFile": ToolStyle("Read", "->", "cyan"),
-    "Grep": ToolStyle("Search", "*", "blue"),
-    "Glob": ToolStyle("Find", "*", "blue"),
-    "Edit": ToolStyle("Edit", "<-", "magenta"),
-    "Replace": ToolStyle("Edit", "<-", "magenta"),
-    "Write": ToolStyle("Write", "<-", "magenta"),
-    "WriteFile": ToolStyle("Write", "<-", "magenta"),
-    "ApplyPatch": ToolStyle("Patch", "◆", "magenta"),
-    "Bash": ToolStyle("Shell", "$", "green"),
-    "Shell": ToolStyle("Shell", "$", "green"),
-    "TodoWrite": ToolStyle("Todo", "☑", "yellow"),
-    "Agent": ToolStyle("Subagent", "●", "#9CA3AF"),
-    "Task": ToolStyle("Subagent", "●", "#9CA3AF"),
-    "AskUser": ToolStyle("Ask", "?", "yellow"),
-    "FetchURL": ToolStyle("Fetch", "%", "blue"),
-    "WebFetch": ToolStyle("Fetch", "%", "blue"),
-    "WebSearch": ToolStyle("Search", "◈", "blue"),
-    "Skill": ToolStyle("Skill", "◇", "cyan"),
+    "Read": ToolStyle("Read", "->", "info"),
+    "ReadFile": ToolStyle("Read", "->", "info"),
+    "Grep": ToolStyle("Search", "*", "info"),
+    "Glob": ToolStyle("Find", "*", "info"),
+    "Edit": ToolStyle("Edit", "<-", "accent"),
+    "Replace": ToolStyle("Edit", "<-", "accent"),
+    "Write": ToolStyle("Write", "<-", "accent"),
+    "WriteFile": ToolStyle("Write", "<-", "accent"),
+    "ApplyPatch": ToolStyle("Patch", "◆", "accent"),
+    "Bash": ToolStyle("Shell", "$", "success"),
+    "Shell": ToolStyle("Shell", "$", "success"),
+    "TodoWrite": ToolStyle("Todo", "☑", "warning"),
+    "Agent": ToolStyle("Subagent", "●", "muted"),
+    "Task": ToolStyle("Subagent", "●", "muted"),
+    "AskUser": ToolStyle("Ask", "?", "warning"),
+    "FetchURL": ToolStyle("Fetch", "%", "info"),
+    "WebFetch": ToolStyle("Fetch", "%", "info"),
+    "WebSearch": ToolStyle("Search", "◈", "info"),
+    "Skill": ToolStyle("Skill", "◇", "info"),
 }
 
 
@@ -93,8 +95,14 @@ def _state_icon(state: WorkLogState) -> Text:
     return icon
 
 
+def _tool_token_style(token_name: str) -> str:
+    tokens = get_tui_tokens()
+    return getattr(tokens, token_name, tokens.info)
+
+
 def tool_style(name: str) -> ToolStyle:
-    return _TOOL_STYLES.get(name, ToolStyle(name, "⚙", "blue"))
+    style = _TOOL_STYLES.get(name, ToolStyle(name, "⚙", "info"))
+    return ToolStyle(style.label, style.icon, _tool_token_style(style.style))
 
 
 def denied_error(message: str) -> bool:
@@ -120,7 +128,7 @@ def render_worklog_entry(
     state: WorkLogState,
     detail: str | None = None,
     icon: str = "•",
-    icon_style: str = "blue",
+    icon_style: str = "info",
     icon_renderable: RenderableType | None = None,
     children: list[RenderableType] | None = None,
 ) -> RenderableType:
@@ -131,11 +139,11 @@ def render_worklog_entry(
     line.append(label, style="bold")
     if target:
         line.append(" ")
-        line.append(target, style="grey70")
+        line.append(target, style=tui_rich_style("muted"))
     line.append(" ")
     line.append(state.value, style=_STATE_STYLE[state])
     if detail:
-        line.append(" · ", style="grey50")
+        line.append(" · ", style=tui_rich_style("muted"))
         line.append(detail, style=_STATE_STYLE[state])
     if icon_renderable is not None:
         return BulletColumns(
@@ -152,7 +160,7 @@ def render_worklog_card(
     body: RenderableType,
     *,
     subtitle: str | None = None,
-    border_style: str = "grey39",
+    border_style: StyleType = "grey39",
 ) -> Panel:
     return Panel(
         body,
@@ -161,6 +169,7 @@ def render_worklog_card(
         subtitle=subtitle,
         subtitle_align="left",
         border_style=border_style,
+        box=box.ROUNDED,
         padding=WORKLOG_PANEL_PADDING,
         expand=False,
     )
@@ -209,13 +218,15 @@ def render_display_blocks(
             text = block.text.strip()
             if text:
                 title = "Error" if is_error else "Report"
-                style = "red" if is_error else "grey70"
+                style = tui_rich_style("error") if is_error else tui_rich_style("muted")
                 if "\n" in text or len(text) > 100:
                     rendered.append(
                         render_worklog_card(
                             title,
                             Markdown(text, style=style),
-                            border_style="red" if is_error else "grey39",
+                            border_style=tui_rich_style("error")
+                            if is_error
+                            else tui_rich_style("dim"),
                         )
                     )
                 else:
@@ -233,7 +244,9 @@ def render_display_blocks(
                     case _:
                         marker = "·"
                 lines.append(f"{marker} {todo.title}")
-            rendered.append(render_worklog_card("Todos", Text("\n".join(lines), style="grey70")))
+            rendered.append(
+                render_worklog_card("Todos", Text("\n".join(lines), style=tui_rich_style("muted")))
+            )
             idx += 1
             continue
         if isinstance(block, BackgroundTaskDisplayBlock):
@@ -242,7 +255,7 @@ def render_display_blocks(
                     "Background task",
                     Text(
                         f"{block.task_id} [{block.status}] {block.kind}: {block.description}",
-                        style="grey70",
+                        style=tui_rich_style("muted"),
                     ),
                 )
             )

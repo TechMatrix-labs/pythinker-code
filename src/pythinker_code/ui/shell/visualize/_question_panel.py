@@ -19,6 +19,7 @@ from pythinker_code.ui.shell.keyboard import KeyEvent
 from pythinker_code.ui.shell.keymap import key_text
 from pythinker_code.ui.shell.spacing import blank_row
 from pythinker_code.ui.shell.visualize._dialog_shell import DialogOption, render_dialog
+from pythinker_code.ui.theme import get_tui_tokens, tui_rich_style
 from pythinker_code.wire.types import QuestionRequest
 
 OTHER_OPTION_LABEL = "Other"
@@ -123,21 +124,22 @@ class QuestionRequestPanel:
         q = self._current_question
         lines: list[RenderableType] = []
 
+        _tok = get_tui_tokens()
         if len(self.request.questions) > 1:
             tab_parts: list[str] = []
             for i, qi in enumerate(self.request.questions):
                 label = _safe_markup_text(qi.header or f"Q{i + 1}")
                 if i == self._current_question_index:
-                    icon, style = "\u25cf", "bold cyan"
+                    icon, style = "\u25cf", f"bold {_tok.info}"
                 elif qi.question in self._answers:
-                    icon, style = "\u2713", "green"
+                    icon, style = "\u2713", _tok.success
                 else:
-                    icon, style = "\u25cb", "grey50"
-                tab_parts.append(f"[{style}]({icon}) {label}[/{style}]")
+                    icon, style = "\u25cb", _tok.muted
+                tab_parts.append(f"[{style}]({icon}) {label}[/]")
             lines.append(Text.from_markup("  ".join(tab_parts)))
             lines.append(blank_row())
 
-        lines.append(Text.from_markup(f"[yellow]? {_safe_markup_text(q.question)}[/yellow]"))
+        lines.append(Text.from_markup(f"[{_tok.warning}]? {_safe_markup_text(q.question)}[/]"))
         if q.multi_select:
             lines.append(Text("  (SPACE to toggle, ENTER to submit)", style="dim italic"))
         lines.append(blank_row())
@@ -146,7 +148,7 @@ class QuestionRequestPanel:
         if self._body_text:
             lines.append(
                 Text.from_markup(
-                    f"[bold cyan]  \u25b6 Press {expand_key} to view full content[/bold cyan]"
+                    f"[bold {_tok.info}]  \u25b6 Press {expand_key} to view full content[/]"
                 )
             )
             lines.append(blank_row())
@@ -194,7 +196,7 @@ class QuestionRequestPanel:
             body=lines,
             options=dialog_options,
             footer=footer,
-            border_style="yellow",
+            border_style=tui_rich_style("warning"),
         )
 
     def save_other_draft(self, text: str) -> None:
@@ -300,9 +302,10 @@ class QuestionRequestPanel:
 
 
 def show_question_body_in_pager(panel: QuestionRequestPanel) -> None:
+    _warn = get_tui_tokens().warning
     with console.screen(), console.pager(styles=True):
         console.print(
-            Text.from_markup(f"[yellow]? {_safe_markup_text(panel.current_question_text)}[/yellow]")
+            Text.from_markup(f"[{_warn}]? {_safe_markup_text(panel.current_question_text)}[/]")
         )
         console.print()
         for renderable in panel.render_full_body():
@@ -310,7 +313,8 @@ def show_question_body_in_pager(panel: QuestionRequestPanel) -> None:
 
 
 async def prompt_other_input(question_text: str) -> str:
-    console.print(Text.from_markup(f"\n[yellow]? {_safe_markup_text(question_text)}[/yellow]"))
+    _warn = get_tui_tokens().warning
+    console.print(Text.from_markup(f"\n[{_warn}]? {_safe_markup_text(question_text)}[/]"))
     console.print(Text("  Enter your answer:", style="dim"))
     try:
         session: PromptSession[str] = PromptSession()

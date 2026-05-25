@@ -25,6 +25,7 @@ from pythinker_code.ui.shell.usage_render import (
 from pythinker_code.ui.shell.usage_render import (
     remaining_quota as _remaining_quota,
 )
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
 from pythinker_code.usage_ratelimit_cache import get_cache
 from pythinker_code.utils.datetime import format_duration
 
@@ -106,7 +107,8 @@ def _print_no_usage_providers(json_mode: bool) -> None:
     if json_mode:
         _print_json([])
         return
-    console.print("[yellow]No providers with usage support are configured.[/yellow]")
+    _t = _get_tui_tokens()
+    console.print(f"[{_t.warning}]No providers with usage support are configured.[/]")
 
 
 def _ratelimit_fallback_report(provider_key: str, provider_label: str) -> UsageReport | None:
@@ -203,10 +205,11 @@ async def usage(app: Shell, args: str):
     """
     assert isinstance(app.soul, PythinkerSoul)
 
+    _t = _get_tui_tokens()
     try:
         tokens = shlex.split(args.strip())
     except ValueError as e:
-        console.print(f"[red]Invalid usage arguments: {e}[/red]")
+        console.print(f"[{_t.error}]Invalid usage arguments: {e}[/]")
         return
 
     json_mode = "--json" in tokens
@@ -250,11 +253,11 @@ async def usage(app: Shell, args: str):
                 _print_json([])
             else:
                 console.print(
-                    f"[yellow]Usage tracking is not yet available for the active "
+                    f"[{_t.warning}]Usage tracking is not yet available for the active "
                     f"provider ({active_provider_key}). Send a message first so "
                     f"live rate-limit headers can be captured, or run "
                     f"[bold]/usage all[/bold] to see other configured providers."
-                    f"[/yellow]"
+                    f"[/]"
                 )
             return
         _print_no_usage_providers(json_mode)
@@ -268,7 +271,7 @@ async def usage(app: Shell, args: str):
         _print_json([r.to_dict() for r in reports])
         return
 
-    with console.status("[cyan]Fetching usage...[/cyan]"):
+    with console.status(f"[{_t.info}]Fetching usage...[/]"):
         reports = await _gather_reports(pairs, app.soul.runtime.oauth)
 
     # Swap any empty primary report for a live-rate-limit fallback when one
@@ -284,7 +287,7 @@ async def usage(app: Shell, args: str):
         if scoped_to_active and len(reports) == 1:
             console.print(build_panel(reports[0]))
             return
-        console.print("[yellow]No usage data available.[/yellow]")
+        console.print(f"[{_t.warning}]No usage data available.[/]")
         return
 
     for report in non_empty_reports:

@@ -103,12 +103,28 @@ async def test_read_nonexistent_file(read_file_tool: ReadFile, temp_work_dir: Ho
     assert result.brief == snapshot("File not found")
 
 
-async def test_read_directory_instead_of_file(read_file_tool: ReadFile, temp_work_dir: HostPath):
-    """Test attempting to read a directory."""
+async def test_read_directory_returns_compact_listing(
+    read_file_tool: ReadFile, temp_work_dir: HostPath
+):
+    """Test reading a directory returns a bounded listing instead of a dead-end error."""
+    await (temp_work_dir / "child").mkdir()
+    await (temp_work_dir / "child" / "nested.txt").write_text("nested")
+    await (temp_work_dir / "root.txt").write_text("root")
+
     result = await read_file_tool(Params(path=str(temp_work_dir)))
-    assert result.is_error
-    assert result.message == snapshot(f"`{temp_work_dir}` is not a file.")
-    assert result.brief == snapshot("Invalid path")
+
+    assert not result.is_error
+    assert result.message == snapshot(
+        f"Directory listing for `{temp_work_dir}`. Use ReadFile on a file path to read file contents."
+    )
+    assert result.brief == snapshot("Listed directory")
+    assert result.output == snapshot(
+        """\
+├── child/
+│   └── nested.txt
+└── root.txt\
+"""
+    )
 
 
 async def test_read_with_relative_path(

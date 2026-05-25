@@ -11,6 +11,7 @@ from prompt_toolkit.layout import HSplit, Layout, VSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Box, Frame, RadioList
+from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
@@ -18,6 +19,8 @@ from rich.text import Text
 from pythinker_code.background import TaskView, is_terminal_status
 from pythinker_code.soul.pythinkersoul import PythinkerSoul
 from pythinker_code.ui.shell.console import console
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.datetime import format_duration, format_relative_time
 
 TaskBrowserFilter = Literal["all", "active"]
@@ -268,7 +271,8 @@ class TaskBrowserApp:
         def render() -> None:
             view = self._model.view_for(task_id)
             if view is None:
-                console.print(f"[yellow]Task not found: {task_id}[/yellow]")
+                _t = _get_tui_tokens()
+                console.print(f"[{_t.warning}]Task not found: {task_id}[/]")
                 return
             with console.pager(styles=True):
                 console.print(_build_full_output_renderable(view, self._model.full_output(task_id)))
@@ -459,7 +463,8 @@ def _build_full_output_renderable(view: TaskView, output: str) -> Panel:
             Text(output),
         ),
         title="Background Task Output",
-        border_style="cyan",
+        border_style=tui_rich_style("border"),
+        box=box.ROUNDED,
     )
 
 

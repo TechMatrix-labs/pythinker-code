@@ -9,6 +9,7 @@ from pythinker_code.ui.shell.design_system import (
     keyboard_hint,
     render_row,
     render_segment_line,
+    shell_style,
     status_icon,
 )
 
@@ -57,3 +58,22 @@ def test_render_row_combines_icon_and_content():
     output = _plain(render_row(status_icon("completed"), "done"))
     assert "✓" in output
     assert "done" in output
+
+
+def test_shell_style_resolves_brand_tokens_and_switches_theme():
+    from pythinker_code.ui.theme import set_active_theme
+
+    set_active_theme("dark")
+    assert shell_style(ShellTone.ACCENT).color.triplet.hex.lower() == "#5ea7e8"
+    assert shell_style(ShellTone.SUCCESS).color.triplet.hex.lower() == "#7bc97f"
+    set_active_theme("light")
+    assert shell_style(ShellTone.ACCENT).color.triplet.hex.lower() == "#256ea8"
+    set_active_theme("dark")
+
+
+def test_verb_spinner_stays_orange_independent_of_accent_token():
+    from pythinker_code.ui.shell.motion import verb_spinner_style
+    from pythinker_code.ui.theme import set_active_theme
+
+    set_active_theme("dark")
+    assert verb_spinner_style().color.triplet.hex.lower() == "#ee9983"

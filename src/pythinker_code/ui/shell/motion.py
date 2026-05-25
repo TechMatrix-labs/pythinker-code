@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 
+from rich.color import Color
 from rich.style import Style
 from rich.text import Text
 
@@ -19,11 +20,64 @@ from pythinker_code.ui.shell.glyphs import (
     SPINNER_FRAME_INTERVAL_S,
     SPINNER_FRAMES,
 )
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.datetime import format_elapsed
 
 _FRAMES = SPINNER_FRAMES
 _FRAME_INTERVAL_S = SPINNER_FRAME_INTERVAL_S
-_VERB_SPINNER_STYLE = Style(color="#F5A97F")
+
+
+def verb_spinner_style() -> Style:
+    """Orange style for the active verb spinner word."""
+    return Style(color=Color.parse("#EE9983"))  # brand-exception: verb shimmer orange
+
+
+# ChatGPT-like clean shimmer: a subtle orange sweep on the active verb only.
+_SHIMMER_BASE = "#EE9983"  # brand-exception: orange shimmer literal
+_SHIMMER_MID = "#F2A892"  # brand-exception: orange shimmer literal
+_SHIMMER_HIGHLIGHT = "#FFD5C7"  # brand-exception: orange shimmer literal
+_SHIMMER_INTERVAL_S = 0.22
+_SPINNER_SILVER_STYLE = Style(color=Color.parse("#C0C0C0"))  # brand-exception: silver spinner
+
+
+def shimmer_spinner_style(elapsed_s: float, *, reduced_motion: bool = False) -> Style:
+    """Clean orange shimmer color for active verb text.
+
+    Reduced motion pins to the base orange so the word stays calm.
+    """
+    if reduced_motion or reduced_motion_enabled():
+        return Style(color=Color.parse(_SHIMMER_BASE))
+    palette = (_SHIMMER_BASE, _SHIMMER_MID, _SHIMMER_HIGHLIGHT, _SHIMMER_MID)
+    idx = int(max(0.0, elapsed_s) / _SHIMMER_INTERVAL_S) % len(palette)
+    return Style(color=Color.parse(palette[idx]))
+
+
+def _shimmer_label_text(label: str, elapsed_s: float, *, reduced_motion: bool) -> Text:
+    """Return a subtle per-character shimmer for the active verb label."""
+    if reduced_motion or reduced_motion_enabled():
+        return Text(label, style=shimmer_spinner_style(elapsed_s, reduced_motion=True))
+
+    chars = list(label)
+    if not chars:
+        return Text("")
+    # Sweep one bright highlight right-to-left with an asymmetric, slightly
+    # wider trail. The uneven trail reads like an angled sheen instead of a flat pulse.
+    phase = int(max(0.0, elapsed_s) / _SHIMMER_INTERVAL_S) % (len(chars) + 6)
+    head = len(chars) + 2 - phase
+    rendered = Text()
+    for i, char in enumerate(chars):
+        if char.isspace():
+            rendered.append(char)
+            continue
+        offset = i - head
+        if offset == 0:
+            color = _SHIMMER_HIGHLIGHT
+        elif offset in (-1, 1, 2, 3):
+            color = _SHIMMER_MID
+        else:
+            color = _SHIMMER_BASE
+        rendered.append(char, style=Style(color=Color.parse(color)))
+    return rendered
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,14 +137,21 @@ def _activity_label(label: str) -> str:
 
 def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None) -> Text:
     reduced = snapshot.reduced_motion or reduced_motion_enabled()
+    thinking_style = tui_rich_style("thinking_text")
     if snapshot.stalled:
         glyph_style = shell_style(ShellTone.WARNING)
     elif snapshot.spinner == "shape":
-        # Composing / Thinking: muted grey, not the bright coral verb accent.
-        glyph_style = shell_style(ShellTone.MUTED)
+        # Composing / Thinking: neutral muted grey, not the bright coral verb accent.
+        glyph_style = thinking_style
     else:
-        glyph_style = _VERB_SPINNER_STYLE
-    label_style = snapshot.label_style if snapshot.label_style is not None else _VERB_SPINNER_STYLE
+        # The dotted braille spinner is a marker; keep it silver while the verb shimmers.
+        glyph_style = _SPINNER_SILVER_STYLE
+    if snapshot.label_style is not None:
+        label_style = snapshot.label_style
+    elif snapshot.spinner == "shape":
+        label_style = thinking_style
+    else:
+        label_style = shimmer_spinner_style(snapshot.elapsed_s, reduced_motion=reduced)
     if snapshot.label.lower() == "thinking":
         label_style += Style(italic=True)
     if snapshot.spinner == "shape":
@@ -104,7 +165,14 @@ def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None
         style=glyph_style,
     )
     text.append(" ")
-    text.append(_activity_label(snapshot.label), style=label_style)
+    label_text = _activity_label(snapshot.label)
+    if snapshot.label_style is None and snapshot.spinner != "shape":
+        shimmered = _shimmer_label_text(label_text, snapshot.elapsed_s, reduced_motion=reduced)
+        if snapshot.label.lower() == "thinking":
+            shimmered.stylize(Style(italic=True))
+        text.append_text(shimmered)
+    else:
+        text.append(label_text, style=label_style)
 
     parts = _candidate_parts(snapshot)
     if width is not None:
@@ -116,7 +184,8 @@ def activity_status_line(snapshot: ActivitySnapshot, *, width: int | None = None
                 kept.append(part)
         parts = kept
     if parts:
-        text.append(" ", style=shell_style(ShellTone.MUTED))
-        text.append("· ", style=shell_style(ShellTone.MUTED))
-        text.append(" · ".join(parts), style=shell_style(ShellTone.MUTED))
+        secondary_style = thinking_style
+        text.append(" ", style=secondary_style)
+        text.append("· ", style=secondary_style)
+        text.append(" · ".join(parts), style=secondary_style)
     return text

@@ -18,6 +18,7 @@ from pythinker_core.chat_provider import (
     APITimeoutError,
     ChatProviderError,
 )
+from rich import box
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
@@ -59,6 +60,8 @@ from pythinker_code.ui.shell.visualize import (
     ApprovalPromptDelegate,
     visualize,
 )
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
+from pythinker_code.ui.theme import tui_rich_style
 from pythinker_code.utils.aioqueue import QueueShutDown
 from pythinker_code.utils.envvar import get_env_bool
 from pythinker_code.utils.logging import logger
@@ -101,13 +104,13 @@ def _format_local_shell_output(
     """
     children: list[RenderableType] = []
     if stdout:
-        children.append(Text(sanitize_ansi(stdout).rstrip("\n"), style="grey70"))
+        children.append(Text(sanitize_ansi(stdout).rstrip("\n"), style=tui_rich_style("muted")))
     if stderr:
-        children.append(Text(sanitize_ansi(stderr).rstrip("\n"), style="red"))
+        children.append(Text(sanitize_ansi(stderr).rstrip("\n"), style=tui_rich_style("error")))
     if not stdout and not stderr:
-        children.append(Text("(No output)", style="grey50"))
+        children.append(Text("(No output)", style=tui_rich_style("muted")))
     if returncode not in (None, 0):
-        children.append(Text(f"exit {returncode}", style="red"))
+        children.append(Text(f"exit {returncode}", style=tui_rich_style("error")))
     if not children:
         return None
     return Group(*children) if len(children) > 1 else children[0]
@@ -387,8 +390,9 @@ class Shell:
                     style="dim",
                 ),
             ),
-            title="[bold red]Session crashed[/bold red]",
-            border_style="red",
+            title="[bold]Session crashed[/bold]",
+            border_style=tui_rich_style("error"),
+            box=box.ROUNDED,
         )
         console.print()
         console.print(panel)
@@ -774,7 +778,8 @@ class Shell:
                         continue
 
                     if event.kind == "interrupt":
-                        console.print("[grey50]Tip: press Ctrl-D or send 'exit' to quit[/grey50]")
+                        _t = _get_tui_tokens()
+                        console.print(f"[{_t.muted}]Tip: press Ctrl-D or send 'exit' to quit[/]")
                         resume_prompt.set()
                         continue
 
@@ -908,9 +913,10 @@ class Shell:
                 await self._run_slash_command(slash_cmd_call)
                 return
             else:
+                _t = _get_tui_tokens()
                 console.print(
-                    f'[yellow]"/{slash_cmd_call.name}" is not available in shell mode. '
-                    "Press Ctrl-X to switch to agent mode.[/yellow]"
+                    f'[{_t.warning}]"/{slash_cmd_call.name}" is not available in shell mode. '
+                    "Press Ctrl-X to switch to agent mode.[/]"
                 )
                 return
 
@@ -922,9 +928,10 @@ class Shell:
         except ValueError as exc:
             logger.debug("Failed to parse shell command for cd check: {error}", error=exc)
         if split_cmd and len(split_cmd) == 2 and split_cmd[0] == "cd":
+            _t = _get_tui_tokens()
             console.print(
-                "[yellow]Warning: Directory changes are not preserved across command executions."
-                "[/yellow]"
+                f"[{_t.warning}]Warning: Directory changes are not preserved "
+                "across command executions.[/]"
             )
             return
 
@@ -987,7 +994,7 @@ class Shell:
                 console.print(render_message_response(output))
         except Exception as e:
             logger.exception("Failed to run shell command:")
-            console.print(f"[red]Failed to run shell command: {e}[/red]")
+            console.print(f"[{_get_tui_tokens().error}]Failed to run shell command: {e}[/]")
         finally:
             remove_sigint()
 
@@ -999,9 +1006,10 @@ class Shell:
         if available_command is None:
             logger.info("Unknown slash command /{command}", command=command_call.name)
             track("input_command_invalid")
+            _t = _get_tui_tokens()
             console.print(
-                f'[red]Unknown slash command "/{command_call.name}", '
-                'type "/" for all available commands[/red]'
+                f'[{_t.error}]Unknown slash command "/{command_call.name}", '
+                'type "/" for all available commands[/]'
             )
             return
 
@@ -1029,10 +1037,10 @@ class Shell:
         except (asyncio.CancelledError, KeyboardInterrupt):
             # Handle Ctrl-C during slash command execution, return to shell prompt
             logger.debug("Slash command interrupted by KeyboardInterrupt")
-            console.print("[red]Interrupted by user[/red]")
+            console.print(f"[{_get_tui_tokens().error}]Interrupted by user[/]")
         except Exception as e:
             logger.exception("Unknown error:")
-            console.print(f"[red]Unknown error: {e}[/red]")
+            console.print(f"[{_get_tui_tokens().error}]Unknown error: {e}[/]")
             raise  # re-raise unknown error
 
     async def run_soul_command(self, user_input: str | list[ContentPart]) -> bool:
@@ -1166,59 +1174,65 @@ class Shell:
                 # Warn about remaining items in the local pending buffer.
                 # Clear after printing so finally doesn't duplicate.
                 for msg in pending:
-                    console.print(f"[yellow]Queued message dropped: {msg.command}[/yellow]")
+                    console.print(
+                        f"[{_get_tui_tokens().warning}]Queued message dropped: {msg.command}[/]"
+                    )
                 pending.clear()
             return True
         except LLMNotSet:
+            _t = _get_tui_tokens()
             logger.exception("LLM not set:")
-            console.print('[red]LLM not set, send "/login" to login[/red]')
+            console.print(f'[{_t.error}]LLM not set, send "/login" to login[/]')
         except LLMNotSupported as e:
             # actually unsupported input/mode should already be blocked by prompt session
+            _t = _get_tui_tokens()
             logger.exception("LLM not supported:")
-            console.print(f"[red]{e}[/red]")
+            console.print(f"[{_t.error}]{e}[/]")
         except ChatProviderError as e:
+            _t = _get_tui_tokens()
             logger.exception("LLM provider error:")
             if isinstance(e, APIStatusError) and e.status_code == 401:
                 console.print(
-                    "[red]Authorization failed. Your session may have expired.[/red]\n"
+                    f"[{_t.error}]Authorization failed. Your session may have expired.[/]\n"
                     "[dim]Type [bold]/login[/bold] to re-authenticate.[/dim]\n"
                     f"[dim]Server: {e}[/dim]"
                 )
             elif isinstance(e, APIStatusError) and e.status_code == 402:
                 console.print(
-                    f"[red]Membership expired, please renew your plan[/red]\n[dim]Server: {e}[/dim]"
+                    f"[{_t.error}]Membership expired, please renew your plan[/]\n"
+                    f"[dim]Server: {e}[/dim]"
                 )
             elif isinstance(e, APIStatusError) and e.status_code == 403:
                 console.print(
-                    "[red]Quota exceeded, please upgrade your plan or retry later[/red]\n"
+                    f"[{_t.error}]Quota exceeded, please upgrade your plan or retry later[/]\n"
                     f"[dim]Server: {e}[/dim]"
                 )
             elif isinstance(e, APIStatusError) and e.status_code == 429:
                 detail = _extract_429_detail(e)
                 console.print(
-                    f"[red]Rate / usage limit hit: {detail['summary']}[/red]\n"
+                    f"[{_t.error}]Rate / usage limit hit: {detail['summary']}[/]\n"
                     f"[dim]{detail['hint']}[/dim]"
                 )
             elif isinstance(e, APIConnectionError):
                 console.print(
-                    f"[red]Network connection failed: {e}[/red]\n"
+                    f"[{_t.error}]Network connection failed: {e}[/]\n"
                     "[dim]Please check your network and try again.[/dim]"
                 )
             elif isinstance(e, APITimeoutError):
                 console.print(
-                    f"[red]Request timed out: {e}[/red]\n"
+                    f"[{_t.error}]Request timed out: {e}[/]\n"
                     "[dim]The server may be slow or unreachable. Please try again later.[/dim]"
                 )
             elif isinstance(e, APIEmptyResponseError):
                 console.print(
-                    "[red]The server returned an empty response.[/red]\n"
+                    f"[{_t.error}]The server returned an empty response.[/]\n"
                     "[dim]This is usually a temporary issue. Please try again.[/dim]"
                 )
             elif _is_lm_studio_context_too_small(e):
                 n_keep, n_ctx = _parse_n_keep_n_ctx(str(e))
                 console.print(
-                    f"[red]LM Studio's loaded context window is too small "
-                    f"(loaded n_ctx={n_ctx}, agent needs at least {n_keep}).[/red]\n"
+                    f"[{_t.error}]LM Studio's loaded context window is too small "
+                    f"(loaded n_ctx={n_ctx}, agent needs at least {n_keep}).[/]\n"
                     "[dim]To fix:[/dim]\n"
                     "[dim]  1. In LM Studio, open the model in the Chat tab "
                     "and click the gear/settings icon (or use 'My Models' → 'Edit').[/dim]\n"
@@ -1232,7 +1246,7 @@ class Shell:
                 failed_model = _parse_lm_studio_load_failed_model(str(e))
                 model_label = failed_model or "the requested model"
                 console.print(
-                    f"[red]LM Studio could not load {model_label}.[/red]\n"
+                    f"[{_t.error}]LM Studio could not load {model_label}.[/]\n"
                     "[dim]Most common cause: VRAM exhausted (the model is too big "
                     "for your GPU at its current quantization).[/dim]\n"
                     "[dim]To fix:[/dim]\n"
@@ -1249,7 +1263,7 @@ class Shell:
                 )
             elif _is_lm_studio_jinja_template_error(e):
                 console.print(
-                    "[red]LM Studio failed to render this model's prompt template.[/red]\n"
+                    f"[{_t.error}]LM Studio failed to render this model's prompt template.[/]\n"
                     "[dim]This is a model-side bug (broken or version-mismatched "
                     "Jinja template baked into the GGUF), not a Pythinker issue.[/dim]\n"
                     "[dim]To fix:[/dim]\n"
@@ -1262,7 +1276,7 @@ class Shell:
                     f"[dim]Server: {e}[/dim]"
                 )
             else:
-                console.print(f"[red]LLM provider error: {e}[/red]")
+                console.print(f"[{_t.error}]LLM provider error: {e}[/]")
             if not isinstance(e, APIStatusError) or e.status_code not in (401, 402, 403):
                 console.print(
                     "[dim]If this persists, run [bold]pythinker export[/bold] and send the "
@@ -1270,9 +1284,10 @@ class Shell:
                     "Please do not share the exported file publicly.[/dim]"
                 )
         except MaxStepsReached as e:
+            _t = _get_tui_tokens()
             logger.warning("Max steps reached: {n_steps}", n_steps=e.n_steps)
             console.print(
-                f"[yellow]{e}[/yellow]\n"
+                f"[{_t.warning}]{e}[/]\n"
                 "[dim]Send another message to continue where it left off.[/dim]"
             )
         except RunCancelled:
@@ -1285,11 +1300,12 @@ class Shell:
                 else 0
             )
             track("turn_interrupted", at_step=_at_step)
-            console.print("[red]Interrupted by user[/red]")
+            console.print(f"[{_get_tui_tokens().error}]Interrupted by user[/]")
         except Exception as e:
+            _t = _get_tui_tokens()
             logger.exception("Unexpected error:")
             console.print(
-                f"[red]Unexpected error: {e}[/red]\n"
+                f"[{_t.error}]Unexpected error: {e}[/]\n"
                 "[dim]Run [bold]pythinker export[/bold] and send the exported data to support "
                 "for assistance. Please do not share the exported file publicly.[/dim]"
             )
@@ -1305,7 +1321,9 @@ class Shell:
             if captured_view is not None:
                 all_lost.extend(captured_view.drain_queued_messages())
             for msg in all_lost:
-                console.print(f"[yellow]Queued message dropped: {msg.command}[/yellow]")
+                console.print(
+                    f"[{_get_tui_tokens().warning}]Queued message dropped: {msg.command}[/]"
+                )
             self._maybe_present_pending_approvals()
             remove_sigint()
         return False
@@ -1777,26 +1795,30 @@ def _value_style_for_label(label: str, level: WelcomeInfoItem.Level) -> str:
     """INFO-level styling per label; WARN/ERROR colors always win."""
     if level is not WelcomeInfoItem.Level.INFO:
         return level.value
+    from pythinker_code.ui.theme import get_tui_tokens
+
+    tokens = get_tui_tokens()
     label = label.strip()
     if label == "Directory":
-        return "cyan"
+        return tokens.info or "cyan"
     if label == "Session":
-        return "grey39"
+        return tokens.dim or "grey39"
     if label == "Model":
-        return "bold bright_white"
+        return f"bold {tokens.text}" if tokens.text else "bold bright_white"
     if label == "Branch":
-        return "magenta"
+        return tokens.info or "cyan"
     if label == "Auto-save":
-        return "grey50"
+        return tokens.muted or "grey50"
     return level.value
 
 
 def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
+    _t = _get_tui_tokens()
     head = Text.from_markup("Welcome to Pythinker — think first, then code.")
     help_text = Text.from_markup(
-        "[grey50]Review · Secure · Diagnose · then Create. Send /help for help.[/grey50]"
+        f"[{_t.muted}]Review · Secure · Diagnose · then Create. Send /help for help.[/]"
     )
-    help_text.highlight_regex(r"/help\b", "yellow bold")
+    help_text.highlight_regex(r"/help\b", f"bold {_t.warning}")
 
     # Use Table for precise width control
     logo = Text.from_markup(_LOGO)
@@ -1815,8 +1837,8 @@ def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
         info_table = Table(
             show_header=False, show_edge=False, box=None, padding=(0, 1), expand=False
         )
-        info_table.add_column(justify="right", style="grey50")
-        info_table.add_column(justify="center", style="grey39", no_wrap=True)
+        info_table.add_column(justify="right", style=tui_rich_style("muted"))
+        info_table.add_column(justify="center", style=tui_rich_style("dim"), no_wrap=True)
         info_table.add_column(justify="left")
         for item in facts:
             value_style = _value_style_for_label(item.name, item.level)
@@ -1825,13 +1847,13 @@ def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
 
     if tips:
         rows.append(Text(""))  # empty line
-        rows.append(Text("Tips", style="grey50"))
+        rows.append(Text("Tips", style=tui_rich_style("muted")))
         # 2-col table → wrapped tip lines hang-indent under the text column,
         # not under the bullet.
         tips_table = Table(
             show_header=False, show_edge=False, box=None, padding=(0, 0), expand=False
         )
-        tips_table.add_column(style="grey50", no_wrap=True, width=4)
+        tips_table.add_column(style=tui_rich_style("muted"), no_wrap=True, width=4)
         tips_table.add_column(justify="left", overflow="fold")
         for item in tips:
             tip_text = Text(item.value, style=item.level.value)
@@ -1850,6 +1872,7 @@ def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
             title=version_title,
             title_align="left",
             border_style=_PYTHINKER_BORDER,
+            box=box.ROUNDED,
             expand=False,
             padding=(1, 2),
         )

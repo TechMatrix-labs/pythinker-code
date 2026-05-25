@@ -27,6 +27,7 @@ from pythinker_code.config import (
 )
 from pythinker_code.ui.shell.console import console
 from pythinker_code.ui.shell.slash import registry
+from pythinker_code.ui.theme import get_tui_tokens as _get_tui_tokens
 from pythinker_code.utils.logging import logger
 
 if TYPE_CHECKING:
@@ -38,13 +39,14 @@ async def select_platform() -> Platform | None:
         header="Select a platform (↑↓ navigate, Enter select, Ctrl+C cancel):",
         choices=[platform.name for platform in PLATFORMS],
     )
+    _t = _get_tui_tokens()
     if not platform_name:
-        console.print("[red]No platform selected[/red]")
+        console.print(f"[{_t.error}]No platform selected[/]")
         return None
 
     platform = get_platform_by_name(platform_name)
     if platform is None:
-        console.print("[red]Unknown platform[/red]")
+        console.print(f"[{_t.error}]Unknown platform[/]")
         return None
     return platform
 
@@ -56,8 +58,9 @@ async def setup_platform(platform: Platform) -> bool:
         return False
 
     _apply_setup_result(result)
+    _t = _get_tui_tokens()
     thinking_label = "on" if result.thinking else "off"
-    console.print("[green]✓ Setup complete![/green]")
+    console.print(f"[{_t.success}]✓ Setup complete![/]")
     console.print(f"  Platform: [bold]{result.platform.name}[/bold]")
     console.print(f"  Model:    [bold]{result.selected_model.id}[/bold]")
     console.print(f"  Thinking: [bold]{thinking_label}[/bold]")
@@ -80,26 +83,27 @@ async def _setup_platform(platform: Platform) -> _SetupResult | None:
         return None
 
     # list models
+    _t = _get_tui_tokens()
     try:
-        with console.status("[cyan]Verifying API key...[/cyan]"):
+        with console.status(f"[{_t.info}]Verifying API key...[/]"):
             models = await list_models(platform, api_key)
     except aiohttp.ClientResponseError as e:
         logger.error("Failed to get models: {error}", error=e)
-        console.print(f"[red]Failed to get models: {e.message}[/red]")
+        console.print(f"[{_t.error}]Failed to get models: {e.message}[/]")
         if e.status == 401 and platform.id != PYTHINKER_CODE_PLATFORM_ID:
             console.print(
-                "[yellow]Hint: If your API key was obtained from Pythinker, "
-                'please select "Pythinker" instead.[/yellow]'
+                f"[{_t.warning}]Hint: If your API key was obtained from Pythinker, "
+                'please select "Pythinker" instead.[/]'
             )
         return None
     except Exception as e:
         logger.error("Failed to get models: {error}", error=e)
-        console.print(f"[red]Failed to get models: {e}[/red]")
+        console.print(f"[{_t.error}]Failed to get models: {e}[/]")
         return None
 
     # select the model
     if not models:
-        console.print("[red]No models available for the selected platform[/red]")
+        console.print(f"[{_t.error}]No models available for the selected platform[/]")
         return None
 
     model_map = {model.id: model for model in models}
@@ -108,7 +112,7 @@ async def _setup_platform(platform: Platform) -> _SetupResult | None:
         choices=list(model_map),
     )
     if not model_id:
-        console.print("[red]No model selected[/red]")
+        console.print(f"[{_t.error}]No model selected[/]")
         return None
 
     selected_model = model_map[model_id]

@@ -162,6 +162,34 @@ def test_pinned_tail_absent_falls_back_to_plain_clip() -> None:
     assert "output clipped to fit terminal" in text
 
 
+def test_pinned_tail_has_blank_row_after_preamble() -> None:
+    from prompt_toolkit.formatted_text import FormattedText
+
+    out = CustomPromptSession._fit_preamble_with_pinned_tail(
+        FormattedText([("", "tool output")]),
+        FormattedText([("", "Actioning…")]),
+        columns=80,
+        max_rows=6,
+    )
+    text = "".join(fragment for _, fragment, *_ in out)
+
+    assert "tool output\n\nActioning…" in text
+
+
+def test_pinned_tail_has_initial_blank_row_when_first_visible_status() -> None:
+    from prompt_toolkit.formatted_text import FormattedText
+
+    out = CustomPromptSession._fit_preamble_with_pinned_tail(
+        FormattedText(),
+        FormattedText([("", "Actioning…")]),
+        columns=80,
+        max_rows=6,
+    )
+    text = "".join(fragment for _, fragment, *_ in out)
+
+    assert text.startswith("\nActioning…")
+
+
 def test_prompt_status_shows_working_spinner_for_background_tasks() -> None:
     session = object.__new__(CustomPromptSession)
     session._running_prompt_delegate = None

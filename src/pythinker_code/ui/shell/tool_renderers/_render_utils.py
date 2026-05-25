@@ -72,6 +72,7 @@ def tool_call_header(
     summary: str | Text | None = None,
     *,
     style_token: str = "success",
+    paren_style_token: str = "muted",
 ) -> Text:
     """Return the Blackbox/Claude-style tool-use row.
 
@@ -82,7 +83,7 @@ def tool_call_header(
     header.append("● ", style=tui_rich_style(style_token))
     header.append_text(tool_title(name))
     if summary is not None:
-        paren_style = tui_rich_style("muted")
+        paren_style = tui_rich_style(paren_style_token)
         header.append("(", style=paren_style)
         if isinstance(summary, Text):
             header.append_text(summary)
@@ -101,17 +102,17 @@ def loading_marker(
 ) -> Text:
     """Return the app-wide task marker.
 
-    Running tasks always show a visible dot that pulses between heavy/light
-    dot glyphs; completed tasks use a green checkmark. The animated braille
-    spinner is reserved for the bottom thinking-word status. Callers may pass
-    ``style_token="accent"`` for prominent rows such as subagents.
+    Running tasks use the same solid-dot appear/disappear pulse as the
+    Composing / Thinking indicator; completed tasks use a green checkmark.
+    The animated braille spinner is reserved for the bottom thinking-word
+    status. Callers may pass ``style_token="accent"`` for prominent rows.
     """
     if done:
         return Text("✓ ", style=tui_rich_style("success"))
     if not pulse or reduced_motion_enabled():
         return Text("● ", style=tui_rich_style(style_token))
     t = time.monotonic() if now is None else now
-    glyph = "●" if int(t / 0.8) % 2 == 0 else "•"
+    glyph = "●" if int(t / 0.8) % 2 == 0 else " "
     return Text(f"{glyph} ", style=tui_rich_style(style_token))
 
 
@@ -120,6 +121,7 @@ def running_spinner(
     *,
     execution_started: bool,
     has_result: bool,
+    marker_style_token: str = "muted",
 ) -> RenderableType:
     """Wrap *renderable* in the animated tool marker while executing.
 
@@ -132,7 +134,7 @@ def running_spinner(
     if not (execution_started and not has_result):
         return renderable
 
-    marker = loading_marker()
+    marker = loading_marker(style_token=marker_style_token)
     content = _strip_running_static_marker(renderable)
     table = Table.grid(padding=0)
     table.add_column(width=2, no_wrap=True)
