@@ -650,3 +650,90 @@ agent:
 """)
 
         yield extending_agent
+
+
+def test_subagent_extension_merges_subagents_dicts(tmp_path: Path):
+    """Extending an agent with a new subagent type should ADD to, not replace, base subagents."""
+    system_md = tmp_path / "system.md"
+    system_md.write_text("Base system prompt")
+
+    base_yaml = tmp_path / "base.yaml"
+    base_yaml.write_text("""
+version: 1
+agent:
+  name: "Base"
+  system_prompt_path: ./system.md
+  tools: ["pythinker_code.tools.think:Think"]
+  subagents:
+    alpha:
+      path: ./alpha.yaml
+      description: "Alpha agent"
+    beta:
+      path: ./beta.yaml
+      description: "Beta agent"
+""")
+
+    (tmp_path / "alpha.yaml").write_text("version: 1\nagent:\n  name: alpha\n  system_prompt_path: ./system.md\n  tools: []\n")
+    (tmp_path / "beta.yaml").write_text("version: 1\nagent:\n  name: beta\n  system_prompt_path: ./system.md\n  tools: []\n")
+    (tmp_path / "gamma.yaml").write_text("version: 1\nagent:\n  name: gamma\n  system_prompt_path: ./system.md\n  tools: []\n")
+
+    child_yaml = tmp_path / "child.yaml"
+    child_yaml.write_text("""
+version: 1
+agent:
+  extend: ./base.yaml
+  name: "Child"
+  subagents:
+    gamma:
+      path: ./gamma.yaml
+      description: "Gamma agent"
+""")
+
+    spec = load_agent_spec(child_yaml)
+
+    # Child adds gamma; base alpha and beta must still be present.
+    assert set(spec.subagents.keys()) == {"alpha", "beta", "gamma"}
+    assert spec.subagents["gamma"].description == snapshot("Gamma agent")
+    assert spec.subagents["alpha"].description == snapshot("Alpha agent")
+
+
+def test_subagent_extension_child_overrides_base_entry(tmp_path: Path):
+    """Child subagent with same name as base overwrites only that entry."""
+    system_md = tmp_path / "system.md"
+    system_md.write_text("prompt")
+
+    base_yaml = tmp_path / "base.yaml"
+    base_yaml.write_text("""
+version: 1
+agent:
+  name: "Base"
+  system_prompt_path: ./system.md
+  tools: ["pythinker_code.tools.think:Think"]
+  subagents:
+    coder:
+      path: ./coder_v1.yaml
+      description: "Original coder"
+    reviewer:
+      path: ./reviewer.yaml
+      description: "Reviewer"
+""")
+    for name in ("coder_v1", "coder_v2", "reviewer"):
+        (tmp_path / f"{name}.yaml").write_text(f"version: 1\nagent:\n  name: {name}\n  system_prompt_path: ./system.md\n  tools: []\n")
+
+    child_yaml = tmp_path / "child.yaml"
+    child_yaml.write_text("""
+version: 1
+agent:
+  extend: ./base.yaml
+  name: "Child"
+  subagents:
+    coder:
+      path: ./coder_v2.yaml
+      description: "Upgraded coder"
+""")
+
+    spec = load_agent_spec(child_yaml)
+
+    assert set(spec.subagents.keys()) == {"coder", "reviewer"}
+    assert spec.subagents["coder"].description == snapshot("Upgraded coder")
+    assert spec.subagents["reviewer"].description == snapshot("Reviewer")

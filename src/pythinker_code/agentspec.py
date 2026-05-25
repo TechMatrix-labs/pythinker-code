@@ -158,6 +158,15 @@ def _load_agent_spec(agent_file: Path) -> AgentSpec:
         if not isinstance(agent_spec.exclude_tools, Inherit):
             base_agent_spec.exclude_tools = agent_spec.exclude_tools
         if not isinstance(agent_spec.subagents, Inherit):
-            base_agent_spec.subagents = agent_spec.subagents
+            if isinstance(agent_spec.subagents, dict) and isinstance(
+                base_agent_spec.subagents, dict
+            ):
+                # Child entries WIN on key conflicts; base entries fill the rest.
+                base_agent_spec.subagents = {
+                    **base_agent_spec.subagents,
+                    **agent_spec.subagents,
+                }
+            else:
+                base_agent_spec.subagents = agent_spec.subagents
         agent_spec = base_agent_spec
     return agent_spec
