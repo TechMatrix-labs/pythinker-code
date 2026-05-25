@@ -160,6 +160,8 @@ class BackgroundAgentRunner:
             self._runtime.subagent_store,
             on_stage=output.stage,
         )
+        if self._runtime.hook_engine is not None:
+            soul.set_hook_engine(self._runtime.hook_engine)
 
         async def _ui_loop_fn(wire: Wire) -> None:
             wire_ui = wire.ui_side(merge=True)

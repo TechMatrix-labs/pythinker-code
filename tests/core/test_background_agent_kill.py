@@ -465,3 +465,89 @@ async def test_kill_completed_task_is_noop(runtime, monkeypatch):
     # Subagent should be idle (completed bg returns to idle).
     record = runtime.subagent_store.require_instance(agent_id)
     assert record.status == "idle"
+
+
+# ---------------------------------------------------------------------------
+# Test: BackgroundAgentRunner._run_core calls soul.set_hook_engine when the
+# runtime has a hook engine attached.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_background_runner_propagates_hook_engine(runtime, monkeypatch):
+    """BackgroundAgentRunner._run_core calls soul.set_hook_engine with runtime.hook_engine."""
+    from pythinker_code.hooks import HookEngine
+
+    _register_coder(runtime)
+    agent_id = _create_bg_agent_instance(runtime, agent_id="ahook01")
+
+    # Attach a hook engine to the runtime so the runner has something to propagate.
+    hook_engine = HookEngine()
+    runtime.hook_engine = hook_engine
+
+    hook_engine_calls: list[object] = []
+    soul_started = asyncio.Event()
+
+    async def fake_load_agent(agent_file, rt, *, mcp_configs, start_mcp_loading=True):
+        soul = SoulAgent(
+            name=agent_file.stem,
+            system_prompt="hook engine test",
+            toolset=EmptyToolset(),
+            runtime=rt,
+        )
+        return soul
+
+    original_prepare_soul = None
+
+    async def fake_prepare_soul(spec, rt, builder, store, on_stage=None):
+        # Call the real prepare_soul to get the real soul.
+        soul, prompt = await original_prepare_soul(spec, rt, builder, store, on_stage=on_stage)
+        # Wrap set_hook_engine to track calls.
+        real_set_hook_engine = soul.set_hook_engine
+
+        def tracking_set_hook_engine(engine):
+            hook_engine_calls.append(engine)
+            real_set_hook_engine(engine)
+
+        soul.set_hook_engine = tracking_set_hook_engine
+        return soul, prompt
+
+    import pythinker_code.background.agent_runner as agent_runner_mod
+    import pythinker_code.subagents.core as core_mod
+
+    original_prepare_soul = core_mod.prepare_soul
+    monkeypatch.setattr(agent_runner_mod, "prepare_soul", fake_prepare_soul)
+
+    long = "x" * 250
+
+    async def fake_run_soul(soul, user_input, ui_loop_fn, cancel_event, wire_file=None, runtime=None):
+        await soul.context.append_message(Message(role="assistant", content=[TextPart(text=long)]))
+
+    monkeypatch.setattr("pythinker_code.subagents.builder.load_agent", fake_load_agent)
+    monkeypatch.setattr("pythinker_code.subagents.runner.run_soul", fake_run_soul)
+
+    runtime.background_tasks.bind_runtime(runtime)
+    view = runtime.background_tasks.create_agent_task(
+        agent_id=agent_id,
+        subagent_type="coder",
+        prompt="hook engine check",
+        description="hook engine test",
+        tool_call_id="tc-hook-engine",
+        model_override=None,
+    )
+    task_id = view.spec.id
+
+    # Wait for the task to complete.
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        v = runtime.background_tasks.get_task(task_id)
+        if v is not None and v.runtime.status in ("completed", "failed"):
+            break
+        await asyncio.sleep(0.05)
+    else:
+        pytest.fail("Background task did not complete within 10 seconds")
+
+    assert hook_engine_calls == [hook_engine], (
+        f"Expected set_hook_engine to be called once with the runtime's hook engine, "
+        f"got {hook_engine_calls}"
+    )

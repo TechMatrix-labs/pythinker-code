@@ -1895,3 +1895,44 @@ async def test_agent_tool_records_parent_agent_id_as_none_for_root(
     agent_id = _extract_agent_id(result.output)
     record = runtime.subagent_store.require_instance(agent_id)
     assert record.launch_spec.parent_agent_id is None
+
+
+async def test_agent_tool_background_sets_parent_agent_id(agent_tool, runtime, monkeypatch):
+    """When a background agent is launched from the root agent (subagent_id=None),
+    the created AgentLaunchSpec must have parent_agent_id=None (root agent)."""
+    runtime.labor_market.add_builtin_type(
+        AgentTypeDefinition(
+            name="coder",
+            description="Good at general software engineering tasks.",
+            agent_file=runtime.subagent_store.root / "coder.yaml",
+            tool_policy=ToolPolicy(mode="inherit"),
+        )
+    )
+
+    created_specs: list[AgentLaunchSpec] = []
+
+    def fake_create_agent_task(**kwargs):
+        # Capture the launch_spec from the subagent store at creation time.
+        agent_id = kwargs["agent_id"]
+        record = runtime.subagent_store.require_instance(agent_id)
+        created_specs.append(record.launch_spec)
+        return SimpleNamespace(
+            spec=SimpleNamespace(id="a-task-pid", kind="agent", description=kwargs["description"]),
+            runtime=SimpleNamespace(status="starting"),
+        )
+
+    monkeypatch.setattr(runtime.background_tasks, "create_agent_task", fake_create_agent_task)
+
+    with tool_call_context("Agent"):
+        result = await agent_tool(
+            agent_tool.params(
+                description="parent id check",
+                prompt="do work",
+                run_in_background=True,
+            )
+        )
+
+    assert not result.is_error
+    assert len(created_specs) == 1
+    # Root agent has subagent_id=None, so parent_agent_id should be None.
+    assert created_specs[0].parent_agent_id is None

@@ -331,6 +331,7 @@ class AgentTool(CallableTool2[Params]):
                         thinking=self._runtime.llm.thinking
                         if self._runtime.llm is not None
                         else None,
+                        parent_agent_id=self._runtime.subagent_id,
                     ),
                 )
                 created_instance = True
