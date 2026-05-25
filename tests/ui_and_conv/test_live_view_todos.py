@@ -62,10 +62,10 @@ def test_todo_update_pins_current_task_under_activity_line(monkeypatch) -> None:
 
     rendered = _render(view._working_indicator())
 
-    assert "Implement pinned todos…" in rendered
-    assert "■ Implement pinned todos" in rendered
-    assert "✓ Explore UI" in rendered
-    assert "✓ Write tests" in rendered
+    assert "✽ Implement pinned todos…" in rendered
+    assert "⎿  ◼ Implement pinned todos" in rendered
+    assert "✔ Explore UI" in rendered
+    assert "✔ Write tests" in rendered
     assert "… +1 completed" in rendered
     assert "todos(" not in rendered
     assert "Accomplishing" not in rendered
