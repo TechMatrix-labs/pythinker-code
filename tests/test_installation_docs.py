@@ -76,7 +76,8 @@ def test_quick_start_standardizes_on_hosted_native_installers() -> None:
     assert not (ROOT / "scripts" / "install.sh").exists()
     assert "**🪟 Windows** | `irm https://pythinker.com/install.ps1 \\| iex`" in readme
     assert (
-        "**🍎 macOS / 🐧 Linux** | `curl -fsSL https://pythinker.com/install.sh \\| bash`" in readme
+        'alt="macOS"> / <img src="https://img.shields.io/badge/-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">** | `curl -fsSL https://pythinker.com/install.sh \\| bash`'
+        in readme
     )
     assert "uvx pythinker-code" not in readme
     assert "uv tool install pythinker-code" not in readme

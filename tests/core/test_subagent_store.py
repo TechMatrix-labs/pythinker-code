@@ -166,7 +166,7 @@ def test_agent_launch_spec_round_trips_parent_agent_id(session) -> None:
         subagent_type="coder",
         model_override=None,
         effective_model=None,
-        parent_agent_id="aparent",
+        parent_agent_id="apparent",
     )
     store.create_instance(
         agent_id="achild",
@@ -174,7 +174,7 @@ def test_agent_launch_spec_round_trips_parent_agent_id(session) -> None:
         launch_spec=spec,
     )
     loaded = store.require_instance("achild")
-    assert loaded.launch_spec.parent_agent_id == "aparent"
+    assert loaded.launch_spec.parent_agent_id == "apparent"
 
 
 def test_agent_launch_spec_parent_agent_id_defaults_none(session) -> None:
