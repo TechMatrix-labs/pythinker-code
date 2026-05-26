@@ -87,6 +87,6 @@ def test_status_block_shows_mcp_loading_summary():
         )
     )
 
-    assert "MCP" in block.text.plain
+    assert "Starting MCP servers" in block.text.plain
     assert "1/2" in block.text.plain
-    assert "7 tools" in block.text.plain
+    assert "docs" in block.text.plain

@@ -29,6 +29,7 @@ from pythinker_code.ui.shell.components.markdown import (
 )
 from pythinker_code.ui.shell.console import console, current_console_width
 from pythinker_code.ui.shell.glyphs import TRANSCRIPT_ASSISTANT_MARKER, TRANSCRIPT_STATUS_MARKER
+from pythinker_code.ui.shell.mcp_status import mcp_startup_header
 from pythinker_code.ui.shell.motion import (
     ActivitySnapshot,
     activity_status_line,
@@ -54,6 +55,8 @@ from pythinker_code.utils.rich.columns import BulletColumns
 from pythinker_code.wire.types import (
     MCPStatusSnapshot,
     Notification,
+    ProgressNote,
+    QuestionAnswered,
     StatusUpdate,
     ToolCall,
     ToolCallPart,
@@ -396,6 +399,17 @@ class _ToolCallBlock:
         self._tui_card.toggle_expanded()
         self._renderable = self._compose()
 
+    def render_expanded(self) -> RenderableType:
+        """Render the card expanded without changing its remembered collapsed state."""
+        if self._tui_card is None:
+            return self.compose()
+        was_expanded = self._tui_card.expanded
+        self._tui_card.set_expanded(True)
+        try:
+            return self._tui_card.render()
+        finally:
+            self._tui_card.set_expanded(was_expanded)
+
     def append_args_part(self, args_part: str):
         if self.finished:
             return
@@ -687,6 +701,54 @@ class _NotificationBlock:
         return BulletColumns(Group(*lines), bullet_style=style)
 
 
+class _QuestionAnsweredBlock:
+    """Compact transcript row for answers returned from AskUserQuestion."""
+
+    def __init__(self, event: QuestionAnswered) -> None:
+        self.event = event
+
+    def compose(self) -> RenderableType:
+        title = Text()
+        if self.event.dismissed or not self.event.answers:
+            title.append(
+                "User dismissed the question",
+                style=tui_rich_style("muted") + Style(bold=True),
+            )
+            return BulletColumns(title, bullet_style=tui_rich_style("muted"))
+
+        title.append(
+            "User answered Pythinker's questions:",
+            style=tui_rich_style("tool_title") + Style(bold=True),
+        )
+        rows: list[RenderableType] = [title]
+        for question, answer in self.event.answers.items():
+            row = Text("· ", style=tui_rich_style("muted"))
+            row.append(question, style=tui_rich_style("muted"))
+            row.append(" → ", style=tui_rich_style("dim"))
+            row.append(answer, style=tui_rich_style("accent") + Style(bold=True))
+            rows.append(row)
+        return BulletColumns(Group(*rows), bullet_style=tui_rich_style("success"))
+
+
+class _ProgressNoteBlock:
+    """Compact checkpoint/progress note for transcript UIs."""
+
+    def __init__(self, event: ProgressNote) -> None:
+        self.event = event
+
+    def compose(self) -> RenderableType:
+        title = Text(
+            self.event.title.strip() or "Progress",
+            style=tui_rich_style("tool_title") + Style(bold=True),
+        )
+        if not self.event.body.strip():
+            return BulletColumns(title, bullet_style=tui_rich_style("success"))
+        return BulletColumns(
+            Group(title, Markdown(self.event.body.strip())),
+            bullet_style=tui_rich_style("success"),
+        )
+
+
 class _StatusBlock:
     def __init__(self, initial: StatusUpdate) -> None:
         self.text = Text("", justify="right")
@@ -718,11 +780,12 @@ class _StatusBlock:
                         self._max_context_tokens,
                     )
                 )
-            if self._mcp_status is not None and self._mcp_status.loading:
-                parts.append(
-                    f"MCP {self._mcp_status.connected}/{self._mcp_status.total} · "
-                    f"{self._mcp_status.tools} tools"
-                )
+            if (
+                self._mcp_status is not None
+                and self._mcp_status.loading
+                and (header := mcp_startup_header(self._mcp_status))
+            ):
+                parts.append(header)
             self.text.plain = "  ".join(parts)
 
 

@@ -18,7 +18,7 @@ from pythinker_code.subagents.models import AgentTypeDefinition, ToolPolicy
 from pythinker_code.ui.shell.slash import ShellSlashCmdFunc, shell_mode_registry
 from pythinker_code.ui.shell.slash import registry as shell_slash_registry
 from pythinker_code.utils.slashcmd import SlashCommand
-from pythinker_code.wire.types import TextPart
+from pythinker_code.wire.types import MCPServerSnapshot, MCPStatusSnapshot, TextPart
 
 
 async def _invoke_slash_command(command: SlashCommand[ShellSlashCmdFunc], shell: Any) -> None:
@@ -87,6 +87,80 @@ def test_blackbox_style_slash_aliases_are_registered() -> None:
         command = shell_slash_registry.find_command(alias)
         assert command is not None, alias
         assert command.name == canonical
+
+
+async def test_mcp_slash_persists_only_final_snapshot(
+    monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    loading = MCPStatusSnapshot(
+        loading=True,
+        connected=0,
+        total=1,
+        tools=0,
+        servers=(MCPServerSnapshot(name="context7", status="connecting", tools=()),),
+    )
+    connected = MCPStatusSnapshot(
+        loading=False,
+        connected=1,
+        total=1,
+        tools=2,
+        servers=(
+            MCPServerSnapshot(
+                name="context7",
+                status="connected",
+                tools=("resolve-library-id", "query-docs"),
+            ),
+        ),
+    )
+
+    class _Soul:
+        def __init__(self) -> None:
+            self.status = self
+            self._snapshots = [loading, connected, connected]
+
+        @property
+        def mcp_status(self) -> MCPStatusSnapshot:
+            if len(self._snapshots) > 1:
+                return self._snapshots.pop(0)
+            return self._snapshots[0]
+
+        async def start_background_mcp_loading(self) -> bool:
+            return False
+
+        async def wait_for_background_mcp_loading(self) -> None:
+            return None
+
+    live_transient_values: list[bool] = []
+
+    class _Live:
+        def __init__(self, *args: Any, transient: bool, **kwargs: Any) -> None:
+            live_transient_values.append(transient)
+
+        def __enter__(self) -> _Live:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def update(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr("pythinker_code.ui.shell.slash.ensure_pythinker_soul", lambda _app: _Soul())
+    monkeypatch.setattr("rich.live.Live", _Live)
+
+    cmd = shell_slash_registry.find_command("mcp")
+    assert cmd is not None
+    await _invoke_slash_command(cmd, SimpleNamespace())
+
+    output = capsys.readouterr().out
+    assert live_transient_values == [True]
+    assert "🔌  MCP Tools" in output
+    assert "context7" in output
+    assert "Status: connected" in output
+    assert "query-docs" in output
+    assert "resolve-library-id" in output
+    assert "Loading MCP inventory" not in output
+    assert "MCP Servers:" not in output
 
 
 # ---------------------------------------------------------------------------

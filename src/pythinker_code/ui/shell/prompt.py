@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, cast, override, runtime_checkable
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app_or_none
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
@@ -2281,9 +2282,19 @@ class CustomPromptSession:
         delegate.handle_running_prompt_key(key, event)
         event.app.invalidate()
 
+    def _app_for_repaint(self) -> Application[str] | None:
+        # Prefer the session's own Application over get_app_or_none(). The latter
+        # resolves the running app from the current context, and returns None
+        # inside background coroutines (the status refresh task, the MCP
+        # completion task), which silently drops the repaint. The stored
+        # reference is correct regardless of which task calls it.
+        session = getattr(self, "_session", None)
+        app = getattr(session, "app", None) if session is not None else None
+        return app if app is not None else get_app_or_none()
+
     def invalidate(self) -> None:
         self._sync_prompt_ui_state()
-        app = get_app_or_none()
+        app = self._app_for_repaint()
         if app is not None:
             app.invalidate()
 
@@ -2594,7 +2605,7 @@ class CustomPromptSession:
         async def _refresh() -> None:
             try:
                 while True:
-                    app = get_app_or_none()
+                    app = self._app_for_repaint()
                     if app is not None:
                         app.invalidate()
 

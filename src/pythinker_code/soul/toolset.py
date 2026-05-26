@@ -5,6 +5,7 @@ import contextlib
 import importlib
 import inspect
 import json
+import re
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
 current_tool_call = ContextVar[ToolCall | None]("current_tool_call", default=None)
 
 _current_session_id: ContextVar[str] = ContextVar("_current_session_id", default="")
+_MCP_LOG_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def set_session_id(sid: str) -> None:
@@ -79,6 +81,29 @@ def get_current_tool_call_or_none() -> ToolCall | None:
     Expect to be not None when called from a `__call__` method of a tool.
     """
     return current_tool_call.get()
+
+
+def _mcp_stderr_log_path(runtime: Runtime, server_name: str) -> Path:
+    safe_name = _MCP_LOG_NAME_RE.sub("_", server_name).strip("._-") or "server"
+    log_dir = runtime.session.dir / "mcp"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"{safe_name}.stderr.log"
+
+
+def _configure_mcp_client_stderr_log(client: Any, runtime: Runtime, server_name: str) -> None:
+    """Route stdio MCP child stderr to a session log file instead of the TUI."""
+    log_path = _mcp_stderr_log_path(runtime, server_name)
+
+    def _set_transport_log_file(transport: Any) -> None:
+        if hasattr(transport, "log_file"):
+            transport.log_file = log_path
+        nested = getattr(transport, "transport", None)
+        if nested is not None:
+            _set_transport_log_file(nested)
+        for child in getattr(transport, "_transports", ()) or ():
+            _set_transport_log_file(child)
+
+    _set_transport_log_file(getattr(client, "transport", None))
 
 
 type ToolType = CallableTool | CallableTool2[Any]
@@ -561,6 +586,7 @@ class PythinkerToolset:
                     oauth_servers[server_name] = server_config.url
 
                 client = fastmcp.Client(MCPConfig(mcpServers={server_name: server_config}))
+                _configure_mcp_client_stderr_log(client, runtime, server_name)
                 self._mcp_servers[server_name] = MCPServerInfo(
                     status="pending", client=client, tools=[]
                 )

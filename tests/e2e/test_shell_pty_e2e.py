@@ -299,10 +299,22 @@ def test_shell_shows_mcp_loading_without_blocking_input(tmp_path: Path) -> None:
         shell.read_until_contains("Welcome to Pythinker — think first, then code.")
         prompt_mark = shell.mark()
         _read_until_prompt(shell, after=prompt_mark)
-        shell.read_until_contains("MCP Servers:", after=prompt_mark, timeout=15.0)
+        initial_transcript = shell.normalized_text()[prompt_mark:]
+        booting_index = initial_transcript.find("Booting MCP server: slow-test")
+        prompt_index = initial_transcript.find("  ❯")
+        assert booting_index >= 0
+        assert prompt_index >= 0
+        assert booting_index < prompt_index
+        # Wait long enough for the stdio MCP subprocess to emit its startup log.
+        # That stderr must be captured to a session log file, not written into
+        # the prompt/input area.
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            shell.read_available(timeout=0.1)
         transcript = shell.normalized_text()[prompt_mark:]
-        assert "slow-test" in transcript
-        assert "(pending)" in transcript or "(connecting)" in transcript
+        assert "Starting MCP server 'slow-mcp'" not in transcript
+        assert "transport.py" not in transcript
+        assert "MCP Servers:" not in transcript
         assert "ping" not in transcript
 
         _exit_shell(shell)

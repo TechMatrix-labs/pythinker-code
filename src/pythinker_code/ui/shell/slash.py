@@ -22,6 +22,7 @@ from pythinker_code.utils.slashcmd import SlashCommand, SlashCommandRegistry
 
 if TYPE_CHECKING:
     from pythinker_code.ui.shell import Shell
+    from pythinker_code.wire.types import MCPStatusSnapshot
 
 type ShellSlashCmdFunc = Callable[[Shell, str], None | Awaitable[None]]
 """
@@ -1635,16 +1636,19 @@ async def mcp(app: Shell, args: str):
         console.print(render_mcp_console(snapshot))
         return
 
+    final_snapshot: MCPStatusSnapshot | None = snapshot
     with Live(
         render_mcp_console(snapshot),
         console=console,
         refresh_per_second=8,
-        transient=False,
+        transient=True,
     ) as live:
         while True:
             snapshot = soul.status.mcp_status
             if snapshot is None:
+                final_snapshot = None
                 break
+            final_snapshot = snapshot
             live.update(render_mcp_console(snapshot), refresh=True)
             if not snapshot.loading:
                 break
@@ -1655,7 +1659,11 @@ async def mcp(app: Shell, args: str):
             logger.debug("MCP loading completed with error while rendering /mcp: {error}", error=e)
         snapshot = soul.status.mcp_status
         if snapshot is not None:
+            final_snapshot = snapshot
             live.update(render_mcp_console(snapshot), refresh=True)
+
+    if final_snapshot is not None:
+        console.print(render_mcp_console(final_snapshot))
 
 
 @registry.command

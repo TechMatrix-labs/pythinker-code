@@ -397,6 +397,18 @@ def test_background_task_summary_uses_single_task_command() -> None:
     )
 
 
+def test_bottom_toolbar_does_not_render_mcp_startup_status(monkeypatch: Any) -> None:
+    prompt_session = _make_toolbar_session(tips=[])
+    prompt_session._status_block_provider = lambda _columns: [
+        ("", "● Booting MCP server: context7")
+    ]
+
+    fragments = _render_toolbar_fragments(prompt_session, 80, monkeypatch)
+    plain = "".join(text for _, text in fragments)
+
+    assert "Booting MCP server" not in plain
+
+
 # ── Toolbar overflow invariants ───────────────────────────────────────────────
 
 

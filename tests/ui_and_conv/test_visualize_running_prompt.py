@@ -203,6 +203,23 @@ def test_prompt_status_shows_working_spinner_for_background_tasks() -> None:
     assert "2 background agents" in text
 
 
+def test_prompt_status_block_renders_above_agent_input_preamble() -> None:
+    from prompt_toolkit.formatted_text import FormattedText
+
+    def _status_block(_columns: int) -> FormattedText:
+        return FormattedText([("", "● Booting MCP server: context7")])
+
+    session = object.__new__(CustomPromptSession)
+    session._running_prompt_delegate = None
+    session._background_task_count_provider = None
+    session._status_block_provider = _status_block
+
+    rendered = CustomPromptSession._render_agent_status(session, 80)
+    text = "".join(item[1] for item in rendered)
+
+    assert text.startswith("● Booting MCP server: context7")
+
+
 def test_background_status_splits_verb_and_count_styles() -> None:
     from pythinker_code.ui.theme import get_active_theme, get_tui_tokens, set_active_theme
 

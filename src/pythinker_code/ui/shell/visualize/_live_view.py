@@ -32,6 +32,7 @@ from pythinker_code.ui.shell.console import console, current_console_width
 from pythinker_code.ui.shell.echo import render_user_echo
 from pythinker_code.ui.shell.glyphs import TRANSCRIPT_ACTIVE_MARKER, TRANSCRIPT_TOOL_GUTTER
 from pythinker_code.ui.shell.keyboard import KeyboardListener, KeyEvent
+from pythinker_code.ui.shell.mcp_status import render_mcp_startup_text
 from pythinker_code.ui.shell.motion import (
     ActivitySnapshot,
     activity_status_line,
@@ -49,6 +50,8 @@ from pythinker_code.ui.shell.visualize._blocks import (
     _CompactionBlock,
     _ContentBlock,
     _NotificationBlock,
+    _ProgressNoteBlock,
+    _QuestionAnsweredBlock,
     _StatusBlock,
     _ToolCallBlock,
 )
@@ -75,6 +78,8 @@ from pythinker_code.wire.types import (
     MCPLoadingEnd,
     Notification,
     PlanDisplay,
+    ProgressNote,
+    QuestionAnswered,
     QuestionRequest,
     StatusUpdate,
     SteerInput,
@@ -183,6 +188,7 @@ class _LiveView:
         self._latest_todos: tuple[TodoDisplayItem, ...] = ()
         self._pinned_todos_visible = True
         self._compaction_block: _CompactionBlock | None = None
+        self._latest_mcp_status = initial_status.mcp_status
         self._mcp_loading_spinner: RenderableType | None = None
         self._btw_spinner: RenderableType | None = None
         self._btw_question: str | None = None
@@ -190,6 +196,7 @@ class _LiveView:
         self._current_content_block: _ContentBlock | None = None
         self._tool_call_blocks: dict[str, _ToolCallBlock] = {}
         self._last_tool_call_block: _ToolCallBlock | None = None
+        self._completed_expandable_tool_blocks = deque[_ToolCallBlock](maxlen=20)
         self._current_step_retry: StepRetry | None = None
         self._approval_request_queue = deque[ApprovalRequest]()
         """
@@ -242,7 +249,10 @@ class _LiveView:
                 # Handle Ctrl+O specially - pause Live only while the pager is active.
                 # Ctrl+E remains accepted as a legacy alias.
                 if event in (KeyEvent.CTRL_O, KeyEvent.CTRL_E):
-                    if self._has_expandable_modal_panel():
+                    if self._has_expandable_modal_panel() or (
+                        self._expandable_tool_card() is None
+                        and self._completed_expandable_tool_card() is not None
+                    ):
                         from pythinker_code.telemetry import track
 
                         track("shortcut_expand")
@@ -355,7 +365,11 @@ class _LiveView:
             logger.debug("Ignoring external wire message after live view shutdown: {msg}", msg=msg)
 
     def has_expandable_panel(self) -> bool:
-        return self._has_expandable_modal_panel() or self._expandable_tool_card() is not None
+        return (
+            self._has_expandable_modal_panel()
+            or self._expandable_tool_card() is not None
+            or self._completed_expandable_tool_card() is not None
+        )
 
     def _has_expandable_modal_panel(self) -> bool:
         return (
@@ -385,6 +399,12 @@ class _LiveView:
                 return block
         return None
 
+    def _completed_expandable_tool_card(self) -> _ToolCallBlock | None:
+        for block in reversed(self._completed_expandable_tool_blocks):
+            if block.has_expandable_card:
+                return block
+        return None
+
     def _toggle_latest_tool_card(self) -> bool:
         block = self._expandable_tool_card()
         if block is None:
@@ -399,6 +419,10 @@ class _LiveView:
             return True
         if question_panel := self._expandable_question_panel():
             show_question_body_in_pager(question_panel)
+            return True
+        if block := self._completed_expandable_tool_card():
+            with console.screen(), console.pager(styles=True):
+                console.print(block.render_expanded())
             return True
         return False
 
@@ -513,7 +537,11 @@ class _LiveView:
             return Group(line, todo_block)
 
         line = activity_status_line(
-            ActivitySnapshot(label=spinner_message(now), elapsed_s=elapsed),
+            ActivitySnapshot(
+                label=spinner_message(now),
+                elapsed_s=elapsed,
+                tokens=getattr(self, "_latest_context_tokens", None) or 0,
+            ),
             width=width,
         )
         # During longer waits, surface a rotating CLI-feature tip under the verb.
@@ -679,12 +707,12 @@ class _LiveView:
                 self._compaction_block = None
                 self.refresh_soon()
             case MCPLoadingBegin():
-                glyph = (
-                    "●" if reduced_motion_enabled() or int(time.monotonic() / 0.8) % 2 == 0 else " "
-                )
-                line = Text(f"{glyph} ", style=tui_rich_style("muted"))
-                line.append("Connecting MCP servers...", style=tui_rich_style("muted"))
-                self._mcp_loading_spinner = line
+                if self._latest_mcp_status is not None:
+                    self._mcp_loading_spinner = render_mcp_startup_text(self._latest_mcp_status)
+                else:
+                    line = Text("● ", style=tui_rich_style("muted"))
+                    line.append("Starting MCP servers", style=tui_rich_style("muted"))
+                    self._mcp_loading_spinner = line
                 self.refresh_soon()
             case MCPLoadingEnd():
                 self._mcp_loading_spinner = None
@@ -727,12 +755,20 @@ class _LiveView:
                 self.refresh_soon()
             case StatusUpdate():
                 self._status_block.update(msg)
+                if msg.mcp_status is not None:
+                    self._latest_mcp_status = msg.mcp_status
+                    if msg.mcp_status.loading:
+                        self._mcp_loading_spinner = render_mcp_startup_text(msg.mcp_status)
                 if msg.context_tokens is not None:
                     self._latest_context_tokens = msg.context_tokens
                     if self._compaction_block is not None:
                         self._compaction_block.update_context_tokens(msg.context_tokens)
             case Notification():
                 self.append_notification(msg)
+            case QuestionAnswered():
+                self.display_question_answered(msg)
+            case ProgressNote():
+                self.display_progress_note(msg)
             case ContentPart():
                 self.append_content(msg)
             case ToolCall():
@@ -900,6 +936,7 @@ class _LiveView:
         # to scrollback here; the transient Live area is about to be erased.
         for tool_call_id in list(self._tool_call_blocks.keys()):
             block = self._tool_call_blocks.pop(tool_call_id)
+            self._archive_completed_tool_card(block)
             console.print()
             console.print(block.compose())
             self.refresh_soon()
@@ -966,6 +1003,7 @@ class _LiveView:
             if not block.finished:
                 break
 
+            self._archive_completed_tool_card(block)
             self._tool_call_blocks.pop(tool_call_id)
             console.print()
             console.print(block.compose())
@@ -1046,10 +1084,29 @@ class _LiveView:
                 self._latest_todos = tuple(block.items)
                 return
 
+    def _archive_completed_tool_card(self, block: _ToolCallBlock) -> None:
+        if block.has_expandable_card:
+            self._completed_expandable_tool_blocks.append(block)
+
     def append_notification(self, notification: Notification) -> None:
         block = _NotificationBlock(notification)
         self._notification_blocks.append(block)
         self._live_notification_blocks.append(block)
+        self.refresh_soon()
+
+    def display_question_answered(self, event: QuestionAnswered) -> None:
+        self.flush_content()
+        block = _QuestionAnsweredBlock(event)
+        console.print()
+        console.print(block.compose())
+        self.refresh_soon()
+
+    def display_progress_note(self, event: ProgressNote) -> None:
+        self.flush_content()
+        self.flush_finished_tool_calls()
+        block = _ProgressNoteBlock(event)
+        console.print()
+        console.print(block.compose())
         self.refresh_soon()
 
     def request_approval(self, request: ApprovalRequest) -> None:

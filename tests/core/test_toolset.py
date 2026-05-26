@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from types import SimpleNamespace
+from typing import Any, cast
 
 from pydantic import BaseModel
 from pythinker_core.tooling import CallableTool2, ToolOk, ToolReturnValue
 from pythinker_core.tooling.error import ToolNotFoundError as PythinkerCoreToolNotFoundError
 
-from pythinker_code.soul.toolset import PythinkerToolset
+from pythinker_code.soul.toolset import PythinkerToolset, _configure_mcp_client_stderr_log
 from pythinker_code.wire.types import ToolCall, ToolResult
 
 
@@ -166,6 +168,25 @@ async def test_nonexistent_tool_returns_not_found():
     result = ts.handle(tool_call)
     assert isinstance(result, ToolResult)
     assert isinstance(result.return_value, PythinkerCoreToolNotFoundError)
+
+
+def test_configure_mcp_client_stderr_log_routes_stdio_noise_to_session_file(tmp_path):
+    """Stdio MCP server stderr should not inherit the interactive terminal."""
+    import fastmcp
+    from fastmcp.mcp_config import MCPConfig
+
+    config = MCPConfig.from_dict(
+        {"mcpServers": {"context7": {"command": "node", "args": ["server.js"]}}}
+    )
+    client = fastmcp.Client(config)
+    runtime = SimpleNamespace(session=SimpleNamespace(dir=tmp_path))
+
+    _configure_mcp_client_stderr_log(client, cast(Any, runtime), "context7")
+
+    config_transport = cast(Any, client.transport)
+    stdio_transport = config_transport.transport
+    assert stdio_transport.log_file == tmp_path / "mcp" / "context7.stderr.log"
+    assert (tmp_path / "mcp").is_dir()
 
 
 async def test_cleanup_suppresses_cancelled_mcp_loading_task():
