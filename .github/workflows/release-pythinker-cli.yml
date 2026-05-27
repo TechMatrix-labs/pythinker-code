@@ -553,6 +553,13 @@ jobs:
     name: Publish Python package to TestPyPI
     needs: validate
     runs-on: ubuntu-latest
+    # TestPyPI is a non-critical staging smoke-test that runs in parallel with
+    # the production publish from the same artifacts. A transient flake here
+    # (e.g. a registry 502 pulling the publish action's image) must not mark the
+    # release run as failed - production PyPI below is the gating publish.
+    continue-on-error: true
+    # Fail fast if a registry pull or upload hangs, so a rerun is quick.
+    timeout-minutes: 15
     environment:
       name: testpypi
       url: https://test.pypi.org/project/pythinker-code/
@@ -598,6 +605,9 @@ jobs:
     name: Publish Python package to PyPI
     needs: validate
     runs-on: ubuntu-latest
+    # Fail fast if a registry pull or upload hangs; skip-existing below keeps a
+    # rerun idempotent so a transient flake costs only a rerun, not a version.
+    timeout-minutes: 15
     environment:
       name: pypi
       url: https://pypi.org/project/pythinker-code/
