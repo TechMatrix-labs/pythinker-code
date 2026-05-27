@@ -142,6 +142,10 @@ class ProjectMemoryStore:
     @staticmethod
     @contextlib.contextmanager
     def _file_lock(path: Path) -> Generator[None]:
+        # NOTE (v1): fcntl gives cross-process safety. The lock is held across
+        # await in callers, so do NOT invoke store mutations concurrently on one
+        # event loop / store instance in v1 (the Memory tool is root-only and
+        # sequential). Revisit with asyncio.to_thread / asyncio.Lock if that changes.
         lock_path = path.with_name(path.name + ".lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         fh = lock_path.open("a+", encoding="utf-8")
@@ -249,6 +253,13 @@ class ProjectMemoryStore:
         return MemoryOpResult(True, "Entry removed.")
 
     async def _read_journal(self, *, last_n: int = 10) -> list[str]:
+        """Read up to ``last_n`` newest session recaps from ``JOURNAL.md``.
+
+        Forward hook: ``JOURNAL.md`` is written by a later phase (P2) which
+        prepends recaps (newest-first), so the first ``last_n`` entries are the
+        most recent. No writer exists yet, so this returns ``[]`` in P1; reading
+        it here keeps the P2 writer purely additive.
+        """
         root = await self._ensure_dir()
         path = root / "memory" / "JOURNAL.md"
         try:
