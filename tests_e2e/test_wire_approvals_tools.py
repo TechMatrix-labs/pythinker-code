@@ -146,6 +146,16 @@ def test_shell_approval_approve(tmp_path) -> None:
                 },
                 {
                     "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-1", "stream": "stdout", "text": "ok\n"},
+                },
+                {
+                    "method": "event",
                     "type": "ToolResult",
                     "payload": {
                         "tool_call_id": "tc-1",
@@ -412,6 +422,16 @@ def test_approve_for_session(tmp_path) -> None:
                 },
                 {
                     "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-1", "stream": "stdout", "text": "first\n"},
+                },
+                {
+                    "method": "event",
                     "type": "ToolResult",
                     "payload": {
                         "tool_call_id": "tc-1",
@@ -477,6 +497,16 @@ def test_approve_for_session(tmp_path) -> None:
                         "plan_mode": False,
                         "mcp_status": None,
                     },
+                },
+                {
+                    "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-2"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-2", "stream": "stdout", "text": "second\n"},
                 },
                 {
                     "method": "event",
@@ -583,6 +613,16 @@ def test_yolo_skips_approval(tmp_path) -> None:
                         "plan_mode": False,
                         "mcp_status": None,
                     },
+                },
+                {
+                    "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-1", "stream": "stdout", "text": "ok\n"},
                 },
                 {
                     "method": "event",
@@ -889,6 +929,11 @@ def test_display_block_todo(tmp_path) -> None:
                 },
                 {
                     "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
                     "type": "ToolResult",
                     "payload": {
                         "tool_call_id": "tc-1",
@@ -1004,6 +1049,11 @@ def test_tool_call_part_streaming(tmp_path) -> None:
                         "plan_mode": False,
                         "mcp_status": None,
                     },
+                },
+                {
+                    "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
                 },
                 {
                     "method": "event",

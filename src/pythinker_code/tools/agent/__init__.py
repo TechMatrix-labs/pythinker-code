@@ -462,6 +462,7 @@ class _BackgroundCapacity:
 class RunAgentsTool(CallableTool2[RunAgentsParams]):
     name: str = "RunAgents"
     params: type[RunAgentsParams] = RunAgentsParams
+    emits_tool_execution_started_after_approval = True
 
     def __init__(self, runtime: Runtime):
         max_background = runtime.config.background.max_running_tasks
@@ -546,6 +547,9 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
 
         fingerprint = _run_agents_fingerprint(params)
         if self._runtime.approval.is_orchestration_approved(fingerprint):
+            from pythinker_code.soul.toolset import emit_current_tool_execution_started
+
+            emit_current_tool_execution_started()
             orchestration_approval = "reused"
         else:
             approved_count = capacity.launch_count if capacity is not None else len(params.agents)

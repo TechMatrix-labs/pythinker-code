@@ -552,6 +552,7 @@ def _normalize_step_block(block: list[dict[str, Any]]) -> list[dict[str, Any]]:
     status_updates: list[dict[str, Any]] = []
     requests: list[dict[str, Any]] = []
     approvals: list[dict[str, Any]] = []
+    tool_progress: list[dict[str, Any]] = []
     tool_results: list[dict[str, Any]] = []
     other: list[dict[str, Any]] = []
     tool_call_order: list[str] = []
@@ -571,22 +572,46 @@ def _normalize_step_block(block: list[dict[str, Any]]) -> list[dict[str, Any]]:
             requests.append(msg)
         elif msg_type == "ApprovalResponse":
             approvals.append(msg)
+        elif msg_type in {"ToolExecutionStarted", "ToolOutputPart"}:
+            tool_progress.append(msg)
         elif msg_type == "ToolResult":
             tool_results.append(msg)
         else:
             other.append(msg)
+    tool_progress = _order_tool_progress(tool_progress, tool_call_order)
     tool_results = _order_tool_results(tool_results, tool_call_order)
-    return head + stream_events + status_updates + requests + approvals + tool_results + other
+    return (
+        head
+        + stream_events
+        + status_updates
+        + requests
+        + approvals
+        + tool_progress
+        + tool_results
+        + other
+    )
+
+
+def _order_tool_progress(
+    tool_progress: list[dict[str, Any]], tool_call_order: list[str]
+) -> list[dict[str, Any]]:
+    return _order_by_tool_call_id(tool_progress, tool_call_order)
 
 
 def _order_tool_results(
     tool_results: list[dict[str, Any]], tool_call_order: list[str]
 ) -> list[dict[str, Any]]:
+    return _order_by_tool_call_id(tool_results, tool_call_order)
+
+
+def _order_by_tool_call_id(
+    messages: list[dict[str, Any]], tool_call_order: list[str]
+) -> list[dict[str, Any]]:
     if not tool_call_order:
-        return tool_results
+        return messages
     by_id: dict[str, list[dict[str, Any]]] = {}
     unknown: list[dict[str, Any]] = []
-    for msg in tool_results:
+    for msg in messages:
         payload = msg.get("payload")
         tool_call_id = payload.get("tool_call_id") if isinstance(payload, dict) else None
         if isinstance(tool_call_id, str) and tool_call_id in tool_call_order:

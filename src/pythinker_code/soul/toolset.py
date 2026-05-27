@@ -43,6 +43,7 @@ from pythinker_code.wire.types import (
     TextPart,
     ToolCall,
     ToolCallRequest,
+    ToolExecutionStarted,
     ToolResult,
     ToolReturnValue,
     VideoURLPart,
@@ -58,6 +59,9 @@ if TYPE_CHECKING:
     from pythinker_code.soul.agent import Runtime
 
 current_tool_call = ContextVar[ToolCall | None]("current_tool_call", default=None)
+_current_tool_execution_started_ids: ContextVar[set[str] | None] = ContextVar(
+    "current_tool_execution_started_ids", default=None
+)
 
 _current_session_id: ContextVar[str] = ContextVar("_current_session_id", default="")
 _MCP_LOG_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -81,6 +85,41 @@ def get_current_tool_call_or_none() -> ToolCall | None:
     Expect to be not None when called from a `__call__` method of a tool.
     """
     return current_tool_call.get()
+
+
+def emit_current_tool_execution_started() -> None:
+    """Emit ToolExecutionStarted once for the current tool call, if wire is active."""
+    tool_call = get_current_tool_call_or_none()
+    if tool_call is None:
+        return
+
+    started_ids = _current_tool_execution_started_ids.get()
+    if started_ids is None:
+        started_ids = set[str]()
+        _current_tool_execution_started_ids.set(started_ids)
+    if tool_call.id in started_ids:
+        return
+    started_ids.add(tool_call.id)
+
+    try:
+        from pythinker_code.soul import get_wire_or_none
+
+        if wire := get_wire_or_none():
+            wire.soul_side.send(ToolExecutionStarted(tool_call_id=tool_call.id))
+    except Exception as exc:  # noqa: BLE001 - lifecycle events must not break tool execution
+        logger.debug(
+            "Failed to emit tool execution start: {tool_name} (call_id={call_id}): {error}",
+            tool_name=tool_call.function.name,
+            call_id=tool_call.id,
+            error=exc,
+        )
+
+
+def _tool_defers_execution_started(tool: ToolType) -> bool:
+    return bool(
+        getattr(tool, "emits_tool_execution_started_after_approval", False)
+        or hasattr(tool, "_approval")
+    )
 
 
 def _mcp_stderr_log_path(runtime: Runtime, server_name: str) -> Path:
@@ -184,6 +223,13 @@ class PythinkerToolset:
                 return ToolResult(tool_call_id=tool_call.id, return_value=ToolParseError(str(e)))
 
             async def _call():
+                started_ids_token = _current_tool_execution_started_ids.set(set[str]())
+                try:
+                    return await _call_with_lifecycle()
+                finally:
+                    _current_tool_execution_started_ids.reset(started_ids_token)
+
+            async def _call_with_lifecycle():
                 tool_input_dict = arguments if isinstance(arguments, dict) else {}
 
                 if self._runtime is not None:
@@ -224,6 +270,9 @@ class PythinkerToolset:
                 # --- Execute tool ---
                 from pythinker_code.telemetry import metrics as _m
                 from pythinker_code.telemetry import otel as _otel
+
+                if not _tool_defers_execution_started(tool):
+                    emit_current_tool_execution_started()
 
                 t0 = time.monotonic()
                 _tool_span_cm = _otel.start_span(

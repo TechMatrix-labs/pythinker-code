@@ -66,6 +66,7 @@ from pythinker_code.wire.types import (
 
 _ELLIPSIS = "..."
 _THINKING_PREVIEW_LINES = 6
+_COMPOSING_PREVIEW_LINES = 12
 MAX_SUBAGENT_TOOL_CALLS_TO_SHOW = 4
 
 # Background-agent statuses that mean "still running" — the tool call result
@@ -203,7 +204,7 @@ class _ContentBlock:
             if self._show_thinking_stream:
                 return self._compose_thinking_stream()
             return self._compose_thinking()
-        return self._compose_spinner()
+        return self._compose_composing()
 
     def compose_final(self) -> RenderableType:
         """Render the remaining uncommitted content when the block ends."""
@@ -253,6 +254,15 @@ class _ContentBlock:
             bullet=Text(TRANSCRIPT_ASSISTANT_MARKER, style=tui_rich_style("success")),
         )
 
+    def _wrap_preview_bullet(self, renderable: RenderableType) -> BulletColumns:
+        """Wrap transient live preview without mutating scrollback bullet state."""
+        if self._has_printed_bullet:
+            return BulletColumns(renderable, bullet=Text(" "))
+        return BulletColumns(
+            renderable,
+            bullet=Text(TRANSCRIPT_ASSISTANT_MARKER, style=tui_rich_style("success")),
+        )
+
     @property
     def has_emitted_to_scrollback(self) -> bool:
         """Whether any part of this block has been printed to scrollback yet."""
@@ -292,6 +302,14 @@ class _ContentBlock:
             spinner="shape",
         )
 
+    def _compose_composing(self) -> RenderableType:
+        spinner = self._compose_spinner()
+        pending = self._pending_text()
+        if not pending:
+            return spinner
+        preview = self._build_preview(pending, max_lines=_COMPOSING_PREVIEW_LINES)
+        return Group(spinner, self._wrap_preview_bullet(Markdown(preview)))
+
     def _compose_spinner(self) -> Text:
         return activity_status_line(
             self._activity_snapshot("Composing", label_style=tui_rich_style("thinking_text")),
@@ -304,7 +322,7 @@ class _ContentBlock:
         pending = self._pending_text()
         if not pending:
             return spinner
-        preview = self._build_preview(pending)
+        preview = self._build_preview(pending, max_lines=_THINKING_PREVIEW_LINES)
         preview_style = tui_rich_style("thinking_text") + Style(italic=True)
         return Group(spinner, Text(preview, style=preview_style))
 
@@ -314,10 +332,10 @@ class _ContentBlock:
             width=current_console_width(),
         )
 
-    def _build_preview(self, text: str) -> str:
-        """Tail-trim *text* to the last ``_THINKING_PREVIEW_LINES`` and clamp width."""
+    def _build_preview(self, text: str, *, max_lines: int) -> str:
+        """Tail-trim *text* to ``max_lines`` and clamp it to current terminal width."""
         max_width = current_console_width() - 2
-        tail_text = _tail_lines(text, _THINKING_PREVIEW_LINES)
+        tail_text = _tail_lines(text, max_lines)
         lines = tail_text.split("\n")
         return "\n".join(_truncate_to_display_width(line, max_width) for line in lines)
 
@@ -358,6 +376,14 @@ class _ToolCallBlock:
         # ``pythinker`` worklog path so that rendering is bit-for-bit
         # unchanged.
         self._tui_card: ToolExecutionComponent | None = None
+        # True once the runtime reports that approval/hooks are complete and
+        # the tool body is executing. Before this, streamed tool-call args render
+        # as a calm "preparing" row instead of an execution spinner.
+        self._execution_started: bool = False
+        # Incremental tool output (currently shell stdout/stderr) that should be
+        # visible before the final ToolResult arrives.
+        self._streamed_output_parts: list[str] = []
+        self._streamed_output_had_stderr: bool = False
         # True while the Agent tool result indicates a still-running background
         # agent.  The block stays in _tool_call_blocks (and in the Live area)
         # rather than being flushed to static scrollback, so the spinner keeps
@@ -419,6 +445,23 @@ class _ToolCallBlock:
         if argument and argument != self._argument:
             self._argument = argument
             self._renderable = self._compose()
+
+    def mark_execution_started(self) -> None:
+        if self._execution_started:
+            return
+        self._execution_started = True
+        if self._tui_card is not None:
+            self._tui_card.mark_execution_started()
+        self._renderable = self._compose()
+
+    def append_output_part(self, text: str, *, stream: str = "output") -> None:
+        if self.finished or not text:
+            return
+        self._streamed_output_parts.append(text)
+        if stream == "stderr":
+            self._streamed_output_had_stderr = True
+        self.mark_execution_started()
+        self._renderable = self._compose()
 
     def finish(self, result: ToolReturnValue):
         self._result = result
@@ -523,6 +566,11 @@ class _ToolCallBlock:
                 children.append(render_activity_tree(rows, width=current_console_width()))
 
         if self._result is None:
+            streamed_output = self._streamed_output_text()
+            if streamed_output:
+                preview = _tail_lines(streamed_output.rstrip("\n"), 8)
+                output_style = "error" if self._streamed_output_had_stderr else "muted"
+                children.append(Text(preview, style=tui_rich_style(output_style)))
             return render_worklog_entry(
                 label=style.label,
                 target=self._argument,
@@ -575,8 +623,8 @@ class _ToolCallBlock:
                 self._tool_call_id,
                 definition=definition,
             )
-            # We see the tool call event, so the model has begun work.
-            self._tui_card.mark_execution_started()
+            if self._execution_started:
+                self._tui_card.mark_execution_started()
         raw_args = self._lexer.complete_json() or "{}"
         try:
             parsed = json.loads(raw_args, strict=False)
@@ -584,10 +632,11 @@ class _ToolCallBlock:
             parsed = {}
         if isinstance(parsed, dict):
             self._tui_card.update_args(cast(dict[str, Any], parsed))
-        # Args are complete once a result lands; before that we treat
+        # Args are complete once execution starts; before that we treat
         # complete_json output as best-effort.
-        if self._result is not None:
+        if self._execution_started or self._result is not None:
             self._tui_card.set_args_complete()
+        if self._result is not None:
             self._tui_card.set_result(
                 ToolResultPayload(
                     text=self._card_result_text(self._result),
@@ -596,7 +645,24 @@ class _ToolCallBlock:
                 ),
                 is_partial=self._is_background_pending,
             )
+        elif streamed_output := self._streamed_output_text():
+            self._tui_card.set_result(
+                ToolResultPayload(
+                    text=streamed_output,
+                    is_error=False,
+                    details={
+                        "output": streamed_output,
+                        "message": "",
+                        "display": [],
+                        "extras": {"status": "running"},
+                    },
+                ),
+                is_partial=True,
+            )
         return self._tui_card.render()
+
+    def _streamed_output_text(self) -> str:
+        return "".join(self._streamed_output_parts)
 
     @staticmethod
     def _card_result_details(result: ToolReturnValue) -> dict[str, Any]:

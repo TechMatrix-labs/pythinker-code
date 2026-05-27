@@ -146,6 +146,21 @@ def test_card_style_streaming_args_then_result(_force_card_style):
     assert "5 lines" in rendered
 
 
+def test_card_style_streamed_shell_output_renders_before_result(_force_card_style):
+    from pythinker_code.ui.shell.tool_renderers import register_builtin_renderers
+
+    register_builtin_renderers()
+    block = _ToolCallBlock(_make_tool_call(name="Shell", args='{"command":"printf hi"}'))
+
+    block.mark_execution_started()
+    block.append_output_part("hi", stream="stdout")
+
+    rendered = render_plain(block.compose(), width=80)
+    assert "Bash" in rendered
+    assert "hi" in rendered
+    assert "esc to cancel" in rendered
+
+
 def test_card_style_error_result(_force_card_style):
     _register_read_renderer()
     block = _ToolCallBlock(_make_tool_call())
@@ -164,6 +179,7 @@ def test_card_style_running_subagent_uses_solid_circle(_force_card_style, monkey
     block = _ToolCallBlock(
         _make_tool_call(name="Agent", args='{"description":"Audit UI","prompt":"check"}')
     )
+    block.mark_execution_started()
     rendered = render_plain(block.compose(), width=80)
     spinner_frames = set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
@@ -212,6 +228,7 @@ def test_card_style_running_task_output_uses_solid_circle(_force_card_style, mon
             args='{"task_id":"agent-123","block":true,"timeout":300}',
         )
     )
+    block.mark_execution_started()
     rendered = render_plain(block.compose(), width=80)
     spinner_frames = set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
@@ -231,6 +248,7 @@ def test_card_style_running_subagent_marker_pulses(_force_card_style, monkeypatc
     block = _ToolCallBlock(
         _make_tool_call(name="Agent", args='{"description":"Audit UI","prompt":"check"}')
     )
+    block.mark_execution_started()
 
     first = render_plain(block.compose(), width=80)
     monkeypatch.setattr(
@@ -314,8 +332,7 @@ def test_card_style_background_subagent_marker_pulses(_force_card_style, monkeyp
 
 
 def test_card_style_lifecycle_marks_execution_started(_force_card_style):
-    """_ToolCallBlock should call mark_execution_started on the card so
-    renderers see ctx.execution_started == True from the first compose."""
+    """ToolExecutionStarted should mark the card running before the result arrives."""
     seen = {"execution_started": False, "args_complete": False}
 
     def render_call(ctx: ToolRenderContext):
@@ -331,11 +348,16 @@ def test_card_style_lifecycle_marks_execution_started(_force_card_style):
         )
     )
     block = _ToolCallBlock(_make_tool_call())
-    # Initial compose runs from __init__ — execution_started should be set.
+    render_plain(block.compose(), width=40)
+    assert seen["execution_started"] is False
+    assert seen["args_complete"] is False
+
+    block.mark_execution_started()
     render_plain(block.compose(), width=40)
     assert seen["execution_started"] is True
-    assert seen["args_complete"] is False
-    # After the result lands, args_complete should be set too.
+    assert seen["args_complete"] is True
+
+    # After the result lands, args_complete should remain set.
     block.finish(_ok_result("done"))
     render_plain(block.compose(), width=40)
     assert seen["args_complete"] is True

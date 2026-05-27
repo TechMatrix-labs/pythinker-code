@@ -425,7 +425,7 @@ def test_replay_streams_wire_history(tmp_path) -> None:
         assert resp.get("result") == snapshot(
             {
                 "status": "finished",
-                "events": 10,
+                "events": 12,
                 "requests": 0,
             }
         )
@@ -464,6 +464,16 @@ def test_replay_streams_wire_history(tmp_path) -> None:
                         "plan_mode": False,
                         "mcp_status": None,
                     },
+                },
+                {
+                    "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-1", "stream": "stdout", "text": "ok\n"},
                 },
                 {
                     "method": "event",

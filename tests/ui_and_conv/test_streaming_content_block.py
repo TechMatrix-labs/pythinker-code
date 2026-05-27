@@ -222,6 +222,7 @@ def test_composing_live_label_uses_professional_activity_wording():
 
     assert "Composing" in output
     assert "tokens" in output
+    assert "hello" in output
 
 
 def test_thinking_status_line_uses_compact_activity_metadata():
@@ -251,7 +252,7 @@ def test_composing_and_thinking_labels_are_neutral_grey():
 
     composing = _ContentBlock(is_think=False)
     composing.append("hello")
-    composing_renderable = composing.compose()
+    composing_renderable = composing._compose_spinner()
     assert isinstance(composing_renderable, Text)
     assert _style_for(composing_renderable, "Composing").color == thinking_grey
     assert _style_for(composing_renderable, "Composing").color != muted
@@ -287,6 +288,26 @@ class TestContentBlockCommitment:
         block = _ContentBlock(is_think=False)
         block.append("just some text without newlines")
         assert block._committed_len == 0
+
+    def test_composing_previews_pending_text_without_committing(self):
+        block = _ContentBlock(is_think=False)
+        block.append("live preview without newline")
+        console = Console(record=True, width=120, color_system=None)
+        console.print(block.compose())
+
+        assert "live preview without newline" in console.export_text()
+        assert block._committed_len == 0
+        assert not block.has_emitted_to_scrollback
+
+    def test_composing_preview_is_tail_limited(self):
+        block = _ContentBlock(is_think=False)
+        block.append("\n".join(f"line {i:02d}" for i in range(1, 21)))
+        console = Console(record=True, width=120, color_system=None)
+        console.print(block.compose())
+        output = console.export_text()
+
+        assert "line 20" in output
+        assert "line 01" not in output
 
     def test_newline_split_across_chunks(self):
         """Block boundary \\n\\n split across two chunks should still commit."""

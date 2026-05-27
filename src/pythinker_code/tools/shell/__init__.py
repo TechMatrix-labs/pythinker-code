@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
-from typing import Self, override
+from typing import Literal, Self, override
 
 import pythinker_host
 from pydantic import BaseModel, Field, model_validator
@@ -124,13 +124,31 @@ class Shell(CallableTool2[Params]):
         if not result:
             return result.rejection_error()
 
+        tool_call = get_current_tool_call_or_none()
+
+        def emit_output_part(stream: Literal["stdout", "stderr", "output"], text: str) -> None:
+            if tool_call is None or not text:
+                return
+            try:
+                from pythinker_code.soul import get_wire_or_none
+                from pythinker_code.wire.types import ToolOutputPart
+
+                if wire := get_wire_or_none():
+                    wire.soul_side.send(
+                        ToolOutputPart(tool_call_id=tool_call.id, stream=stream, text=text)
+                    )
+            except Exception as exc:  # noqa: BLE001 - streaming must not break the tool
+                logger.debug("Failed to stream shell output: {error}", error=exc)
+
         def stdout_cb(line: bytes):
             line_str = line.decode(encoding="utf-8", errors="replace")
             builder.write(line_str)
+            emit_output_part("stdout", line_str)
 
         def stderr_cb(line: bytes):
             line_str = line.decode(encoding="utf-8", errors="replace")
             builder.write(line_str)
+            emit_output_part("stderr", line_str)
 
         try:
             exitcode = await self._run_shell_command(

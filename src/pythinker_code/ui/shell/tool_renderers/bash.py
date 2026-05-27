@@ -71,7 +71,9 @@ def _render_call(ctx: ToolRenderContext) -> RenderableType | None:
         description = as_str(args.get("description"))
         suffix = f" (background: {description})" if description else " (background)"
         summary.append_text(fg("muted", suffix))
-    style_token = "error" if ctx.is_error else "success" if ctx.has_result else "muted"
+    style_token = (
+        "error" if ctx.is_error else "success" if ctx.has_result and not ctx.is_partial else "muted"
+    )
     line = tool_call_header("Bash", summary, style_token=style_token)
     return running_spinner(line, execution_started=ctx.execution_started, has_result=ctx.has_result)
 
@@ -95,7 +97,9 @@ def _render_result(ctx: ToolRenderContext, result: ToolResultPayload) -> Rendera
     extras = cast("dict[str, object]", extras_raw) if isinstance(extras_raw, dict) else {}
     status_value = extras.get("status")
     status: BashStatus
-    if status_value == "cancelled":
+    if ctx.is_partial or status_value == "running":
+        status = "running"
+    elif status_value == "cancelled":
         status = "cancelled"
     else:
         status = "error" if result.is_error else "complete"

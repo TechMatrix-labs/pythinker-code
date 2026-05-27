@@ -10,7 +10,10 @@ from pythinker_code.approval_runtime import (
     ApprovalSource,
     get_current_approval_source_or_none,
 )
-from pythinker_code.soul.toolset import get_current_tool_call_or_none
+from pythinker_code.soul.toolset import (
+    emit_current_tool_execution_started,
+    get_current_tool_call_or_none,
+)
 from pythinker_code.tools.utils import ToolRejectedError
 from pythinker_code.utils.logging import logger
 from pythinker_code.wire.types import DisplayBlock
@@ -210,6 +213,7 @@ class Approval:
                 tool_name=tool_call.function.name,
                 approval_mode="auto" if self.is_auto() else "yolo",
             )
+            emit_current_tool_execution_started()
             return ApprovalResult(approved=True)
 
         if action in self._state.auto_approve_actions:
@@ -220,6 +224,7 @@ class Approval:
                 tool_name=tool_call.function.name,
                 approval_mode="auto_session",
             )
+            emit_current_tool_execution_started()
             return ApprovalResult(approved=True)
 
         request_id = str(uuid.uuid4())
@@ -258,6 +263,7 @@ class Approval:
                     tool_name=tool_call.function.name,
                     approval_mode="manual",
                 )
+                emit_current_tool_execution_started()
                 return ApprovalResult(approved=True)
             case "approve_for_session":
                 track(
@@ -270,6 +276,7 @@ class Approval:
                 for pending in self._runtime.list_pending():
                     if pending.action == action:
                         self._runtime.resolve(pending.id, "approve")
+                emit_current_tool_execution_started()
                 return ApprovalResult(approved=True)
             case "reject":
                 track(

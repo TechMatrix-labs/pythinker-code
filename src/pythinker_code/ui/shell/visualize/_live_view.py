@@ -93,6 +93,8 @@ from pythinker_code.wire.types import (
     ToolCall,
     ToolCallPart,
     ToolCallRequest,
+    ToolExecutionStarted,
+    ToolOutputPart,
     ToolResult,
     TurnBegin,
     TurnEnd,
@@ -805,6 +807,10 @@ class _LiveView:
                 self.append_tool_call(msg)
             case ToolCallPart():
                 self.append_tool_call_part(msg)
+            case ToolExecutionStarted():
+                self.mark_tool_execution_started(msg.tool_call_id)
+            case ToolOutputPart():
+                self.append_tool_output_part(msg)
             case ToolResult():
                 self.append_tool_result(msg)
             case ApprovalResponse():
@@ -1092,6 +1098,16 @@ class _LiveView:
         self._last_tool_call_block.append_args_part(part.arguments_part)
         self.refresh_soon()
 
+    def mark_tool_execution_started(self, tool_call_id: str) -> None:
+        if block := self._tool_call_blocks.get(tool_call_id):
+            block.mark_execution_started()
+            self.refresh_soon()
+
+    def append_tool_output_part(self, part: ToolOutputPart) -> None:
+        if block := self._tool_call_blocks.get(part.tool_call_id):
+            block.append_output_part(part.text, stream=part.stream)
+            self.refresh_soon()
+
     def append_tool_result(self, result: ToolResult) -> None:
         if block := self._tool_call_blocks.get(result.tool_call_id):
             self._record_todo_display(result.return_value)
@@ -1243,6 +1259,10 @@ class _LiveView:
                 block.append_sub_tool_call_part(tool_call_part)
             case ToolResult() as tool_result:
                 block.finish_sub_tool_call(tool_result)
+                self.refresh_soon()
+            case ToolExecutionStarted() | ToolOutputPart():
+                # Nested subagent execution/output streaming is intentionally
+                # summarized at the parent Agent-card level for now.
                 self.refresh_soon()
             case _:
                 # ignore other events for now
