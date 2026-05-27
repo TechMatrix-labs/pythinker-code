@@ -229,6 +229,20 @@ class ProjectMemoryStore:
             await self._write_entries(target, candidate)
         return MemoryOpResult(True, "Entry replaced.")
 
+    async def remove(self, target: Target, old_text: str) -> MemoryOpResult:
+        old_text = old_text.strip()
+        if not old_text:
+            return MemoryOpResult(False, "old_text cannot be empty.")
+        path = await self._path_for(target)
+        with self._file_lock(path):
+            entries = await self.read_entries(target)
+            idx = self._match_one(entries, old_text)
+            if isinstance(idx, MemoryOpResult):
+                return idx
+            entries.pop(idx)
+            await self._write_entries(target, entries)
+        return MemoryOpResult(True, "Entry removed.")
+
 
 _MEMORY_THREAT_PATTERNS: list[tuple[str, str]] = [
     (r"ignore\s+(?:(?:previous|all|above|prior)\s+)+instructions", "prompt_injection"),
