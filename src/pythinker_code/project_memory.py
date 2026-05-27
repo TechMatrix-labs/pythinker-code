@@ -13,16 +13,21 @@ import hashlib
 import os
 import re
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
+from pythinker_core.message import Message
 from pythinker_host.path import HostPath
 
 from pythinker_code.scratchpad import GitRunner, _default_git_runner
 from pythinker_code.share import get_share_dir
+from pythinker_code.soul.dynamic_injection import DynamicInjection, DynamicInjectionProvider
 from pythinker_code.utils.logging import logger
+
+if TYPE_CHECKING:
+    from pythinker_code.soul.pythinkersoul import PythinkerSoul
 
 ENTRY_DELIMITER = "\n§\n"
 MEMORY_CHAR_LIMIT = 2200
@@ -330,3 +335,33 @@ def scan_memory_content(content: str) -> str | None:
                 f"Blocked: content looks like a secret ('{pid}'). Do not store secrets in memory."
             )
     return None
+
+
+_INJECTION_TYPE = "project_memory"
+
+
+class ProjectMemoryInjectionProvider(DynamicInjectionProvider):
+    """Injects the project-memory snapshot once per session (root soul only)."""
+
+    def __init__(self, store: ProjectMemoryStore) -> None:
+        self._store = store
+        self._injected = False
+
+    async def get_injections(
+        self, history: Sequence[Message], soul: PythinkerSoul
+    ) -> list[DynamicInjection]:
+        _ = history, soul
+        if self._injected:
+            return []
+        self._injected = True
+        try:
+            block = await self._store.snapshot()
+        except Exception:
+            logger.debug("project memory snapshot failed")
+            return []
+        if not block.strip():
+            return []
+        return [DynamicInjection(type=_INJECTION_TYPE, content=block)]
+
+    async def on_context_compacted(self) -> None:
+        self._injected = False

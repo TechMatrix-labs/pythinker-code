@@ -210,3 +210,24 @@ async def test_snapshot_builds_block_with_priority_and_budget(tmp_path, monkeypa
     small = await store.snapshot(budget=len("## Project memory\n- uses pytest\n") + 5)
     assert "uses pytest" in small
     assert "prefers concise answers" not in small
+
+
+async def test_injection_provider_injects_once_and_resets_on_compaction(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path / "share"))
+    from pythinker_code.project_memory import ProjectMemoryInjectionProvider, ProjectMemoryStore
+
+    fake = FakeGit({("rev-parse", "--show-toplevel"): GitResult(True, 0, str(tmp_path / "repo"))})
+    store = ProjectMemoryStore(_hp(tmp_path / "repo"), git_runner=fake)
+
+    provider = ProjectMemoryInjectionProvider(store)
+    assert await provider.get_injections([], object()) == []
+
+    await store.add("memory", "uses pytest")
+    provider2 = ProjectMemoryInjectionProvider(store)
+    first = await provider2.get_injections([], object())
+    assert len(first) == 1 and first[0].type == "project_memory"
+    assert "uses pytest" in first[0].content
+    assert await provider2.get_injections([], object()) == []
+    await provider2.on_context_compacted()
+    again = await provider2.get_injections([], object())
+    assert len(again) == 1
