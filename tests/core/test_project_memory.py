@@ -186,3 +186,27 @@ async def test_remove_deletes_matching_entry(tmp_path, monkeypatch):
 
     r = await store.remove("memory", "nope")
     assert not r.ok and "No entry matched" in r.message
+
+
+async def test_snapshot_builds_block_with_priority_and_budget(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path / "share"))
+    from pythinker_code.project_memory import ProjectMemoryStore
+
+    fake = FakeGit({("rev-parse", "--show-toplevel"): GitResult(True, 0, str(tmp_path / "repo"))})
+    store = ProjectMemoryStore(_hp(tmp_path / "repo"), git_runner=fake)
+
+    assert (await store.snapshot()).strip() == ""
+
+    await store.add("memory", "uses pytest")
+    await store.add("user", "prefers concise answers")
+    block = await store.snapshot()
+    assert "## Project memory" in block
+    assert "uses pytest" in block
+    assert "## User" in block
+    assert "prefers concise answers" in block
+    assert "Memory tool" in block
+    assert "MEMORY.md" in block
+
+    small = await store.snapshot(budget=len("## Project memory\n- uses pytest\n") + 5)
+    assert "uses pytest" in small
+    assert "prefers concise answers" not in small

@@ -243,6 +243,47 @@ class ProjectMemoryStore:
             await self._write_entries(target, entries)
         return MemoryOpResult(True, "Entry removed.")
 
+    async def _read_journal(self, *, last_n: int = 10) -> list[str]:
+        root = await self._ensure_dir()
+        path = root / "memory" / "JOURNAL.md"
+        try:
+            if not path.exists():
+                return []
+            return self._split_entries(path.read_text(encoding="utf-8"))[:last_n]
+        except OSError:
+            return []
+
+    async def snapshot(self, *, budget: int = INJECTION_BUDGET_BYTES) -> str:
+        memory = await self.read_entries("memory")
+        user = await self.read_entries("user")
+        journal = await self._read_journal()
+        sections: list[tuple[str, list[str]]] = [
+            ("## Project memory", memory),
+            ("## User", user),
+            ("## Recent sessions", journal),
+        ]
+        out: list[str] = []
+        used = 0
+        for heading, entries in sections:
+            if not entries:
+                continue
+            chunk = heading + "\n" + "\n".join(f"- {e}" for e in entries) + "\n"
+            if used + len(chunk.encode("utf-8")) > budget and out:
+                break
+            out.append(chunk)
+            used += len(chunk.encode("utf-8"))
+        if not out:
+            return ""
+        # Header (exempt from the entry budget) names the source files so the
+        # agent can read full files if truncated and knows the write path.
+        root = await self._ensure_dir()
+        header = (
+            "Project memory — durable facts recorded for this project, stored at "
+            f"{root / 'memory'}. Update it with the Memory tool; if this block looks "
+            "truncated, read MEMORY.md / USER.md there directly.\n"
+        )
+        return (header + "\n" + "\n".join(out)).strip()
+
 
 _MEMORY_THREAT_PATTERNS: list[tuple[str, str]] = [
     (r"ignore\s+(?:(?:previous|all|above|prior)\s+)+instructions", "prompt_injection"),
