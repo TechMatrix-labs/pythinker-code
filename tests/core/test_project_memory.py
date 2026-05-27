@@ -235,3 +235,19 @@ async def test_injection_provider_injects_once_and_resets_on_compaction(tmp_path
     await provider2.on_context_compacted()
     again = await provider2.get_injections([], object())
     assert len(again) == 1
+
+
+async def test_end_to_end_written_fact_is_recalled(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path / "share"))
+    from pythinker_code.project_memory import ProjectMemoryInjectionProvider, ProjectMemoryStore
+
+    fake = FakeGit({("rev-parse", "--show-toplevel"): GitResult(True, 0, str(tmp_path / "repo"))})
+
+    writer = ProjectMemoryStore(_hp(tmp_path / "repo"), git_runner=fake)
+    await writer.add("memory", "build with uv run")
+
+    reader = ProjectMemoryStore(_hp(tmp_path / "repo"), git_runner=fake)
+    provider = ProjectMemoryInjectionProvider(reader)
+    injections = await provider.get_injections([], object())
+    assert len(injections) == 1
+    assert "build with uv run" in injections[0].content

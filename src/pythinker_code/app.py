@@ -345,6 +345,15 @@ class PythinkerCLI:
 
         soul = PythinkerSoul(agent, context=context)
 
+        from pythinker_code.project_memory import (
+            ProjectMemoryInjectionProvider,
+            ProjectMemoryStore,
+        )
+
+        soul.add_injection_provider(
+            ProjectMemoryInjectionProvider(ProjectMemoryStore(session.work_dir))
+        )
+
         # Activate plan mode if requested (for new sessions or --plan flag)
         if plan_mode and not soul.plan_mode:
             await soul.set_plan_mode_from_manual(True)
