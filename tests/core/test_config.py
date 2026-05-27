@@ -148,22 +148,44 @@ def test_load_config_max_steps_per_turn():
     assert config.loop_control.max_steps_per_turn == 42
 
 
-def test_load_config_invalid_legacy_json_is_backed_up_and_replaced(tmp_path, monkeypatch):
+def test_load_config_corrupt_legacy_json_is_backed_up_and_replaced(tmp_path, monkeypatch):
+    """Corrupt (non-JSON) legacy config: backup + use defaults, no silent data loss."""
     monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path))
     legacy_config = tmp_path / "config.json"
     legacy_config.write_text(
-        '{"providers":{"custom":{"apiKey":null,"apiBase":null,"extraBody":null}}}',
+        '{"providers":{"custom":{"apiKey":null}}',  # unclosed brace — invalid JSON
         encoding="utf-8",
     )
 
     config = load_config()
 
+    # Config should be defaults (created fresh), JSON backed up, TOML written.
     assert config.model_dump(
         exclude={"is_from_default_location", "source_file"}
     ) == get_default_config().model_dump(exclude={"is_from_default_location", "source_file"})
     assert not legacy_config.exists()
     assert (tmp_path / "config.json.bak").exists()
     assert (tmp_path / "config.toml").exists()
+
+
+def test_load_config_incompatible_legacy_json_is_preserved_and_rejected(tmp_path, monkeypatch):
+    """Incompatible (valid JSON but schema mismatch) legacy config: preserved, error raised."""
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path))
+    legacy_config = tmp_path / "config.json"
+    legacy_config.write_text(
+        '{"loop_control": {"max_ralph_iterations": -2}}',  # valid JSON, invalid schema
+        encoding="utf-8",
+    )
+
+    # Should raise ConfigError with details instead of silently using defaults.
+    from pythinker_code.exception import ConfigError
+
+    with pytest.raises(ConfigError, match="max_ralph_iterations"):
+        load_config()
+
+    # Legacy file and TOML must both remain intact — no silent backup/replace.
+    assert legacy_config.exists()
+    assert not (tmp_path / "config.toml").exists()
 
 
 def test_load_config_max_steps_per_run():

@@ -420,7 +420,13 @@ def load_config(config_file: Path | None = None) -> Config:
 
     # If the user hasn't provided an explicit config path, migrate legacy JSON config once.
     if is_default_config_file and not config_file.exists():
-        _migrate_json_config_to_toml()
+        migration_error = _migrate_json_config_to_toml()
+        if migration_error is not None:
+            raise ConfigError(
+                f"Legacy config file has incompatible settings; please fix or "
+                f"rename/delete {migration_error.config_file} to continue. "
+                f"Errors: {migration_error.errors}"
+            ) from None
 
     if not config_file.exists():
         config = get_default_config()
@@ -509,14 +515,33 @@ def save_config(config: Config, config_file: Path | None = None):
         os.chmod(config_file, 0o600)
 
 
-def _migrate_json_config_to_toml() -> None:
+class MigrationError(Exception):
+    """Raised when legacy config migration fails due to incompatible schema."""
+
+    def __init__(self, config_file: str, errors: list[str]) -> None:
+        super().__init__(config_file, errors)
+        self.config_file = config_file
+        self.errors = errors
+
+
+def _migrate_json_config_to_toml() -> MigrationError | None:
+    """
+    Attempt to migrate legacy JSON config to TOML.
+
+    Returns:
+        None on success.
+        MigrationError if the JSON is valid but has incompatible schema — caller
+        should raise ConfigError so the user can see their actual settings.
+
+    Corrupt JSON is handled here: backed up so defaults take over silently.
+    """
     old_json_config_file = get_share_dir() / "config.json"
     new_toml_config_file = get_share_dir() / "config.toml"
 
     if not old_json_config_file.exists():
-        return
+        return None
     if new_toml_config_file.exists():
-        return
+        return None
 
     logger.info(
         "Migrating legacy config file from {old} to {new}",
@@ -524,30 +549,54 @@ def _migrate_json_config_to_toml() -> None:
         new=new_toml_config_file,
     )
 
-    try:
-        with open(old_json_config_file, encoding="utf-8") as f:
-            data = json.load(f)
-        config = Config.model_validate(data)
-    except json.JSONDecodeError as e:
-        logger.warning(
-            "Ignoring invalid legacy JSON config file {file}: {err}",
-            file=old_json_config_file,
-            err=e,
-        )
-        config = get_default_config()
-    except ValidationError as e:
-        logger.warning(
-            "Ignoring incompatible legacy config file {file}: {err}",
-            file=old_json_config_file,
-            err=e,
-        )
-        config = get_default_config()
-
-    # Write new TOML config, then keep a backup of the original JSON file.
-    save_config(config, new_toml_config_file)
     backup_path = _next_legacy_config_backup_path(old_json_config_file)
-    old_json_config_file.replace(backup_path)
-    logger.info("Legacy config backed up to {file}", file=backup_path)
+
+    data: object | None = None
+    json_decode_error: json.JSONDecodeError | None = None
+    validation_errors: list[str] = []
+    config: Config | None = None
+
+    try:
+        data = json.loads(old_json_config_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        json_decode_error = e
+
+    if json_decode_error is not None:
+        # Corrupt JSON: back up the file so load_config() creates a fresh config.
+        logger.error(
+            "Legacy config file is corrupt JSON ({err}); backing it up and skipping migration. "
+            "Please fix or remove {file} to restore default behavior.",
+            err=json_decode_error,
+            file=old_json_config_file,
+        )
+        old_json_config_file.replace(backup_path)
+        return None
+
+    try:
+        config = Config.model_validate(data)
+    except ValidationError as e:
+        validation_errors = [
+            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in e.errors()
+        ]
+
+    if config is not None:
+        save_config(config, new_toml_config_file)
+        old_json_config_file.replace(backup_path)
+        logger.info("Legacy config migrated and backed up to {file}", file=backup_path)
+        return None
+
+    # Valid JSON but incompatible schema: keep the original in place so load_config()
+    # raises ConfigError with the user's actual settings. This preserves user data.
+    logger.warning(
+        "Legacy config file has incompatible settings; please review and fix {file} or "
+        "rename/delete it to use defaults. Errors: {errors}",
+        file=old_json_config_file,
+        errors=validation_errors,
+    )
+    return MigrationError(
+        config_file=str(old_json_config_file),
+        errors=validation_errors,
+    )
 
 
 def _next_legacy_config_backup_path(config_file: Path) -> Path:
