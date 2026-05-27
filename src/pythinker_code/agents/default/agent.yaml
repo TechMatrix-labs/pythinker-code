@@ -12,6 +12,7 @@ agent:
     # - "pythinker_code.tools.think:Think"
     - "pythinker_code.tools.ask_user:AskUserQuestion"
     - "pythinker_code.tools.todo:SetTodoList"
+    - "pythinker_code.tools.memory:Memory"
     - "pythinker_code.tools.shell:Shell"
     - "pythinker_code.tools.background:TaskList"
     - "pythinker_code.tools.background:TaskOutput"
