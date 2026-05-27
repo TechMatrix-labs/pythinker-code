@@ -122,3 +122,50 @@ class ProjectMemoryStore:
         except OSError:
             logger.debug("project memory read failed for {t}", t=target)
             return []
+
+
+_MEMORY_THREAT_PATTERNS: list[tuple[str, str]] = [
+    (r"ignore\s+(?:(?:previous|all|above|prior)\s+)+instructions", "prompt_injection"),
+    (r"you\s+are\s+now\s+", "role_hijack"),
+    (r"do\s+not\s+tell\s+the\s+user", "deception_hide"),
+    (r"system\s+prompt\s+override", "sys_prompt_override"),
+    (r"disregard\s+(your|all|any)\s+(instructions|rules|guidelines)", "disregard_rules"),
+    (r"curl\s+[^\n]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|API)", "exfil_curl"),
+    (r"wget\s+[^\n]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|API)", "exfil_wget"),
+    (r"cat\s+[^\n]*(\.env|credentials|\.netrc|\.pgpass|\.npmrc|\.pypirc)", "read_secrets"),
+    (r"authorized_keys", "ssh_backdoor"),
+]
+
+_SECRET_PATTERNS: list[tuple[str, str]] = [
+    (r"sk-[A-Za-z0-9]{20,}", "openai_key"),
+    (r"gh[ps]_[A-Za-z0-9]{30,}", "github_token"),
+    (r"xox[bp]-[A-Za-z0-9-]{10,}", "slack_token"),
+    (r"AKIA[0-9A-Z]{16}", "aws_access_key"),
+]
+
+_INVISIBLE_CHARS = frozenset(
+    chr(c)
+    for c in (
+        0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF,
+        0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+    )
+)
+
+
+def scan_memory_content(content: str) -> str | None:
+    """Return an error string if content is unsafe to persist+inject, else None."""
+    for ch in content:
+        if ch in _INVISIBLE_CHARS:
+            return f"Blocked: invisible unicode U+{ord(ch):04X} (possible injection)."
+    for pattern, pid in _MEMORY_THREAT_PATTERNS:
+        if re.search(pattern, content, re.IGNORECASE):
+            return (
+                f"Blocked: content matches threat pattern '{pid}'. Memory is injected "
+                "into the prompt and must not contain injection/exfiltration payloads."
+            )
+    for pattern, pid in _SECRET_PATTERNS:
+        if re.search(pattern, content):
+            return (
+                f"Blocked: content looks like a secret ('{pid}'). Do not store secrets in memory."
+            )
+    return None
