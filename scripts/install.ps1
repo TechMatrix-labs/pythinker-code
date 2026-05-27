@@ -18,24 +18,120 @@ $Repo = "mohamed-elkholy95/Pythinker-Code"
 $Version = $env:PYTHINKER_VERSION
 $NoColor = $env:NO_COLOR
 
+$ESC = [char]27
 $useColor = $Host.UI.RawUI -ne $null -and -not $NoColor
 if ($useColor) {
-  $IRIS  = "$([char]27)[38;5;152m"
-  $CORAL = "$([char]27)[38;5;216m"
-  $DIM   = "$([char]27)[2m"
-  $BOLD  = "$([char]27)[1m"
-  $RESET = "$([char]27)[0m"
+  $NAVY  = "$ESC[38;5;24m"
+  $FACE  = "$ESC[38;5;255m"
+  $IRIS  = "$ESC[38;5;152m"
+  $CORAL = "$ESC[38;5;216m"
+  $DIM   = "$ESC[2m"
+  $BOLD  = "$ESC[1m"
+  $RESET = "$ESC[0m"
+  $HIDE  = "$ESC[?25l"
+  $SHOW  = "$ESC[?25h"
 } else {
-  $IRIS = $CORAL = $DIM = $BOLD = $RESET = ""
+  $NAVY = $FACE = $IRIS = $CORAL = $DIM = $BOLD = $RESET = $HIDE = $SHOW = ""
 }
 
 function Step($msg) { Write-Host "  $IRIS⠿$RESET $msg" }
 function OK($msg)   { Write-Host "  $IRIS✓$RESET $msg" }
 function Fail($msg) { Write-Host "  $CORAL✗$RESET $msg" -ForegroundColor Red; exit 1 }
 
+# Static logo. Used as the animation fallback (non-TTY, NO_COLOR, CI, or
+# PYTHINKER_NO_ANIMATION=1) and as the source of truth for the final frame.
+function Write-LogoStatic {
+  Write-Host ""
+  Write-Host "      $CORAL●$RESET"
+  Write-Host "      $NAVY│$RESET"
+  Write-Host "  $NAVY▛$RESET$FACE▀▀▀▀▀▀▀$RESET$NAVY▜$RESET"
+  Write-Host " $CORAL◖$RESET$NAVY█$RESET $IRIS◉$RESET   $IRIS◉$RESET $NAVY█$RESET$CORAL◗$RESET"
+  Write-Host "  $NAVY▙▄▄▄$RESET$FACE≡$RESET$NAVY▄▄▄▟$RESET"
+  Write-Host ""
+  Write-Host "  ${BOLD}${FACE}pythinker code${RESET} ${DIM}· your next CLI agent${RESET}"
+  Write-Host ""
+}
+
+# Tetris-style animated logo. Pieces fall from above the canvas one at a time
+# and settle into a 5-row x 13-col grid forming the robot head.
+function Write-LogoAnimated {
+  $rows = 5; $cols = 13
+  $frameMs = 60; $staggerMs = 40
+  if ($env:PYTHINKER_LOGO_FRAME_DELAY)   { try { $frameMs   = [int]([double]$env:PYTHINKER_LOGO_FRAME_DELAY   * 1000) } catch {} }
+  if ($env:PYTHINKER_LOGO_STAGGER_DELAY) { try { $staggerMs = [int]([double]$env:PYTHINKER_LOGO_STAGGER_DELAY * 1000) } catch {} }
+
+  $chars  = New-Object 'string[]' ($rows * $cols)
+  $colors = New-Object 'string[]' ($rows * $cols)
+  for ($i = 0; $i -lt $chars.Length; $i++) { $chars[$i] = ' '; $colors[$i] = '' }
+
+  # Each piece: anchor row/col + cells "dr,dc,char,color" dropped together.
+  $pieces = @(
+    @{ r = 2; c = 2;  cells = @("0,0,▛,$NAVY", "1,0,█,$NAVY", "2,0,▙,$NAVY") },
+    @{ r = 2; c = 10; cells = @("0,0,▜,$NAVY", "1,0,█,$NAVY", "2,0,▟,$NAVY") },
+    @{ r = 2; c = 3;  cells = @("0,0,▀,$FACE", "0,1,▀,$FACE", "0,2,▀,$FACE", "0,3,▀,$FACE", "0,4,▀,$FACE", "0,5,▀,$FACE", "0,6,▀,$FACE") },
+    @{ r = 4; c = 3;  cells = @("0,0,▄,$NAVY", "0,1,▄,$NAVY", "0,2,▄,$NAVY", "0,3,≡,$FACE", "0,4,▄,$NAVY", "0,5,▄,$NAVY", "0,6,▄,$NAVY") },
+    @{ r = 3; c = 4;  cells = @("0,0,◉,$IRIS") },
+    @{ r = 3; c = 8;  cells = @("0,0,◉,$IRIS") },
+    @{ r = 3; c = 1;  cells = @("0,0,◖,$CORAL") },
+    @{ r = 3; c = 11; cells = @("0,0,◗,$CORAL") },
+    @{ r = 1; c = 6;  cells = @("0,0,│,$NAVY") },
+    @{ r = 0; c = 6;  cells = @("0,0,●,$CORAL") }
+  )
+
+  $out = [Console]::Out
+  $out.Write($HIDE)
+  try {
+    for ($i = 0; $i -lt $rows; $i++) { $out.Write("`n") }
+
+    foreach ($p in $pieces) {
+      for ($r = -1; $r -le $p.r; $r++) {
+        $out.Write("$ESC[${rows}A`r")
+        $line = New-Object System.Text.StringBuilder
+        for ($rr = 0; $rr -lt $rows; $rr++) {
+          for ($cc = 0; $cc -lt $cols; $cc++) {
+            $idx = $rr * $cols + $cc
+            $ch = $chars[$idx]; $col = $colors[$idx]
+            foreach ($cell in $p.cells) {
+              $parts = $cell -split ',', 4
+              if (($r + [int]$parts[0]) -eq $rr -and ($p.c + [int]$parts[1]) -eq $cc) {
+                $ch = $parts[2]; $col = $parts[3]
+              }
+            }
+            if ($col) { [void]$line.Append("$col$ch$RESET") } else { [void]$line.Append($ch) }
+          }
+          [void]$line.Append("$ESC[K`n")
+        }
+        $out.Write($line.ToString())
+        Start-Sleep -Milliseconds $frameMs
+      }
+      foreach ($cell in $p.cells) {
+        $parts = $cell -split ',', 4
+        $idx = ($p.r + [int]$parts[0]) * $cols + ($p.c + [int]$parts[1])
+        $chars[$idx] = $parts[2]; $colors[$idx] = $parts[3]
+      }
+      if ($staggerMs -gt 0) { Start-Sleep -Milliseconds $staggerMs }
+    }
+
+    $out.Write("`n")
+    $out.Write("  ${BOLD}${FACE}pythinker code${RESET} ${DIM}· your next CLI agent${RESET}`n`n")
+  } finally {
+    $out.Write($SHOW)
+  }
+}
+
+function Write-Logo {
+  if ($env:PYTHINKER_NO_ANIMATION -or $env:CI -or $NoColor -or -not $useColor -or [Console]::IsOutputRedirected) {
+    Write-LogoStatic
+  } else {
+    Write-LogoAnimated
+  }
+}
+
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
   Fail "This installer is for Windows. Use: curl -fsSL https://pythinker.com/install.sh | bash"
 }
+
+Write-Logo
 
 function Get-LatestVersion {
   Step "Looking up latest Pythinker release"

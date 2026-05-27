@@ -86,21 +86,60 @@ def test_quick_start_standardizes_on_hosted_native_installers() -> None:
     assert "pipx install pythinker-code" not in readme
 
 
+def test_native_curl_installer_shows_robot_logo() -> None:
+    installer = (ROOT / "scripts" / "install-native.sh").read_text()
+
+    assert "print_logo_static()" in installer
+    assert "print_logo_animated()" in installer
+    assert "\nprint_logo\n\n# --- detect target" in installer
+    assert "pythinker code" in installer
+
+
+def test_native_powershell_installer_shows_robot_logo() -> None:
+    installer = (ROOT / "scripts" / "install.ps1").read_text()
+
+    assert "function Write-LogoStatic" in installer
+    assert "function Write-LogoAnimated" in installer
+    assert "function Write-Logo" in installer
+    assert "pythinker code" in installer
+
+
+def test_native_powershell_installer_is_parseable_when_pwsh_is_available() -> None:
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        return
+    installer = (ROOT / "scripts" / "install.ps1").resolve()
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-Command",
+            (
+                "$errs = $null;"
+                f"[System.Management.Automation.Language.Parser]::ParseFile('{installer}',"
+                " [ref]$null, [ref]$errs) | Out-Null;"
+                " if ($errs) { $errs | ForEach-Object { $_.Message }; exit 1 }"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_native_shell_installers_are_parseable_when_bash_is_available() -> None:
     bash = shutil.which("bash")
     if bash is None:
         return
-    subprocess.run(
-        [
-            bash,
-            "-n",
-            str(ROOT / "scripts" / "install-native.sh"),
-            str(ROOT / "docs" / "public" / "install.sh"),
-            str(ROOT / "web" / "public" / "install.sh"),
-            str(ROOT / "src" / "pythinker_code" / "web" / "static" / "install.sh"),
-        ],
-        check=True,
-    )
+    # bash -n only parses its first script argument (the rest become positional
+    # params), so check each tracked copy individually.
+    for rel in (
+        ("scripts", "install-native.sh"),
+        ("docs", "public", "install.sh"),
+        ("web", "public", "install.sh"),
+    ):
+        subprocess.run([bash, "-n", str(ROOT.joinpath(*rel))], check=True)
 
 
 def test_public_install_scripts_match_native_sources_of_truth() -> None:
