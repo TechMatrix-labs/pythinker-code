@@ -220,9 +220,11 @@ def test_prompt_status_block_renders_above_agent_input_preamble() -> None:
     assert text.startswith("● Booting MCP server: context7")
 
 
-def test_background_status_splits_verb_and_count_styles() -> None:
+def test_background_status_splits_verb_and_count_styles(monkeypatch) -> None:
+    import pythinker_code.ui.shell.prompt as prompt_module
     from pythinker_code.ui.theme import get_active_theme, get_tui_tokens, set_active_theme
 
+    monkeypatch.setattr(prompt_module.time, "monotonic", lambda: 0.88)
     saved_theme = get_active_theme()
     try:
         set_active_theme("dark")
@@ -235,8 +237,9 @@ def test_background_status_splits_verb_and_count_styles() -> None:
 
     fragments = [(style, text) for style, text, *_ in rendered]
     muted_style = f"fg:{get_tui_tokens('dark').muted}"
+    shimmer_styles = {style.lower() for style, text in fragments if text.strip(" …")}
 
-    assert any(style == "fg:#E6B450" and "…" in text for style, text in fragments)
+    assert {"fg:#e6b450", "fg:#ebc46e", "fg:#f3d89a"} <= shimmer_styles
     assert any(style == muted_style and "2 background agents" in text for style, text in fragments)
     assert all(style != "ansicyan" for style, _ in fragments)
 

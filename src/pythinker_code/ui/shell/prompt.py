@@ -60,6 +60,7 @@ from pythinker_code.soul import StatusSnapshot, format_context_status
 from pythinker_code.ui.shell import placeholders as prompt_placeholders
 from pythinker_code.ui.shell.console import console
 from pythinker_code.ui.shell.glyphs import TRANSCRIPT_PROMPT_MARKER
+from pythinker_code.ui.shell.motion import shimmer_prompt_fragments
 from pythinker_code.ui.shell.placeholders import (
     PromptPlaceholderManager,
     normalize_pasted_text,
@@ -89,7 +90,6 @@ PROMPT_SYMBOL_SHELL = "$"
 PROMPT_SYMBOL_THINKING = "💫"
 PROMPT_SYMBOL_PLAN = "📋"
 _CARD_SIDE_PADDING = 2
-_PROMPT_VERB_SPINNER_STYLE = "fg:#E6B450"  # brand-exception: muted yellow verb shimmer
 
 
 # prompt_toolkit 3.0.52 can emit these during prompt shutdown on Python 3.14
@@ -2558,7 +2558,7 @@ class CustomPromptSession:
             return FormattedText(
                 [
                     (frame_style, frame_text),
-                    (_PROMPT_VERB_SPINNER_STYLE, verb_text),
+                    *shimmer_prompt_fragments(verb_text, now),
                     (muted_style, detail_text),
                 ]
             )

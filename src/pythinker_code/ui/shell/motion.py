@@ -52,32 +52,67 @@ def shimmer_spinner_style(elapsed_s: float, *, reduced_motion: bool = False) -> 
     return Style(color=Color.parse(palette[idx]))
 
 
-def _shimmer_label_text(label: str, elapsed_s: float, *, reduced_motion: bool) -> Text:
-    """Return a subtle per-character shimmer for the active verb label."""
+def _shimmer_segments(
+    label: str, elapsed_s: float, *, reduced_motion: bool
+) -> list[tuple[str | None, str]]:
+    """Return coalesced ``(hex_color, text)`` shimmer segments.
+
+    This is shared by Rich renderables and prompt_toolkit fragments so every
+    active-work label uses the same visual language.
+    """
+    if not label:
+        return []
     if reduced_motion or reduced_motion_enabled():
-        return Text(label, style=shimmer_spinner_style(elapsed_s, reduced_motion=True))
+        return [(_SHIMMER_BASE, label)]
 
     chars = list(label)
-    if not chars:
-        return Text("")
     # Sweep one bright highlight right-to-left with an asymmetric, slightly
     # wider trail. The uneven trail reads like an angled sheen instead of a flat pulse.
     phase = int(max(0.0, elapsed_s) / _SHIMMER_INTERVAL_S) % (len(chars) + 6)
     head = len(chars) + 2 - phase
-    rendered = Text()
+    segments: list[tuple[str | None, str]] = []
     for i, char in enumerate(chars):
         if char.isspace():
-            rendered.append(char)
-            continue
-        offset = i - head
-        if offset == 0:
-            color = _SHIMMER_HIGHLIGHT
-        elif offset in (-1, 1, 2, 3):
-            color = _SHIMMER_MID
+            color: str | None = None
         else:
-            color = _SHIMMER_BASE
-        rendered.append(char, style=Style(color=Color.parse(color)))
+            offset = i - head
+            if offset == 0:
+                color = _SHIMMER_HIGHLIGHT
+            elif offset in (-1, 1, 2, 3):
+                color = _SHIMMER_MID
+            else:
+                color = _SHIMMER_BASE
+        if segments and segments[-1][0] == color:
+            segments[-1] = (color, segments[-1][1] + char)
+        else:
+            segments.append((color, char))
+    return segments
+
+
+def shimmer_text(label: str, elapsed_s: float, *, reduced_motion: bool = False) -> Text:
+    """Return subtle per-character shimmer text for any active work label."""
+    rendered = Text()
+    for color, text in _shimmer_segments(label, elapsed_s, reduced_motion=reduced_motion):
+        if color is None:
+            rendered.append(text)
+        else:
+            rendered.append(text, style=Style(color=Color.parse(color)))
     return rendered
+
+
+def shimmer_prompt_fragments(
+    label: str, elapsed_s: float, *, reduced_motion: bool = False
+) -> list[tuple[str, str]]:
+    """Return prompt_toolkit fragments using the same shimmer as ``shimmer_text``."""
+    return [
+        (f"fg:{color}" if color is not None else "", text)
+        for color, text in _shimmer_segments(label, elapsed_s, reduced_motion=reduced_motion)
+    ]
+
+
+# Backwards-compatible private name used by older callers/tests.
+def _shimmer_label_text(label: str, elapsed_s: float, *, reduced_motion: bool) -> Text:
+    return shimmer_text(label, elapsed_s, reduced_motion=reduced_motion)
 
 
 @dataclass(frozen=True, slots=True)

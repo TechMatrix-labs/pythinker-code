@@ -4,6 +4,7 @@ import importlib
 
 from pythinker_core.message import ToolCall
 from pythinker_core.tooling import ToolResult, ToolReturnValue
+from rich.color import Color
 from rich.console import Console, Group
 from rich.style import Style
 
@@ -26,6 +27,26 @@ def _style_for(renderable, text: str) -> Style:
     end = start + len(text)
     span = next(span for span in renderable.spans if span.start <= start and span.end >= end)
     return Style.parse(span.style) if isinstance(span.style, str) else span.style
+
+
+def _color_hex(color: Color | None) -> str:
+    assert color is not None
+    triplet = color.triplet
+    assert triplet is not None
+    return triplet.hex.lower()
+
+
+def _span_colors_for(renderable, text: str) -> set[str]:
+    start = renderable.plain.index(text)
+    end = start + len(text)
+    colors: set[str] = set()
+    for span in renderable.spans:
+        if span.end <= start or span.start >= end:
+            continue
+        style = Style.parse(span.style) if isinstance(span.style, str) else span.style
+        if style.color is not None:
+            colors.add(_color_hex(style.color))
+    return colors
 
 
 def _todo_call(call_id: str = "todo-1") -> ToolCall:
@@ -79,6 +100,37 @@ def test_todo_update_pins_current_task_under_activity_line(monkeypatch) -> None:
     assert "… +1 completed" in rendered
     assert "todos(" not in rendered
     assert "Accomplishing" not in rendered
+
+
+def test_active_todo_activity_line_uses_shimmer_palette(monkeypatch) -> None:
+    monkeypatch.delenv("PYTHINKER_REDUCED_MOTION", raising=False)
+    view = _LiveView(StatusUpdate(context_tokens=10_000))
+
+    line = view._todo_activity_line("Implement pinned todos", elapsed_s=0.88, width=100)
+
+    assert _span_colors_for(line, "Implement pinned todos") >= {
+        "#e6b450",
+        "#ebc46e",
+        "#f3d89a",
+    }
+
+
+def test_active_pinned_todo_row_uses_shimmer_palette(monkeypatch) -> None:
+    monkeypatch.delenv("PYTHINKER_REDUCED_MOTION", raising=False)
+    view = _LiveView(StatusUpdate())
+
+    row = view._pinned_todo_row(
+        TodoDisplayItem(title="Implement pinned todos", status="in_progress"),
+        is_first=True,
+        width=100,
+        elapsed_s=0.88,
+    )
+
+    assert _span_colors_for(row, "Implement pinned todos") >= {
+        "#e6b450",
+        "#ebc46e",
+        "#f3d89a",
+    }
 
 
 def test_successful_todo_tool_card_is_suppressed() -> None:

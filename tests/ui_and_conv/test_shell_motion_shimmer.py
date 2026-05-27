@@ -1,6 +1,6 @@
 from rich.color import Color
 
-from pythinker_code.ui.shell.motion import shimmer_spinner_style
+from pythinker_code.ui.shell.motion import shimmer_prompt_fragments, shimmer_spinner_style
 from pythinker_code.ui.theme import set_active_theme
 
 
@@ -24,3 +24,15 @@ def test_shimmer_varies_over_time_when_motion_enabled(monkeypatch):
     later = _color_hex(shimmer_spinner_style(0.22, reduced_motion=False).color)
     # At least one sampled frame differs from the base when animating.
     assert first != later or first != "#e6b450"
+
+
+def test_prompt_shimmer_fragments_share_muted_yellow_palette(monkeypatch):
+    monkeypatch.delenv("PYTHINKER_REDUCED_MOTION", raising=False)
+
+    fragments = shimmer_prompt_fragments("Schlepping…", 0.88)
+    styles = {style.lower() for style, text in fragments if text.strip()}
+
+    assert "fg:#e6b450" in styles
+    assert "fg:#ebc46e" in styles
+    assert "fg:#f3d89a" in styles
+    assert "".join(text for _style, text in fragments) == "Schlepping…"

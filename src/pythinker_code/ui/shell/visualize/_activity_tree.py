@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Literal
 
@@ -10,6 +11,7 @@ from rich.text import Text
 
 from pythinker_code.ui.shell.components.render_utils import cell_width, truncate_to_width
 from pythinker_code.ui.shell.design_system import ShellTone, shell_style, status_icon
+from pythinker_code.ui.shell.motion import shimmer_text
 
 ActivityState = Literal["running", "completed", "failed", "waiting", "denied", "interrupted"]
 
@@ -37,7 +39,11 @@ def render_activity_tree(
         text.append_text(status_icon(row.state))
         text.append(" ")
         text.append(prefix, style=shell_style(ShellTone.MUTED))
-        text.append(truncate_to_width(row.detail, available), style=shell_style(ShellTone.MUTED))
+        detail = truncate_to_width(row.detail, available)
+        if row.state == "running":
+            text.append_text(shimmer_text(detail, time.monotonic()))
+        else:
+            text.append(detail, style=shell_style(ShellTone.MUTED))
         rendered.append(text)
     if hidden:
         rendered.insert(

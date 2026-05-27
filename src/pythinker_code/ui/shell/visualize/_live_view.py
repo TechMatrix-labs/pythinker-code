@@ -37,6 +37,7 @@ from pythinker_code.ui.shell.motion import (
     ActivitySnapshot,
     activity_status_line,
     reduced_motion_enabled,
+    shimmer_text,
 )
 from pythinker_code.ui.shell.spacing import BLANK_ROW
 from pythinker_code.ui.shell.spinner_words import spinner_message
@@ -527,7 +528,7 @@ class _LiveView:
         now = time.monotonic()
         elapsed = 0.0 if self._turn_start_time is None else now - self._turn_start_time
         width = current_console_width()
-        todo_block = self._pinned_todo_block(width=width)
+        todo_block = self._pinned_todo_block(width=width, elapsed_s=elapsed)
         if todo_block is not None:
             line = self._todo_activity_line(
                 self._active_todo_title() or spinner_message(now),
@@ -563,7 +564,7 @@ class _LiveView:
         label_width = max(1, width - cell_width(prefix) - cell_width(suffix))
 
         line = Text(prefix, style=tui_rich_style("accent"))
-        line.append(truncate_to_width(label, label_width), style=tui_rich_style("thinking_text"))
+        line.append_text(shimmer_text(truncate_to_width(label, label_width), elapsed_s))
         line.append(suffix, style=tui_rich_style("muted"))
         return line
 
@@ -573,7 +574,9 @@ class _LiveView:
                 return todo.title.strip()
         return None
 
-    def _pinned_todo_block(self, *, width: int) -> RenderableType | None:
+    def _pinned_todo_block(
+        self, *, width: int, elapsed_s: float | None = None
+    ) -> RenderableType | None:
         """Render the single todo source of truth under the pinned activity line."""
         if not getattr(self, "_pinned_todos_visible", True):
             return None
@@ -589,8 +592,18 @@ class _LiveView:
         hidden = todos[_MAX_PINNED_TODO_ROWS:]
 
         rows: list[Text] = []
+        if elapsed_s is None:
+            now = time.monotonic()
+            elapsed_s = 0.0 if self._turn_start_time is None else now - self._turn_start_time
         for index, todo in enumerate(visible):
-            rows.append(self._pinned_todo_row(todo, is_first=index == 0, width=width))
+            rows.append(
+                self._pinned_todo_row(
+                    todo,
+                    is_first=index == 0,
+                    width=width,
+                    elapsed_s=elapsed_s,
+                )
+            )
 
         if hidden:
             hidden_pending = sum(1 for todo in hidden if todo.status == "pending")
@@ -607,7 +620,14 @@ class _LiveView:
             rows.append(row)
         return Group(*rows)
 
-    def _pinned_todo_row(self, todo: TodoDisplayItem, *, is_first: bool, width: int) -> Text:
+    def _pinned_todo_row(
+        self,
+        todo: TodoDisplayItem,
+        *,
+        is_first: bool,
+        width: int,
+        elapsed_s: float | None = None,
+    ) -> Text:
         if todo.status == "done":
             icon = "✔"
             icon_token = "success"
@@ -624,6 +644,16 @@ class _LiveView:
         title_budget = max(1, width - cell_width(prefix) - 2)
         title = truncate_to_width(todo.title.strip(), title_budget)
         row = Text(prefix, style=tui_rich_style("muted"))
+        if todo.status == "in_progress":
+            if elapsed_s is None:
+                now = time.monotonic()
+                elapsed_s = 0.0 if self._turn_start_time is None else now - self._turn_start_time
+            row.append_text(shimmer_text(icon, elapsed_s))
+            row.append(" ")
+            title_text = shimmer_text(title, elapsed_s)
+            title_text.stylize(Style(bold=True))
+            row.append_text(title_text)
+            return row
         row.append(icon, style=tui_rich_style(icon_token))
         row.append(" ")
         row.append(title, style=title_style)
