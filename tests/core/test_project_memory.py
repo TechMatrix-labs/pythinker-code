@@ -75,3 +75,23 @@ async def test_project_key_never_raises_on_git_failure(tmp_path):
 
     key = await project_key(_hp(tmp_path), git_runner=Boom())
     assert key
+
+
+async def test_store_resolves_central_dir_and_reads_entries(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path / "share"))
+    from pythinker_code.project_memory import ProjectMemoryStore
+
+    fake = FakeGit({("rev-parse", "--show-toplevel"): GitResult(True, 0, str(tmp_path / "repo"))})
+    store = ProjectMemoryStore(_hp(tmp_path / "repo"), git_runner=fake)
+
+    # Empty store reads no entries.
+    assert await store.read_entries("memory") == []
+
+    # The memory dir is created under the central share location.
+    mem_dir = await store._ensure_dir()
+    assert (mem_dir / "memory").is_dir()
+    assert str(tmp_path / "share") in str(mem_dir)
+
+    # Pre-seed a file and confirm delimiter-splitting (ignores empty fragments).
+    (mem_dir / "memory" / "MEMORY.md").write_text("one\n§\ntwo\n§\n  \n", encoding="utf-8")
+    assert await store.read_entries("memory") == ["one", "two"]
