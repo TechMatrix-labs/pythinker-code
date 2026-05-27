@@ -299,6 +299,11 @@ def test_max_steps_reached(tmp_path) -> None:
                 },
                 {
                     "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
                     "type": "ToolResult",
                     "payload": {
                         "tool_call_id": "tc-1",
@@ -307,10 +312,7 @@ def test_max_steps_reached(tmp_path) -> None:
                             "output": "Todo list updated",
                             "message": "Todo list updated",
                             "display": [
-                                {
-                                    "type": "todo",
-                                    "items": [{"title": "x", "status": "pending"}],
-                                }
+                                {"type": "todo", "items": [{"title": "x", "status": "pending"}]}
                             ],
                             "extras": None,
                         },
@@ -498,6 +500,16 @@ def test_concurrent_prompt_error(tmp_path) -> None:
                     "method": "event",
                     "type": "ApprovalResponse",
                     "payload": {"request_id": "<uuid>", "response": "approve", "feedback": ""},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
+                    "type": "ToolOutputPart",
+                    "payload": {"tool_call_id": "tc-1", "stream": "stdout", "text": "hi\n"},
                 },
                 {
                     "method": "event",

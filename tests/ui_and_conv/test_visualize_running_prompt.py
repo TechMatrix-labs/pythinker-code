@@ -176,6 +176,22 @@ def test_pinned_tail_has_blank_row_after_preamble() -> None:
     assert "tool output\n\nActioning…" in text
 
 
+def test_pinned_tail_has_blank_row_below_before_prompt() -> None:
+    from prompt_toolkit.formatted_text import FormattedText
+
+    out = CustomPromptSession._fit_preamble_with_pinned_tail(
+        FormattedText([("", "tool output")]),
+        FormattedText([("", "Actioning…")]),
+        columns=80,
+        max_rows=6,
+    )
+    text = "".join(fragment for _, fragment, *_ in out)
+
+    # Breathing room below the pinned tail so the todo list / spinner is never
+    # flush against the prompt separator beneath it.
+    assert text.endswith("Actioning…\n\n")
+
+
 def test_pinned_tail_has_initial_blank_row_when_first_visible_status() -> None:
     from prompt_toolkit.formatted_text import FormattedText
 

@@ -372,3 +372,19 @@ class TestWebWorkerResumedDetection:
             await run_worker(uuid4())
 
         assert create_calls[0]["resumed"] is True
+
+
+class TestScratchpadSectionForwarding:
+    """The scratchpad_section kwarg must reach Runtime.create()."""
+
+    @pytest.mark.asyncio
+    async def test_scratchpad_section_forwarded_to_runtime_create(
+        self, session, config, monkeypatch
+    ):
+        _, runtime_create_calls = _patch_create_deps(monkeypatch)
+
+        await PythinkerCLI.create(
+            session, config=config, scratchpad_section="GUARD_XYZ", resumed=False
+        )
+
+        assert runtime_create_calls[0]["scratchpad_section"] == "GUARD_XYZ"

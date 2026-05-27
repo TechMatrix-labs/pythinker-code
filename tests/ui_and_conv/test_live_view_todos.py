@@ -85,6 +85,9 @@ def _todo_result(call_id: str = "todo-1") -> ToolResult:
 def test_todo_update_pins_current_task_under_activity_line(monkeypatch) -> None:
     now = 1000.0
     monkeypatch.setattr(_live_view_module.time, "monotonic", lambda: now)
+    # Pin the animated star marker to its static ``✶`` frame for a deterministic
+    # assertion on the activity-line content.
+    monkeypatch.setenv("PYTHINKER_REDUCED_MOTION", "1")
     view = _LiveView(StatusUpdate(context_tokens=10_000))
     view.dispatch_wire_message(TurnBegin(user_input="work"))
     view.dispatch_wire_message(_todo_call())
@@ -131,6 +134,28 @@ def test_active_pinned_todo_row_uses_shimmer_palette(monkeypatch) -> None:
         "#ebc46e",
         "#f3d89a",
     }
+
+
+def test_non_first_pinned_rows_indent_under_first_title() -> None:
+    view = _LiveView(StatusUpdate())
+
+    first = view._pinned_todo_row(
+        TodoDisplayItem(title="Lead task", status="in_progress"),
+        is_first=True,
+        width=100,
+        elapsed_s=0.0,
+    )
+    later = view._pinned_todo_row(
+        TodoDisplayItem(title="Next task", status="pending"),
+        is_first=False,
+        width=100,
+    )
+
+    # First row carries the ⎿ gutter; later rows indent so their checkbox sits
+    # under the first row's title (icons intentionally not aligned).
+    assert first.plain.startswith("  ⎿  ◼ ")
+    assert later.plain.startswith("       ◻ ")
+    assert later.plain.index("◻") == first.plain.index("Lead task")
 
 
 def test_successful_todo_tool_card_is_suppressed() -> None:

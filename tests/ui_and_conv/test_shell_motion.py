@@ -4,8 +4,18 @@ from rich.color import Color
 from rich.console import Console
 from rich.style import Style
 
-from pythinker_code.ui.shell.glyphs import SHAPE_FRAME_INTERVAL_S
-from pythinker_code.ui.shell.motion import ActivitySnapshot, activity_status_line, spinner_frame_at
+from pythinker_code.ui.shell.glyphs import (
+    SHAPE_FRAME_INTERVAL_S,
+    STAR_SPINNER_FRAME_INTERVAL_S,
+    STAR_SPINNER_FRAMES,
+    TRANSCRIPT_ACTIVE_MARKER,
+)
+from pythinker_code.ui.shell.motion import (
+    ActivitySnapshot,
+    active_marker_frame,
+    activity_status_line,
+    spinner_frame_at,
+)
 
 
 def _plain(renderable) -> str:
@@ -53,6 +63,19 @@ def test_spinner_frame_changes_with_time():
 
 def test_reduced_motion_uses_static_glyph():
     assert spinner_frame_at(0.2, reduced_motion=True) == "●"
+
+
+def test_active_marker_frame_animates_through_star_frames():
+    seen = {
+        active_marker_frame(i * STAR_SPINNER_FRAME_INTERVAL_S)
+        for i in range(len(STAR_SPINNER_FRAMES))
+    }
+    assert seen == set(STAR_SPINNER_FRAMES)
+    assert all(len(frame) == 1 for frame in STAR_SPINNER_FRAMES)
+
+
+def test_active_marker_frame_reduced_motion_pins_static_star():
+    assert active_marker_frame(0.5, reduced_motion=True) == TRANSCRIPT_ACTIVE_MARKER
 
 
 def test_activity_status_line_contains_label_elapsed_tokens_and_interrupt_hint():

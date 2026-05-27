@@ -89,6 +89,41 @@ class BackgroundTaskManager:
         if self._session.work_dir_meta.host != local_host.name:
             raise RuntimeError("Background tasks are only supported on local sessions.")
 
+    def _journal_task_milestone(self, title: str, view: TaskView) -> None:
+        if self._owner_role != "root":
+            return
+        try:
+            from pythinker_code.scratchpad import append_scratch_event_sync
+
+            details = [
+                f"task: {view.spec.id}",
+                f"kind: {view.spec.kind}",
+                f"status: {view.runtime.status}",
+                f"description: {view.spec.description}",
+            ]
+            if view.spec.kind == "agent":
+                payload = view.spec.kind_payload or {}
+                agent_id = payload.get("agent_id")
+                subagent_type = payload.get("subagent_type")
+                if isinstance(agent_id, str):
+                    details.append(f"agent: {agent_id}")
+                if isinstance(subagent_type, str):
+                    details.append(f"type: {subagent_type}")
+            if view.runtime.exit_code is not None:
+                details.append(f"exit_code: {view.runtime.exit_code}")
+            if view.runtime.failure_reason:
+                details.append(f"reason: {view.runtime.failure_reason}")
+            append_scratch_event_sync(
+                self._session.work_dir,
+                session_id=self._session.id,
+                session_title=self._session.title or self._session.state.custom_title,
+                labels=[f"kind:{view.spec.kind}"],
+                title=title,
+                details=details,
+            )
+        except Exception:
+            logger.debug("background task scratchpad journal failed")
+
     def _active_task_count(self) -> int:
         return sum(
             1 for view in self._store.list_views() if not is_terminal_status(view.runtime.status)
@@ -211,7 +246,9 @@ class BackgroundTaskManager:
             runtime.worker_pid = worker_pid
             runtime.updated_at = time.time()
             self._store.write_runtime(task_id, runtime)
-        return self._store.merged_view(task_id)
+        view = self._store.merged_view(task_id)
+        self._journal_task_milestone("background task started", view)
+        return view
 
     def create_agent_task(
         self,
@@ -297,7 +334,9 @@ class BackgroundTaskManager:
         # itself. The done callback fires regardless of how the task ends, and
         # is idempotent with the runner's own pop (both use pop(..., None)).
         task.add_done_callback(lambda _t, tid=task_id: self._live_agent_tasks.pop(tid, None))
-        return self._store.merged_view(task_id)
+        view = self._store.merged_view(task_id)
+        self._journal_task_milestone("background task started", view)
+        return view
 
     def list_tasks(
         self,
@@ -591,6 +630,7 @@ class BackgroundTaskManager:
             notification = self._notifications.publish(event)
             if notification.event.id == event.id:
                 published.append(notification.event.id)
+                self._journal_task_milestone(f"background task {terminal_reason}", view)
                 self._completion_event.set()
             if limit is not None and len(published) >= limit:
                 break

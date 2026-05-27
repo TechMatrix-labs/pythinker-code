@@ -28,7 +28,6 @@ from pythinker_code.soul.agent import Runtime, load_agent
 from pythinker_code.soul.context import Context
 from pythinker_code.soul.pythinkersoul import PythinkerSoul
 from pythinker_code.utils.aioqueue import QueueShutDown
-from pythinker_code.utils.envvar import get_env_bool
 from pythinker_code.utils.logging import logger, open_original_stderr, redirect_stderr_to_logger
 from pythinker_code.utils.path import shorten_home
 from pythinker_code.wire import Wire, WireUISide
@@ -166,6 +165,7 @@ class PythinkerCLI:
         max_ralph_iterations: int | None = None,
         startup_progress: Callable[[str], None] | None = None,
         defer_mcp_loading: bool = False,
+        scratchpad_section: str | None = None,
     ) -> PythinkerCLI:
         """
         Create a PythinkerCLI instance.
@@ -290,6 +290,7 @@ class PythinkerCLI:
             auto=auto,
             runtime_auto=runtime_auto,
             skills_dirs=skills_dirs,
+            scratchpad_section=scratchpad_section,
         )
         runtime.ui_mode = ui_mode
         runtime.resumed = resumed
@@ -332,7 +333,13 @@ class PythinkerCLI:
         await context.restore()
 
         if context.system_prompt is not None:
-            agent = dataclasses.replace(agent, system_prompt=context.system_prompt)
+            from pythinker_code.scratchpad import refresh_system_prompt_scratchpad_section
+
+            refreshed_system_prompt = refresh_system_prompt_scratchpad_section(
+                context.system_prompt,
+                runtime.builtin_args.PYTHINKER_SCRATCHPAD_SECTION,
+            )
+            agent = dataclasses.replace(agent, system_prompt=refreshed_system_prompt)
         else:
             await context.write_system_prompt(agent.system_prompt)
 
@@ -355,8 +362,9 @@ class PythinkerCLI:
         # --- Initialize telemetry ---
         from pythinker_code.telemetry import attach_sink, set_context
         from pythinker_code.telemetry import disable as disable_telemetry
+        from pythinker_code.telemetry.config import is_enabled as telemetry_is_enabled
 
-        telemetry_disabled = not config.telemetry or get_env_bool("PYTHINKER_DISABLE_TELEMETRY")
+        telemetry_disabled = not telemetry_is_enabled(config_telemetry=config.telemetry)
         if telemetry_disabled:
             disable_telemetry()
         else:

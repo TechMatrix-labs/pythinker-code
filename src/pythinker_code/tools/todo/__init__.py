@@ -40,7 +40,35 @@ class SetTodoList(CallableTool2[Params]):
     async def __call__(self, params: Params) -> ToolReturnValue:
         if params.todos is None:
             return self._read_todos()
-        return self._write_todos(params.todos)
+        result = self._write_todos(params.todos)
+        if self._runtime.role == "root" and len(params.todos) >= 3:
+            await self._journal_todo_update(params.todos)
+        return result
+
+    async def _journal_todo_update(self, todos: list[Todo]) -> None:
+        from pythinker_code.scratchpad import append_scratch_event
+
+        done = sum(1 for todo in todos if todo.status == "done")
+        in_progress = sum(1 for todo in todos if todo.status == "in_progress")
+        pending = sum(1 for todo in todos if todo.status == "pending")
+        details = [
+            f"items: {len(todos)}; done: {done}; in_progress: {in_progress}; pending: {pending}",
+        ]
+        active = next((todo.title for todo in todos if todo.status == "in_progress"), None)
+        if active is None:
+            active = next((todo.title for todo in todos if todo.status == "pending"), None)
+        if active:
+            details.append(f"active: {active}")
+        if not todos:
+            details.append("cleared: true")
+        await append_scratch_event(
+            self._runtime.session.work_dir,
+            session_id=self._runtime.session.id,
+            session_title=self._runtime.session.title or self._runtime.session.state.custom_title,
+            labels=["kind:todo"],
+            title="todo update",
+            details=details,
+        )
 
     # ---- Write mode --------------------------------------------------------
 

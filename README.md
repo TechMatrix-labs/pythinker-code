@@ -653,16 +653,9 @@ file paths, or any user-identifying data. Two channels:
 - Your real name, email, IP address, hostname (host name field is dropped at the edge collector)
 - Tool arguments (e.g. what file you read, what command you ran)
 
-### Opting in or forcing off
+### Turning it off
 
-Telemetry is off by default. To enable it for a process:
-
-```sh
-export PYTHINKER_ENABLE_TELEMETRY=1
-pythinker
-```
-
-To force telemetry off even if another setting enabled it:
+Telemetry is on by default. To turn it off:
 
 ```sh
 # 1. Per-invocation CLI flag
@@ -692,8 +685,8 @@ export PYTHINKER_OTEL_ENDPOINT="https://your-otel-collector.example.com"
 export PYTHINKER_OTEL_TOKEN="<your bearer token>"
 ```
 
-The defaults point at infrastructure operated by the pythinker maintainers;
-set `PYTHINKER_ENABLE_TELEMETRY=1` to use them.
+The defaults point at infrastructure operated by the pythinker maintainers and
+are used automatically unless you turn telemetry off.
 
 ---
 

@@ -2516,6 +2516,10 @@ class CustomPromptSession:
         # also creates the initial breathing room above the spinner.
         out.append(("", "\n"))
         out.extend(pinned)
+        # Mirror the breathing room below the pinned tail so the todo list / verb
+        # spinner is never flush against the prompt separator beneath it.
+        ensure_prompt_newline(out)
+        out.append(("", "\n"))
         return out
 
     def _render_background_working_status(

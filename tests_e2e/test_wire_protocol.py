@@ -469,6 +469,11 @@ def test_external_tool_call(tmp_path) -> None:
                 },
                 {
                     "method": "event",
+                    "type": "ToolExecutionStarted",
+                    "payload": {"tool_call_id": "tc-1"},
+                },
+                {
+                    "method": "event",
                     "type": "ToolResult",
                     "payload": {
                         "tool_call_id": "tc-1",

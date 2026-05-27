@@ -60,7 +60,12 @@ For any non-trivial request, decompose before acting:
 - Preview the terrain first: scan the directory structure, file headers, and relevant module boundaries before choosing an implementation path.
 - Use `SetTodoList` for multi-step work so the user can see the active plan and progress.
 - Split broad work into independent chunks; use parallel tool calls or focused subagents for chunks that do not depend on each other.
+- For large codebase scans, start with indexes/graphs and targeted searches; avoid one vague repo-wide subagent prompt. If using background agents for thorough exploration, set a realistic explicit timeout and keep scopes narrow. If agents time out, do not repeat the same broad launch; summarize partial evidence, run targeted direct scans, and resume or relaunch narrower agents only when useful.
 - Re-read the plan after each phase and adjust it when new evidence changes the approach.
+
+<!-- PYTHINKER_SCRATCHPAD_SECTION_START -->
+${PYTHINKER_SCRATCHPAD_SECTION}
+<!-- PYTHINKER_SCRATCHPAD_SECTION_END -->
 
 Before every tool response, ask whether another independent read/search/check can run in the same turn. Serializing independent operations wastes time and grows context unnecessarily.
 

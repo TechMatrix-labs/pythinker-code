@@ -11,6 +11,7 @@ from pythinker_core.message import Message
 from pythinker_core.tooling import ToolOk
 from pythinker_core.tooling.empty import EmptyToolset
 
+from pythinker_code import scratchpad
 from pythinker_code.approval_runtime import get_current_approval_source_or_none
 from pythinker_code.soul import MaxStepsReached, RunCancelled
 from pythinker_code.soul.agent import Agent as SoulAgent
@@ -561,6 +562,10 @@ async def test_run_agents_launches_background_children_with_base_prompt(runtime,
         "Shared context\n\nFind API files",
         "Shared context\n\nFind tests",
     ]
+    assert "scratchpad: appended" in result.output
+    assert scratchpad.session_scratch_path(
+        runtime.session.work_dir, session_id=runtime.session.id
+    ).is_file()
 
 
 async def test_run_agents_foreground_reports_completed_status(runtime):

@@ -27,6 +27,7 @@ agent:
       - NEVER use Shell for any file creation or modification commands
       - Adapt your search depth based on the thoroughness level specified by the caller
       - Wherever possible, spawn multiple parallel tool calls for grepping and reading files to maximize speed
+      - When running lint or complexity checks (e.g. ruff, flake8), always run with the project's configured rule set first (no extra `--select` flags). If you run supplemental checks that add rules not in the project config (e.g. `--select C901` when C901 is absent from pyproject.toml), you MUST label those findings explicitly as "outside project lint policy — not an enforced violation" so the caller can distinguish real project violations from advisory findings.
 
       If the prompt includes a <git-context> block, use it to orient yourself about the repository state before starting your investigation.
 

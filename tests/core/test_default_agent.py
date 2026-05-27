@@ -80,7 +80,12 @@ For any non-trivial request, decompose before acting:
 - Preview the terrain first: scan the directory structure, file headers, and relevant module boundaries before choosing an implementation path.
 - Use `SetTodoList` for multi-step work so the user can see the active plan and progress.
 - Split broad work into independent chunks; use parallel tool calls or focused subagents for chunks that do not depend on each other.
+- For large codebase scans, start with indexes/graphs and targeted searches; avoid one vague repo-wide subagent prompt. If using background agents for thorough exploration, set a realistic explicit timeout and keep scopes narrow. If agents time out, do not repeat the same broad launch; summarize partial evidence, run targeted direct scans, and resume or relaunch narrower agents only when useful.
 - Re-read the plan after each phase and adjust it when new evidence changes the approach.
+
+<!-- PYTHINKER_SCRATCHPAD_SECTION_START -->
+As the root agent, treat named `.pythinker/scratch/*.md` files as the minimal session memory for context-aware work. The runtime auto-creates a per-session block with stable recall labels (for example `session:<id>`, `workspace:<name>`, `ui:<mode>`, `source:<startup|resume>`) and compact milestones such as session start, todo summaries, agent/task starts, and task terminal status. Keep any manual additions short and organized: current objective, searchable labels, load-bearing evidence, decisions, blockers, and next verification checkpoint. On a fresh run, or whenever the user asks about prior session work/history/context, fast-skim the relevant `.pythinker/scratch/*.md` labels and current session block before answering. Do not paste full logs, raw prompts, command output, secrets, or duplicate the whole `SetTodoList` checklist into the file. Retain session scratchpads after successful completion as compact history for future recall; remove them only when the user explicitly asks for cleanup. Subagents do not create their own scratch files.
+<!-- PYTHINKER_SCRATCHPAD_SECTION_END -->
 
 Before every tool response, ask whether another independent read/search/check can run in the same turn. Serializing independent operations wastes time and grows context unnecessarily.
 
@@ -472,6 +477,7 @@ instance can preserve previous findings and work.
 - Keep each delegated prompt to one objective. Split unrelated goals into separate agents so each result is reviewable.
 - Do not delegate synthesis with vague prompts such as "based on your findings, fix it". First understand the finding yourself, then give the subagent a concrete scoped task.
 - Spawn multiple subagents in the same turn when they can investigate independent regions concurrently, but keep background launches within available task slots.
+- For thorough large-codebase exploration, prefer scoped questions over one broad scan, and pass an explicit longer `timeout` (for example 1800-3600 seconds) when using background agents. If an agent times out, do not relaunch the same broad prompt unchanged; use targeted direct scans or resume the saved agent with a narrower continuation prompt.
 - Cross-check at least one load-bearing subagent finding before making changes from it.
 - The subagent result is only visible to you. If the user should see it, summarize it yourself.
 
@@ -556,7 +562,7 @@ When calling explore, specify the desired thoroughness in the prompt:
                         {"type": "null"},
                     ],
                     "default": None,
-                    "description": "Timeout in seconds for the agent task. Foreground: no default timeout (runs until completion), max 3600s (1hr). Background: default from config (15min), max 3600s (1hr). The agent is stopped if it exceeds this limit.",
+                    "description": "Timeout in seconds for the agent task. Foreground: no default timeout (runs until completion), max 3600s (1hr). Background: default from config (1hr), max 3600s (1hr). For thorough large-codebase exploration, pass an explicit longer timeout near the max and scope the prompt narrowly. The agent is stopped if it exceeds this limit.",
                 },
                 "dependencies": {
                     "description": "Optional background task IDs this task depends on. Metadata only; the parent agent should launch dependent tasks after prerequisites are ready.",
@@ -582,3 +588,77 @@ When calling explore, specify the desired thoroughness in the prompt:
             "type": "object",
         }
     )
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="Skipping test on Windows")
+async def test_default_agent_scratchpad_guardrails(runtime: Runtime):
+    agent = await load_agent(DEFAULT_AGENT_FILE, runtime, mcp_configs=[])
+    assert ".pythinker/scratch/*.md" in agent.system_prompt
+    assert "minimal session memory" in agent.system_prompt
+    assert "Do not paste full logs" in agent.system_prompt
+    assert "Subagents do not create their own scratch files" in agent.system_prompt
+
+
+import dataclasses
+
+from pythinker_code.scratchpad import ScratchpadStatus, render_scratchpad_section
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="Skipping test on Windows")
+async def test_default_agent_unavailable_scratchpad_guard_only(runtime: Runtime):
+    guard = render_scratchpad_section(
+        ScratchpadStatus(False, "disabled_tracked", True, True, False)
+    )
+    runtime.builtin_args = dataclasses.replace(
+        runtime.builtin_args,
+        PYTHINKER_SCRATCHPAD_SECTION=guard,
+    )
+    agent = await load_agent(DEFAULT_AGENT_FILE, runtime, mcp_configs=[])
+
+    assert "do not create or edit `.pythinker/scratch.md`" in agent.system_prompt
+    assert "minimal session memory" not in agent.system_prompt
+
+
+from pythinker_code.scratchpad import (
+    DEFAULT_SCRATCHPAD_SECTION,
+    refresh_system_prompt_scratchpad_section,
+)
+
+
+def test_refresh_resumed_prompt_replaces_stale_available_section():
+    old_prompt = (
+        "Intro\n\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_START -->\n"
+        f"{DEFAULT_SCRATCHPAD_SECTION}\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_END -->\n\n"
+        "Before every tool response, batch independent work."
+    )
+    guard = "Scratchpad unavailable this session; do not create or edit `.pythinker/scratch.md`."
+    refreshed = refresh_system_prompt_scratchpad_section(old_prompt, guard)
+
+    assert guard in refreshed
+    assert DEFAULT_SCRATCHPAD_SECTION not in refreshed
+
+
+def test_refresh_resumed_prompt_replaces_stale_guard_with_available_section():
+    guard = "Scratchpad unavailable this session; do not create or edit `.pythinker/scratch.md`."
+    old_prompt = (
+        "Intro\n\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_START -->\n"
+        f"{guard}\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_END -->\n\n"
+        "Before every tool response, batch independent work."
+    )
+    refreshed = refresh_system_prompt_scratchpad_section(old_prompt, DEFAULT_SCRATCHPAD_SECTION)
+
+    assert DEFAULT_SCRATCHPAD_SECTION in refreshed
+    assert guard not in refreshed
+
+
+def test_refresh_resumed_legacy_prompt_inserts_guard():
+    old_prompt = "Intro\n\nBefore every tool response, batch independent work."
+    guard = "Scratchpad unavailable this session; do not create or edit `.pythinker/scratch.md`."
+    refreshed = refresh_system_prompt_scratchpad_section(old_prompt, guard)
+
+    assert guard in refreshed
+    assert refreshed.index(guard) < refreshed.index("Before every tool response")

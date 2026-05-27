@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -9,6 +10,11 @@ import pythinker_code.app as app_module
 import pythinker_code.ui.shell.startup as startup_module
 import pythinker_code.ui.theme as theme_module
 from pythinker_code.app import PythinkerCLI
+from pythinker_code.scratchpad import (
+    DEFAULT_SCRATCHPAD_SECTION,
+    ScratchpadStatus,
+    render_scratchpad_section,
+)
 from pythinker_code.ui.shell.startup import ShellStartupProgress
 
 
@@ -118,6 +124,131 @@ async def test_pythinker_code_create_reports_startup_phases(session, config, mon
         "Restoring conversation...",
     ]
     write_system_prompt.assert_awaited_once_with("Test system prompt")
+
+
+@pytest.mark.asyncio
+async def test_pythinker_code_create_forwards_scratchpad_section(
+    session, config, monkeypatch
+) -> None:
+    runtime_create_kwargs: dict[str, object] = {}
+
+    async def fake_runtime_create(*args, **kwargs):
+        runtime_create_kwargs.update(kwargs)
+        return SimpleNamespace(
+            session=session,
+            config=config,
+            llm=None,
+            builtin_args=SimpleNamespace(
+                PYTHINKER_SCRATCHPAD_SECTION=kwargs.get("scratchpad_section")
+                or DEFAULT_SCRATCHPAD_SECTION
+            ),
+            approval=SimpleNamespace(is_yolo=lambda: False, is_auto=lambda: False),
+            notifications=SimpleNamespace(recover=lambda: None),
+            background_tasks=SimpleNamespace(reconcile=lambda: None),
+        )
+
+    fake_context = SimpleNamespace(system_prompt=None)
+    fake_context.restore = AsyncMock()
+    fake_context.write_system_prompt = AsyncMock()
+
+    monkeypatch.setattr(app_module, "load_config", lambda conf: conf)
+    monkeypatch.setattr(
+        app_module, "augment_provider_with_env_vars", lambda provider, model, **kw: {}
+    )
+    monkeypatch.setattr(app_module, "create_llm", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app_module.Runtime, "create", fake_runtime_create)
+    monkeypatch.setattr(
+        app_module,
+        "load_agent",
+        AsyncMock(return_value=SimpleNamespace(name="test", system_prompt="fresh system prompt")),
+    )
+    monkeypatch.setattr(app_module, "Context", lambda _path: fake_context)
+
+    class _FakeSoul:
+        plan_mode = False
+
+        def __init__(self, agent, context):
+            pass
+
+        def set_hook_engine(self, engine):
+            pass
+
+    monkeypatch.setattr(app_module, "PythinkerSoul", _FakeSoul)
+
+    await PythinkerCLI.create(session, config=config, scratchpad_section="scratch section")
+
+    assert runtime_create_kwargs["scratchpad_section"] == "scratch section"
+
+
+@pytest.mark.asyncio
+async def test_pythinker_code_create_refreshes_restored_scratchpad_section(
+    session, config, monkeypatch
+) -> None:
+    guard = render_scratchpad_section(
+        ScratchpadStatus(False, "disabled_tracked", True, True, False)
+    )
+    restored_prompt = (
+        "Intro\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_START -->\n"
+        f"{DEFAULT_SCRATCHPAD_SECTION}\n"
+        "<!-- PYTHINKER_SCRATCHPAD_SECTION_END -->\n"
+        "Before every tool response, batch independent work."
+    )
+
+    @dataclass
+    class FakeAgent:
+        name: str
+        system_prompt: str
+
+    captured_agents: list[FakeAgent] = []
+
+    async def fake_runtime_create(*args, **kwargs):
+        return SimpleNamespace(
+            session=session,
+            config=config,
+            llm=None,
+            builtin_args=SimpleNamespace(
+                PYTHINKER_SCRATCHPAD_SECTION=kwargs.get("scratchpad_section")
+                or DEFAULT_SCRATCHPAD_SECTION
+            ),
+            approval=SimpleNamespace(is_yolo=lambda: False, is_auto=lambda: False),
+            notifications=SimpleNamespace(recover=lambda: None),
+            background_tasks=SimpleNamespace(reconcile=lambda: None),
+        )
+
+    fake_context = SimpleNamespace(system_prompt=restored_prompt)
+    fake_context.restore = AsyncMock()
+    fake_context.write_system_prompt = AsyncMock()
+
+    monkeypatch.setattr(app_module, "load_config", lambda conf: conf)
+    monkeypatch.setattr(
+        app_module, "augment_provider_with_env_vars", lambda provider, model, **kw: {}
+    )
+    monkeypatch.setattr(app_module, "create_llm", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app_module.Runtime, "create", fake_runtime_create)
+    monkeypatch.setattr(
+        app_module,
+        "load_agent",
+        AsyncMock(return_value=FakeAgent(name="test", system_prompt="fresh system prompt")),
+    )
+    monkeypatch.setattr(app_module, "Context", lambda _path: fake_context)
+
+    class _FakeSoul:
+        plan_mode = False
+
+        def __init__(self, agent, context):
+            captured_agents.append(agent)
+
+        def set_hook_engine(self, engine):
+            pass
+
+    monkeypatch.setattr(app_module, "PythinkerSoul", _FakeSoul)
+
+    await PythinkerCLI.create(session, config=config, scratchpad_section=guard)
+
+    assert guard in captured_agents[0].system_prompt
+    assert DEFAULT_SCRATCHPAD_SECTION not in captured_agents[0].system_prompt
+    fake_context.write_system_prompt.assert_not_awaited()
 
 
 @pytest.mark.asyncio

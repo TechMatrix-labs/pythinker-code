@@ -80,6 +80,9 @@ async def test_background_agent_timeout(mock_runner, runtime):
     assert rt.timed_out is True
     assert rt.interrupted is True
     assert "timed out" in (rt.failure_reason or "")
+    output_text = runtime.subagent_store.output_path.return_value.read_text(encoding="utf-8")
+    assert "Do not relaunch the same broad prompt unchanged" in output_text
+    assert 'Agent(resume="a_test123"' in output_text
 
 
 async def test_background_agent_no_timeout(runtime):

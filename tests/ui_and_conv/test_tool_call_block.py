@@ -169,3 +169,160 @@ def test_completed_subagent_renders_compact_summary():
     assert "completed" in output.lower()
     assert "7 tool calls" in output
     assert output.count("ReadFile") <= 4
+
+
+def test_append_sub_output_part_accumulates_text():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"ls"}')
+    block.append_sub_tool_call(call)
+    block.append_sub_output_part("sub-1", "file1.py\n")
+    block.append_sub_output_part("sub-1", "file2.py\n")
+    combined = "".join(block._subagent_output_parts["sub-1"])
+    assert "file1.py" in combined
+    assert "file2.py" in combined
+
+
+def test_append_sub_output_part_discards_unknown_call_id():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    # no append_sub_tool_call — id is unknown
+    block.append_sub_output_part("ghost-id", "should be ignored\n")
+    assert "ghost-id" not in block._subagent_output_parts
+
+
+def test_append_sub_output_part_caps_buffer_at_200_chars():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"find ."}')
+    block.append_sub_tool_call(call)
+    # Fill with >200 chars in one shot
+    block.append_sub_output_part("sub-1", "x" * 300)
+    combined = "".join(block._subagent_output_parts["sub-1"])
+    assert len(combined) <= 200
+
+
+def test_append_sub_output_part_caps_buffer_across_multiple_appends():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"ls"}')
+    block.append_sub_tool_call(call)
+    for _ in range(30):
+        block.append_sub_output_part("sub-1", "x" * 10)  # 300 chars total, 10 at a time
+    combined = "".join(block._subagent_output_parts["sub-1"])
+    assert len(combined) <= 200
+
+
+def test_append_sub_output_part_tracks_stderr():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"cat missing"}')
+    block.append_sub_tool_call(call)
+    block.append_sub_output_part("sub-1", "No such file\n", stream="stderr")
+    assert block._subagent_output_had_stderr.get("sub-1") is True
+
+
+def test_mark_sub_execution_started_records_id():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"ls"}')
+    block.append_sub_tool_call(call)
+    block.mark_sub_execution_started("sub-1")
+    assert "sub-1" in block._subagent_execution_started
+
+
+def test_mark_sub_execution_started_discards_unknown_id():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    block.mark_sub_execution_started("ghost-id")  # should not raise
+    assert "ghost-id" not in block._subagent_execution_started
+
+
+def test_finish_sub_tool_call_cleans_up_output_state():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"ls"}')
+    block.append_sub_tool_call(call)
+    block.append_sub_output_part("sub-1", "output\n")
+    block.mark_sub_execution_started("sub-1")
+    block.finish_sub_tool_call(ToolResult(tool_call_id="sub-1", return_value=ToolOk(output="")))
+    assert "sub-1" not in block._subagent_output_parts
+    assert "sub-1" not in block._subagent_output_had_stderr
+    assert "sub-1" not in block._subagent_execution_started
+
+
+def test_running_agent_shows_ongoing_sub_tool_calls():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Read", '{"file_path":"src/app.py"}')
+    block.append_sub_tool_call(call)
+    output = _plain(block.compose())
+    assert "Read" in output
+    assert "src/app.py" in output
+
+
+def test_running_agent_shows_streamed_output_preview():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"grep -r TODO ."}')
+    block.append_sub_tool_call(call)
+    block.append_sub_output_part("sub-1", "src/app.py:42: # TODO: fix\n")
+    output = _plain(block.compose())
+    assert "src/app.py:42" in output
+
+
+def test_running_agent_card_style_shows_ongoing_sub_tool_calls(monkeypatch):
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "card")
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan","prompt":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Read", '{"file_path":"src/app.py"}')
+    block.append_sub_tool_call(call)
+    output = _plain(block.compose())
+    assert "Read" in output
+    assert "src/app.py" in output
+
+
+def test_running_agent_card_style_shows_streamed_output_preview(monkeypatch):
+    monkeypatch.setenv("PYTHINKER_TUI_STYLE", "card")
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan","prompt":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"grep -r TODO ."}')
+    block.append_sub_tool_call(call)
+    block.mark_sub_execution_started("sub-1")
+    block.append_sub_output_part("sub-1", "src/app.py:42: # TODO: fix\n")
+    output = _plain(block.compose())
+    assert "src/app.py:42" in output
+
+
+def test_running_agent_shows_only_last_4_output_lines():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"find ."}')
+    block.append_sub_tool_call(call)
+    lines = [f"line{i}\n" for i in range(10)]
+    block.append_sub_output_part("sub-1", "".join(lines))
+    output = _plain(block.compose())
+    assert "line9" in output
+    assert "line6" in output
+    assert "line5" not in output
+    assert "line0" not in output
+
+
+def test_running_agent_caps_visible_running_rows_at_2():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    for i in range(5):
+        call = _tool_call_with_id(f"sub-{i}", "Read", f'{{"file_path":"src/file{i}.py"}}')
+        block.append_sub_tool_call(call)
+    output = _plain(block.compose())
+    assert "more running" in output
+
+
+def test_running_agent_rows_stay_visible_with_finished_sub_tool_calls():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    for i in range(4):
+        call = _tool_call_with_id(f"done-{i}", "Read", f'{{"file_path":"src/done{i}.py"}}')
+        block.append_sub_tool_call(call)
+        block.finish_sub_tool_call(ToolResult(tool_call_id=call.id, return_value=ToolOk(output="")))
+
+    running = _tool_call_with_id("live-1", "Read", '{"file_path":"src/live.py"}')
+    block.append_sub_tool_call(running)
+
+    output = _plain(block.compose())
+    assert "src/live.py" in output
+
+
+def test_finished_sub_tool_calls_not_shown_in_output_preview():
+    block = _ToolCallBlock(_tool_call("Agent", '{"description":"scan"}'))
+    call = _tool_call_with_id("sub-1", "Bash", '{"command":"ls"}')
+    block.append_sub_tool_call(call)
+    block.append_sub_output_part("sub-1", "SHOULD_NOT_APPEAR\n")
+    block.finish_sub_tool_call(ToolResult(tool_call_id="sub-1", return_value=ToolOk(output="")))
+    output = _plain(block.compose())
+    assert "SHOULD_NOT_APPEAR" not in output

@@ -58,8 +58,10 @@ class Params(BaseModel):
         description=(
             "Timeout in seconds for the agent task. "
             "Foreground: no default timeout (runs until completion), max 3600s (1hr). "
-            "Background: default from config (15min), max 3600s (1hr). "
-            "The agent is stopped if it exceeds this limit."
+            "Background: default from config (1hr), max 3600s (1hr). "
+            "For thorough large-codebase exploration, pass an explicit longer timeout near "
+            "the max and scope the prompt narrowly. The agent is stopped if it exceeds "
+            "this limit."
         ),
         ge=30,
         le=MAX_BACKGROUND_TIMEOUT,
@@ -205,6 +207,25 @@ class AgentTool(CallableTool2[Params]):
                 names.append(name)
         return names
 
+    async def _journal_foreground_agent_start(self, params: Params, actual_type: str) -> None:
+        from pythinker_code.scratchpad import append_scratch_event
+
+        details = [
+            "mode: foreground",
+            f"type: {actual_type}",
+            f"description: {params.description.strip()}",
+        ]
+        if params.resume:
+            details.append(f"resume: {params.resume}")
+        await append_scratch_event(
+            self._runtime.session.work_dir,
+            session_id=self._runtime.session.id,
+            session_title=self._runtime.session.title or self._runtime.session.state.custom_title,
+            labels=["kind:agent", f"agent-type:{actual_type}"],
+            title="agent started",
+            details=details,
+        )
+
     def check_execution_policy(self, subagent_type: str) -> ToolError | None:
         policy = resolve_execution_policy(
             self._runtime.config.agent_execution_profile,
@@ -251,6 +272,7 @@ class AgentTool(CallableTool2[Params]):
                 "use run_in_background=True to enable isolation.",
                 isolation=params.isolation,
             )
+        await self._journal_foreground_agent_start(params, requested_type)
         timeout = params.effective_timeout
         try:
             runner = ForegroundSubagentRunner(self._runtime)
@@ -462,6 +484,7 @@ class _BackgroundCapacity:
 class RunAgentsTool(CallableTool2[RunAgentsParams]):
     name: str = "RunAgents"
     params: type[RunAgentsParams] = RunAgentsParams
+    emits_tool_execution_started_after_approval = True
 
     def __init__(self, runtime: Runtime):
         max_background = runtime.config.background.max_running_tasks
@@ -546,6 +569,9 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
 
         fingerprint = _run_agents_fingerprint(params)
         if self._runtime.approval.is_orchestration_approved(fingerprint):
+            from pythinker_code.soul.toolset import emit_current_tool_execution_started
+
+            emit_current_tool_execution_started()
             orchestration_approval = "reused"
         else:
             approved_count = capacity.launch_count if capacity is not None else len(params.agents)
@@ -585,6 +611,21 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
             agents_to_launch = params.agents[: capacity.launch_count]
             deferred_agents = params.agents[capacity.launch_count :]
 
+        from pythinker_code.scratchpad import append_scratch_event
+
+        scratchpad_result = await append_scratch_event(
+            self._runtime.session.work_dir,
+            session_id=self._runtime.session.id,
+            session_title=self._runtime.session.title or self._runtime.session.state.custom_title,
+            labels=["kind:agent-batch"],
+            title="agent batch started",
+            details=[
+                f"summary: {params.summary}",
+                f"requested_agents: {len(params.agents)}",
+                f"mode: {'background' if params.run_in_background else 'foreground'}",
+            ],
+        )
+
         results: list[tuple[AgentRunConfig, ToolReturnValue]] = []
         for child in agents_to_launch:
             child_params = Params(
@@ -617,6 +658,7 @@ class RunAgentsTool(CallableTool2[RunAgentsParams]):
             f"requested_agent_count: {len(params.agents)}",
             f"agent_count: {len(results)}",
             f"deferred_agent_count: {len(deferred_agents)}",
+            f"scratchpad: {scratchpad_result.reason}",
         ]
         if capacity is not None:
             lines.extend(

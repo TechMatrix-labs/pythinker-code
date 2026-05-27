@@ -96,6 +96,24 @@ class StepRetry(BaseModel):
     """HTTP status code when available."""
 
 
+class ToolExecutionStarted(BaseModel):
+    """Indicates that a tool call has passed approval/hooks and is executing."""
+
+    tool_call_id: str
+    """The ID of the tool call that started executing."""
+
+
+class ToolOutputPart(BaseModel):
+    """Incremental output produced by a currently executing tool."""
+
+    tool_call_id: str
+    """The ID of the tool call that produced this output."""
+    stream: Literal["stdout", "stderr", "output"] = "output"
+    """The output stream, when known."""
+    text: str
+    """The output chunk text."""
+
+
 class CompactionBegin(BaseModel):
     """
     Indicates that a compaction just began.
@@ -542,6 +560,8 @@ type Event = (
     | StepBegin
     | StepInterrupted
     | StepRetry
+    | ToolExecutionStarted
+    | ToolOutputPart
     | HookTriggered
     | HookResolved
     | CompactionBegin
@@ -693,6 +713,8 @@ __all__ = [
     "StepBegin",
     "StepInterrupted",
     "StepRetry",
+    "ToolExecutionStarted",
+    "ToolOutputPart",
     "CompactionBegin",
     "CompactionEnd",
     "MCPLoadingBegin",

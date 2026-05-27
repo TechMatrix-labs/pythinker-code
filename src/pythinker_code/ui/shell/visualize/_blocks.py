@@ -66,7 +66,10 @@ from pythinker_code.wire.types import (
 
 _ELLIPSIS = "..."
 _THINKING_PREVIEW_LINES = 6
+_COMPOSING_PREVIEW_LINES = 12
 MAX_SUBAGENT_TOOL_CALLS_TO_SHOW = 4
+_MAX_RUNNING_ROWS = 2
+_MAX_SUB_OUTPUT_CHARS = 200
 
 # Background-agent statuses that mean "still running" — the tool call result
 # has arrived but the spawned agent has not yet finished.  Blocks with this
@@ -203,7 +206,7 @@ class _ContentBlock:
             if self._show_thinking_stream:
                 return self._compose_thinking_stream()
             return self._compose_thinking()
-        return self._compose_spinner()
+        return self._compose_composing()
 
     def compose_final(self) -> RenderableType:
         """Render the remaining uncommitted content when the block ends."""
@@ -253,6 +256,15 @@ class _ContentBlock:
             bullet=Text(TRANSCRIPT_ASSISTANT_MARKER, style=tui_rich_style("success")),
         )
 
+    def _wrap_preview_bullet(self, renderable: RenderableType) -> BulletColumns:
+        """Wrap transient live preview without mutating scrollback bullet state."""
+        if self._has_printed_bullet:
+            return BulletColumns(renderable, bullet=Text(" "))
+        return BulletColumns(
+            renderable,
+            bullet=Text(TRANSCRIPT_ASSISTANT_MARKER, style=tui_rich_style("success")),
+        )
+
     @property
     def has_emitted_to_scrollback(self) -> bool:
         """Whether any part of this block has been printed to scrollback yet."""
@@ -292,6 +304,14 @@ class _ContentBlock:
             spinner="shape",
         )
 
+    def _compose_composing(self) -> RenderableType:
+        spinner = self._compose_spinner()
+        pending = self._pending_text()
+        if not pending:
+            return spinner
+        preview = self._build_preview(pending, max_lines=_COMPOSING_PREVIEW_LINES)
+        return Group(spinner, self._wrap_preview_bullet(Markdown(preview)))
+
     def _compose_spinner(self) -> Text:
         return activity_status_line(
             self._activity_snapshot("Composing", label_style=tui_rich_style("thinking_text")),
@@ -304,7 +324,7 @@ class _ContentBlock:
         pending = self._pending_text()
         if not pending:
             return spinner
-        preview = self._build_preview(pending)
+        preview = self._build_preview(pending, max_lines=_THINKING_PREVIEW_LINES)
         preview_style = tui_rich_style("thinking_text") + Style(italic=True)
         return Group(spinner, Text(preview, style=preview_style))
 
@@ -314,10 +334,10 @@ class _ContentBlock:
             width=current_console_width(),
         )
 
-    def _build_preview(self, text: str) -> str:
-        """Tail-trim *text* to the last ``_THINKING_PREVIEW_LINES`` and clamp width."""
+    def _build_preview(self, text: str, *, max_lines: int) -> str:
+        """Tail-trim *text* to ``max_lines`` and clamp it to current terminal width."""
         max_width = current_console_width() - 2
-        tail_text = _tail_lines(text, _THINKING_PREVIEW_LINES)
+        tail_text = _tail_lines(text, max_lines)
         lines = tail_text.split("\n")
         return "\n".join(_truncate_to_display_width(line, max_width) for line in lines)
 
@@ -358,11 +378,22 @@ class _ToolCallBlock:
         # ``pythinker`` worklog path so that rendering is bit-for-bit
         # unchanged.
         self._tui_card: ToolExecutionComponent | None = None
+        # True once the runtime reports that approval/hooks are complete and
+        # the tool body is executing. Before this, streamed tool-call args render
+        # as a calm "preparing" row instead of an execution spinner.
+        self._execution_started: bool = False
+        # Incremental tool output (currently shell stdout/stderr) that should be
+        # visible before the final ToolResult arrives.
+        self._streamed_output_parts: list[str] = []
+        self._streamed_output_had_stderr: bool = False
         # True while the Agent tool result indicates a still-running background
         # agent.  The block stays in _tool_call_blocks (and in the Live area)
         # rather than being flushed to static scrollback, so the spinner keeps
         # animating at the Live refresh rate.
         self._is_background_pending: bool = False
+        self._subagent_output_parts: dict[str, list[str]] = {}
+        self._subagent_output_had_stderr: dict[str, bool] = {}
+        self._subagent_execution_started: set[str] = set()
 
         self._renderable: RenderableType = self._compose()
 
@@ -420,6 +451,23 @@ class _ToolCallBlock:
             self._argument = argument
             self._renderable = self._compose()
 
+    def mark_execution_started(self) -> None:
+        if self._execution_started:
+            return
+        self._execution_started = True
+        if self._tui_card is not None:
+            self._tui_card.mark_execution_started()
+        self._renderable = self._compose()
+
+    def append_output_part(self, text: str, *, stream: str = "output") -> None:
+        if self.finished or not text:
+            return
+        self._streamed_output_parts.append(text)
+        if stream == "stderr":
+            self._streamed_output_had_stderr = True
+        self.mark_execution_started()
+        self._renderable = self._compose()
+
     def finish(self, result: ToolReturnValue):
         self._result = result
         result_text = self._card_result_text(result)
@@ -429,6 +477,7 @@ class _ToolCallBlock:
     def append_sub_tool_call(self, tool_call: ToolCall):
         self._ongoing_subagent_tool_calls[tool_call.id] = tool_call
         self._last_subagent_tool_call = tool_call
+        self._renderable = self._compose()
 
     def append_sub_tool_call_part(self, tool_call_part: ToolCallPart):
         if self._last_subagent_tool_call is None:
@@ -439,12 +488,16 @@ class _ToolCallBlock:
             self._last_subagent_tool_call.function.arguments = tool_call_part.arguments_part
         else:
             self._last_subagent_tool_call.function.arguments += tool_call_part.arguments_part
+        self._renderable = self._compose()
 
     def finish_sub_tool_call(self, tool_result: ToolResult):
         self._last_subagent_tool_call = None
         sub_tool_call = self._ongoing_subagent_tool_calls.pop(tool_result.tool_call_id, None)
         if sub_tool_call is None:
             return
+        self._subagent_output_parts.pop(tool_result.tool_call_id, None)
+        self._subagent_output_had_stderr.pop(tool_result.tool_call_id, None)
+        self._subagent_execution_started.discard(tool_result.tool_call_id)
 
         self._finished_subagent_tool_calls.append(
             _ToolCallBlock.FinishedSubCall(
@@ -461,6 +514,102 @@ class _ToolCallBlock:
         self._subagent_type = subagent_type
         if changed:
             self._renderable = self._compose()
+
+    def mark_sub_execution_started(self, tool_call_id: str) -> None:
+        if tool_call_id not in self._ongoing_subagent_tool_calls:
+            return
+        if tool_call_id in self._subagent_execution_started:
+            return
+        self._subagent_execution_started.add(tool_call_id)
+        self._renderable = self._compose()
+
+    def append_sub_output_part(
+        self, tool_call_id: str, text: str, *, stream: str = "output"
+    ) -> None:
+        if tool_call_id not in self._ongoing_subagent_tool_calls:
+            return
+        if not text:
+            return
+        parts = self._subagent_output_parts.setdefault(tool_call_id, [])
+        parts.append(text)
+        if stream == "stderr":
+            self._subagent_output_had_stderr[tool_call_id] = True
+        combined = "".join(parts)
+        if len(combined) > _MAX_SUB_OUTPUT_CHARS:
+            self._subagent_output_parts[tool_call_id] = [combined[-_MAX_SUB_OUTPUT_CHARS:]]
+        self._renderable = self._compose()
+
+    def _subagent_activity_children(self, style_label: str) -> list[RenderableType]:
+        children: list[RenderableType] = []
+        if not (style_label == "Subagent" and self._result is not None):
+            # Finished sub-tool call rows
+            rows: list[ActivityRow] = []
+            for sub_call, sub_result in self._finished_subagent_tool_calls:
+                argument = extract_key_argument(
+                    sub_call.function.arguments or "", sub_call.function.name
+                )
+                detail = sub_call.function.name
+                if argument:
+                    detail = f"{detail} {argument}"
+                rows.append(
+                    ActivityRow(
+                        label="agent",
+                        detail=detail,
+                        state="failed" if sub_result.is_error else "completed",
+                    )
+                )
+
+            # Running sub-tool call rows (shown above finished rows)
+            ongoing = list(self._ongoing_subagent_tool_calls.values())
+            n_hidden_running = max(0, len(ongoing) - _MAX_RUNNING_ROWS)
+            visible_running = ongoing[-_MAX_RUNNING_ROWS:]
+            running_rows: list[ActivityRow] = []
+            for call in visible_running:
+                argument = extract_key_argument(call.function.arguments or "", call.function.name)
+                detail = call.function.name
+                if argument:
+                    detail = f"{detail} {argument}"
+                state = "running" if call.id in self._subagent_execution_started else "waiting"
+                running_rows.append(ActivityRow(label="agent", detail=detail, state=state))
+
+            if n_hidden_running:
+                children.append(
+                    Text(
+                        f"… {n_hidden_running} more running",
+                        style=tui_rich_style("muted") + Style(italic=True),
+                    )
+                )
+
+            combined_rows = running_rows + rows
+            if combined_rows:
+                children.append(
+                    render_activity_tree(
+                        combined_rows,
+                        width=current_console_width(),
+                        max_rows=len(combined_rows),
+                    )
+                )
+
+            # Output preview for the most-recent ongoing call that has streamed output
+            latest = next(
+                (
+                    call
+                    for call in reversed(list(self._ongoing_subagent_tool_calls.values()))
+                    if call.id in self._subagent_output_parts
+                ),
+                None,
+            )
+            if latest is not None:
+                combined_output = "".join(self._subagent_output_parts[latest.id]).rstrip("\n")
+                if combined_output:
+                    is_stderr = self._subagent_output_had_stderr.get(latest.id, False)
+                    output_style = "error" if is_stderr else "muted"
+                    preview = _tail_lines(combined_output, 4)
+                    max_line_width = max(1, current_console_width() - 6)
+                    for line in preview.splitlines():
+                        truncated = _truncate_to_display_width(line, max_line_width)
+                        children.append(Text(f"│  {truncated}", style=tui_rich_style(output_style)))
+        return children
 
     def _compose(self) -> RenderableType:
         if is_card_style():
@@ -503,26 +652,14 @@ class _ToolCallBlock:
                     bullet_style=tui_rich_style("muted"),
                 )
             )
-        if not (style.label == "Subagent" and self._result is not None):
-            rows: list[ActivityRow] = []
-            for sub_call, sub_result in self._finished_subagent_tool_calls:
-                argument = extract_key_argument(
-                    sub_call.function.arguments or "", sub_call.function.name
-                )
-                detail = sub_call.function.name
-                if argument:
-                    detail = f"{detail} {argument}"
-                rows.append(
-                    ActivityRow(
-                        label="agent",
-                        detail=detail,
-                        state="failed" if sub_result.is_error else "completed",
-                    )
-                )
-            if rows:
-                children.append(render_activity_tree(rows, width=current_console_width()))
+        children.extend(self._subagent_activity_children(style.label))
 
         if self._result is None:
+            streamed_output = self._streamed_output_text()
+            if streamed_output:
+                preview = _tail_lines(streamed_output.rstrip("\n"), 8)
+                output_style = "error" if self._streamed_output_had_stderr else "muted"
+                children.append(Text(preview, style=tui_rich_style(output_style)))
             return render_worklog_entry(
                 label=style.label,
                 target=self._argument,
@@ -575,8 +712,8 @@ class _ToolCallBlock:
                 self._tool_call_id,
                 definition=definition,
             )
-            # We see the tool call event, so the model has begun work.
-            self._tui_card.mark_execution_started()
+            if self._execution_started:
+                self._tui_card.mark_execution_started()
         raw_args = self._lexer.complete_json() or "{}"
         try:
             parsed = json.loads(raw_args, strict=False)
@@ -584,10 +721,11 @@ class _ToolCallBlock:
             parsed = {}
         if isinstance(parsed, dict):
             self._tui_card.update_args(cast(dict[str, Any], parsed))
-        # Args are complete once a result lands; before that we treat
+        # Args are complete once execution starts; before that we treat
         # complete_json output as best-effort.
-        if self._result is not None:
+        if self._execution_started or self._result is not None:
             self._tui_card.set_args_complete()
+        if self._result is not None:
             self._tui_card.set_result(
                 ToolResultPayload(
                     text=self._card_result_text(self._result),
@@ -596,7 +734,28 @@ class _ToolCallBlock:
                 ),
                 is_partial=self._is_background_pending,
             )
-        return self._tui_card.render()
+        elif streamed_output := self._streamed_output_text():
+            self._tui_card.set_result(
+                ToolResultPayload(
+                    text=streamed_output,
+                    is_error=False,
+                    details={
+                        "output": streamed_output,
+                        "message": "",
+                        "display": [],
+                        "extras": {"status": "running"},
+                    },
+                ),
+                is_partial=True,
+            )
+        card_rendered = self._tui_card.render()
+        activity_children = self._subagent_activity_children(tool_style(self._tool_name).label)
+        if activity_children:
+            return Group(card_rendered, *activity_children)
+        return card_rendered
+
+    def _streamed_output_text(self) -> str:
+        return "".join(self._streamed_output_parts)
 
     @staticmethod
     def _card_result_details(result: ToolReturnValue) -> dict[str, Any]:

@@ -109,6 +109,9 @@ def _todo_tool_result(items: list[TodoDisplayItem]) -> ToolResult:
 def test_working_indicator_pins_todos_under_spinner(monkeypatch):
     now = 1000.0
     monkeypatch.setattr(live_view_module.time, "monotonic", lambda: now)
+    # Pin the animated star marker to its static ``✶`` frame so this
+    # structure-focused assertion does not depend on the animation phase.
+    monkeypatch.setenv("PYTHINKER_REDUCED_MOTION", "1")
     view = _LiveView(StatusUpdate())
     view.dispatch_wire_message(TurnBegin(user_input="scan"))
     view.dispatch_wire_message(_todo_tool_call())

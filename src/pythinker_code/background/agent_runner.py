@@ -29,6 +29,17 @@ if TYPE_CHECKING:
     from pythinker_code.soul.agent import Runtime
 
 
+def _timeout_recovery_message(*, timeout_s: int | None, agent_id: str) -> str:
+    timeout_text = f"{timeout_s}s" if timeout_s is not None else "the configured timeout"
+    return (
+        f"Agent task timed out after {timeout_text}.\n"
+        "Recovery: the subagent context is still saved. Do not relaunch the same broad "
+        "prompt unchanged. Run targeted direct scans, or resume the saved agent with a "
+        f'narrower continuation prompt: Agent(resume="{agent_id}", prompt="...", '
+        "timeout=3600)."
+    )
+
+
 class BackgroundAgentRunner:
     def __init__(
         self,
@@ -92,7 +103,9 @@ class BackgroundAgentRunner:
                 self._manager._mark_task_timed_out(
                     self._task_id, f"Agent task timed out after {self._timeout_s}s"
                 )
-                output.error(f"Agent task timed out after {self._timeout_s}s")
+                output.error(
+                    _timeout_recovery_message(timeout_s=self._timeout_s, agent_id=self._agent_id)
+                )
             else:
                 # Internal timeout (e.g. aiohttp request) — treat as generic failure
                 logger.exception("Background agent runner failed")

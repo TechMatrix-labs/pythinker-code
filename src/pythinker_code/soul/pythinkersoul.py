@@ -86,6 +86,7 @@ from pythinker_code.tools.dmail import NAME as SendDMail_NAME
 from pythinker_code.tools.utils import ToolRejectedError
 from pythinker_code.utils.logging import logger
 from pythinker_code.utils.slashcmd import SlashCommand, parse_slash_command_call
+from pythinker_code.utils.sleep_inhibitor import SleepInhibitor
 from pythinker_code.wire.file import WireFile
 from pythinker_code.wire.types import (
     CompactionBegin,
@@ -259,6 +260,7 @@ class PythinkerSoul:
         self._approval = agent.runtime.approval
         self._context = context
         self._loop_control = agent.runtime.config.loop_control
+        self._sleep_inhibitor = SleepInhibitor(enabled=agent.runtime.config.prevent_idle_sleep)
         self._compaction = SimpleCompaction()  # TODO: maybe configurable and composable
 
         for tool in agent.toolset.tools:
@@ -797,6 +799,26 @@ class PythinkerSoul:
                             fresh.custom_title = title
                             save_session_state(fresh, session.dir)
                         session.state.custom_title = fresh.custom_title
+                        if session.state.custom_title:
+                            from pythinker_code.scratchpad import (
+                                append_scratch_event_sync,
+                                rename_session_scratch,
+                            )
+
+                            rename_session_scratch(
+                                session.work_dir,
+                                session_id=session.id,
+                                session_title=session.state.custom_title,
+                            )
+                            await asyncio.to_thread(
+                                append_scratch_event_sync,
+                                session.work_dir,
+                                session_id=session.id,
+                                session_title=session.state.custom_title,
+                                title="session title set",
+                                details=[f"title: {session.state.custom_title}"],
+                                labels=[f"scope:{session.state.custom_title}"],
+                            )
         finally:
             if turn_started and not turn_finished:
                 wire_send(TurnEnd())
@@ -820,45 +842,49 @@ class PythinkerSoul:
         if missing_caps := check_message(user_message, self._runtime.llm.capabilities):
             raise LLMNotSupported(self._runtime.llm, list(missing_caps))
 
-        bus = shared_event_bus()
-        bus.emit(
-            "user.message",
-            {
-                "session_id": self._runtime.session.id,
-                "message": user_message,
-            },
-        )
-
-        with _otel.start_span(
-            "pythinker.turn",
-            {
-                "session.id": self._runtime.session.id,
-                "agent.role": self._runtime.role,
-                "model": self._runtime.llm.model_name,
-                "plan_mode": self._plan_mode,
-            },
-        ) as span:
-            turn_t0 = time.monotonic()
-            await self._checkpoint()  # this creates the checkpoint 0 on first run
-            await self._context.append_message(user_message)
-            logger.debug("Appended user message to context")
-            outcome = await self._agent_loop()
-            span.set_attribute("turn.stop_reason", outcome.stop_reason)
-            span.set_attribute("turn.step_count", outcome.step_count)
-            _m.record_turn(
-                duration_seconds=time.monotonic() - turn_t0,
-                step_count=outcome.step_count,
-                stop_reason=outcome.stop_reason,
-            )
+        self._sleep_inhibitor.set_turn_running(True)
+        try:
+            bus = shared_event_bus()
             bus.emit(
-                "turn.end",
+                "user.message",
                 {
                     "session_id": self._runtime.session.id,
-                    "stop_reason": outcome.stop_reason,
-                    "step_count": outcome.step_count,
+                    "message": user_message,
                 },
             )
-            return outcome
+
+            with _otel.start_span(
+                "pythinker.turn",
+                {
+                    "session.id": self._runtime.session.id,
+                    "agent.role": self._runtime.role,
+                    "model": self._runtime.llm.model_name,
+                    "plan_mode": self._plan_mode,
+                },
+            ) as span:
+                turn_t0 = time.monotonic()
+                await self._checkpoint()  # this creates the checkpoint 0 on first run
+                await self._context.append_message(user_message)
+                logger.debug("Appended user message to context")
+                outcome = await self._agent_loop()
+                span.set_attribute("turn.stop_reason", outcome.stop_reason)
+                span.set_attribute("turn.step_count", outcome.step_count)
+                _m.record_turn(
+                    duration_seconds=time.monotonic() - turn_t0,
+                    step_count=outcome.step_count,
+                    stop_reason=outcome.stop_reason,
+                )
+                bus.emit(
+                    "turn.end",
+                    {
+                        "session_id": self._runtime.session.id,
+                        "stop_reason": outcome.stop_reason,
+                        "step_count": outcome.step_count,
+                    },
+                )
+                return outcome
+        finally:
+            self._sleep_inhibitor.set_turn_running(False)
 
     def _build_slash_commands(self) -> list[SlashCommand[Any]]:
         commands: list[SlashCommand[Any]] = list(soul_slash_registry.list_commands())

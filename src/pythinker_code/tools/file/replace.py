@@ -173,6 +173,9 @@ class StrReplaceFile(CallableTool2[Params]):
                 if not result:
                     return result.rejection_error()
 
+            from pythinker_code.soul.toolset import emit_current_tool_execution_started
+
+            emit_current_tool_execution_started()
             create_file_restore_point(self._runtime.session, tool_name=self.name, path=str(p))
 
             # Write the modified content back to the file

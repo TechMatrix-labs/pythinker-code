@@ -21,6 +21,7 @@ from pythinker_code.exception import MCPConfigError, SystemPromptTemplateError
 from pythinker_code.llm import LLM
 from pythinker_code.notifications import NotificationManager
 from pythinker_code.prompt_templates import PromptTemplate, discover_prompt_templates
+from pythinker_code.scratchpad import DEFAULT_SCRATCHPAD_SECTION
 from pythinker_code.session import Session
 from pythinker_code.skill import (
     Skill,
@@ -69,6 +70,8 @@ class BuiltinSystemPromptArgs:
     """The operating system kind, e.g. 'Windows', 'macOS', 'Linux'."""
     PYTHINKER_SHELL: str
     """The shell executable used by the Shell tool, e.g. 'bash (`/bin/bash`)'."""
+    PYTHINKER_SCRATCHPAD_SECTION: str = DEFAULT_SCRATCHPAD_SECTION
+    """The rendered session-scratchpad prompt section (available or unavailable guard)."""
 
 
 _AGENTS_MD_MAX_BYTES = 32 * 1024  # 32 KiB
@@ -228,6 +231,7 @@ class Runtime:
         auto: bool = False,
         runtime_auto: bool = False,
         skills_dirs: list[HostPath] | None = None,
+        scratchpad_section: str | None = None,
     ) -> Runtime:
         ls_output, agents_md, environment = await asyncio.gather(
             list_directory(session.work_dir),
@@ -330,6 +334,7 @@ class Runtime:
                 PYTHINKER_ADDITIONAL_DIRS_INFO=additional_dirs_info,
                 PYTHINKER_OS=environment.os_kind,
                 PYTHINKER_SHELL=f"{environment.shell_name} (`{environment.shell_path}`)",
+                PYTHINKER_SCRATCHPAD_SECTION=scratchpad_section or DEFAULT_SCRATCHPAD_SECTION,
             ),
             denwa_renji=DenwaRenji(),
             approval=Approval(state=approval_state),

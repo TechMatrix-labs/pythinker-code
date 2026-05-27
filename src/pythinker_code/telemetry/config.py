@@ -7,8 +7,8 @@ keys, mitigated server-side by rate limiting and PII scrubbing at the edge
 collector.
 
 Override any value at runtime with the matching environment variable. Telemetry
-is off by default; enable it with ``PYTHINKER_ENABLE_TELEMETRY=1``. Disable
-telemetry explicitly with ``PYTHINKER_DISABLE_TELEMETRY=1``.
+is on by default; disable it with ``PYTHINKER_DISABLE_TELEMETRY=1`` (or
+``--no-telemetry`` / ``telemetry = false`` in the config file).
 """
 
 from __future__ import annotations
@@ -71,17 +71,25 @@ def is_test_environment() -> bool:
 def is_disabled() -> bool:
     """Master kill switch for external Sentry/OTel emission.
 
-    Telemetry is opt-in: ``PYTHINKER_ENABLE_TELEMETRY=1`` must be set before
-    any external Sentry/OTel emission is attempted. ``PYTHINKER_DISABLE_TELEMETRY=1``
-    remains an explicit kill switch, and pytest is treated as disabled by default
-    so test suites cannot leak deliberate test failures to production telemetry
-    backends.
+    Telemetry is on by default. ``PYTHINKER_DISABLE_TELEMETRY=1`` is the explicit
+    opt-out kill switch, and pytest is treated as disabled by default so test
+    suites cannot leak deliberate test failures to production telemetry backends
+    (override that guard with ``PYTHINKER_FORCE_TELEMETRY_IN_TESTS=1``).
     """
     if _env_truthy("PYTHINKER_DISABLE_TELEMETRY"):
         return True
-    if is_test_environment():
-        return True
-    return not _env_truthy("PYTHINKER_ENABLE_TELEMETRY")
+    return bool(is_test_environment())
+
+
+def is_enabled(*, config_telemetry: bool) -> bool:
+    """Authoritative telemetry gate shared by app startup and the SDK initializers.
+
+    Combines the TOML ``telemetry`` setting with the env-based kill switch/opt-in
+    in :func:`is_disabled`. App startup must consult this before attaching the
+    EventSink so it never buffers events for exporters that ``is_disabled`` will
+    refuse to initialize.
+    """
+    return config_telemetry and not is_disabled()
 
 
 # ---------------------------------------------------------------------------

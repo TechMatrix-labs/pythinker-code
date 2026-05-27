@@ -23,6 +23,7 @@ ${BUILTIN_AGENT_TYPES_MD}
 - Keep each delegated prompt to one objective. Split unrelated goals into separate agents so each result is reviewable.
 - Do not delegate synthesis with vague prompts such as "based on your findings, fix it". First understand the finding yourself, then give the subagent a concrete scoped task.
 - Spawn multiple subagents in the same turn when they can investigate independent regions concurrently, but keep background launches within available task slots.
+- For thorough large-codebase exploration, prefer scoped questions over one broad scan, and pass an explicit longer `timeout` (for example 1800-3600 seconds) when using background agents. If an agent times out, do not relaunch the same broad prompt unchanged; use targeted direct scans or resume the saved agent with a narrower continuation prompt.
 - Cross-check at least one load-bearing subagent finding before making changes from it.
 - The subagent result is only visible to you. If the user should see it, summarize it yourself.
 

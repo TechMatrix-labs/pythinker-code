@@ -30,11 +30,12 @@ from pythinker_code.tools.display import TodoDisplayBlock, TodoDisplayItem
 from pythinker_code.ui.shell.components.render_utils import cell_width, truncate_to_width
 from pythinker_code.ui.shell.console import console, current_console_width
 from pythinker_code.ui.shell.echo import render_user_echo
-from pythinker_code.ui.shell.glyphs import TRANSCRIPT_ACTIVE_MARKER, TRANSCRIPT_TOOL_GUTTER
+from pythinker_code.ui.shell.glyphs import TRANSCRIPT_TOOL_GUTTER
 from pythinker_code.ui.shell.keyboard import KeyboardListener, KeyEvent
 from pythinker_code.ui.shell.mcp_status import render_mcp_startup_text
 from pythinker_code.ui.shell.motion import (
     ActivitySnapshot,
+    active_marker_frame,
     activity_status_line,
     reduced_motion_enabled,
     shimmer_text,
@@ -93,6 +94,8 @@ from pythinker_code.wire.types import (
     ToolCall,
     ToolCallPart,
     ToolCallRequest,
+    ToolExecutionStarted,
+    ToolOutputPart,
     ToolResult,
     TurnBegin,
     TurnEnd,
@@ -559,7 +562,7 @@ class _LiveView:
         if self._latest_context_tokens:
             parts.append(f"↓ {format_token_count(self._latest_context_tokens)} tokens")
         metadata = f"({' · '.join(parts)})"
-        prefix = f"{TRANSCRIPT_ACTIVE_MARKER} "
+        prefix = f"{active_marker_frame(elapsed_s)} "
         suffix = f" {metadata}"
         label_width = max(1, width - cell_width(prefix) - cell_width(suffix))
 
@@ -615,7 +618,7 @@ class _LiveView:
                 if hidden_done == len(hidden)
                 else "more"
             )
-            row = Text("     … ", style=tui_rich_style("muted"))
+            row = Text("       … ", style=tui_rich_style("muted"))
             row.append(f"+{len(hidden)} {label}", style=tui_rich_style("muted"))
             rows.append(row)
         return Group(*rows)
@@ -640,7 +643,10 @@ class _LiveView:
             icon = "◻"
             icon_token = "muted"
             title_style = tui_rich_style("tool_output")
-        prefix = f"  {TRANSCRIPT_TOOL_GUTTER}  " if is_first else "     "
+        # The first row carries the ``⎿`` gutter; later rows indent two extra
+        # columns so their checkbox sits under the first task's title, giving the
+        # list the nested look of the reference design instead of a flat column.
+        prefix = f"  {TRANSCRIPT_TOOL_GUTTER}  " if is_first else "       "
         title_budget = max(1, width - cell_width(prefix) - 2)
         title = truncate_to_width(todo.title.strip(), title_budget)
         row = Text(prefix, style=tui_rich_style("muted"))
@@ -805,6 +811,10 @@ class _LiveView:
                 self.append_tool_call(msg)
             case ToolCallPart():
                 self.append_tool_call_part(msg)
+            case ToolExecutionStarted():
+                self.mark_tool_execution_started(msg.tool_call_id)
+            case ToolOutputPart():
+                self.append_tool_output_part(msg)
             case ToolResult():
                 self.append_tool_result(msg)
             case ApprovalResponse():
@@ -1092,6 +1102,16 @@ class _LiveView:
         self._last_tool_call_block.append_args_part(part.arguments_part)
         self.refresh_soon()
 
+    def mark_tool_execution_started(self, tool_call_id: str) -> None:
+        if block := self._tool_call_blocks.get(tool_call_id):
+            block.mark_execution_started()
+            self.refresh_soon()
+
+    def append_tool_output_part(self, part: ToolOutputPart) -> None:
+        if block := self._tool_call_blocks.get(part.tool_call_id):
+            block.append_output_part(part.text, stream=part.stream)
+            self.refresh_soon()
+
     def append_tool_result(self, result: ToolResult) -> None:
         if block := self._tool_call_blocks.get(result.tool_call_id):
             self._record_todo_display(result.return_value)
@@ -1239,10 +1259,22 @@ class _LiveView:
         match event.event:
             case ToolCall() as tool_call:
                 block.append_sub_tool_call(tool_call)
+                self.refresh_soon()
             case ToolCallPart() as tool_call_part:
                 block.append_sub_tool_call_part(tool_call_part)
+                self.refresh_soon()
             case ToolResult() as tool_result:
                 block.finish_sub_tool_call(tool_result)
+                self.refresh_soon()
+            case ToolExecutionStarted() as started:
+                block.mark_sub_execution_started(started.tool_call_id)
+                self.refresh_soon()
+            case ToolOutputPart() as output_part:
+                block.append_sub_output_part(
+                    output_part.tool_call_id,
+                    output_part.text,
+                    stream=output_part.stream,
+                )
                 self.refresh_soon()
             case _:
                 # ignore other events for now

@@ -37,6 +37,44 @@ def test_shell_markdown_uses_pythinker_code_block_frame() -> None:
     assert "╰" in output
 
 
+def test_shell_markdown_renders_priority_matrix_as_grouped_rows() -> None:
+    output = _render_text(
+        PythinkerMarkdown(
+            "Priority Matrix\n\n"
+            "```\n"
+            "C1 ───────────────────────────────────────────────────────────────── CRITICAL\n"
+            "C2 ───────────────────────────────────────────────────────────────── CRITICAL\n"
+            "H1 ───────────────────────────────────────────────────────────────── HIGH\n"
+            "M1 ───────────────────────────────────────────────────────────────── MEDIUM\n"
+            "L1 ───────────────────────────────────────────────────────────────── LOW\n"
+            "L2 ───────────────────────────────────────────────────────────────── INFO\n"
+            "```\n"
+        ),
+        width=100,
+    )
+
+    assert "Critical" in output
+    assert "C1  C2" in output
+    assert "High" in output and "H1" in output
+    assert "Medium" in output and "M1" in output
+    assert "Low" in output and "L1" in output
+    assert "Info" in output and "L2" in output
+    assert "╭" not in output
+    assert "────────────────" not in output
+
+
+def test_shell_markdown_pads_code_block_with_blank_rows() -> None:
+    # The code block should read as a distinct section, with a blank row framing
+    # the panel above and below so it never crowds the surrounding prose.
+    output = _render_text(PythinkerMarkdown("Before text.\n\n```toml\nkey = 1\n```\n\nAfter text."))
+    lines = output.splitlines()
+    top = next(i for i, line in enumerate(lines) if "╭" in line)
+    bottom = next(i for i, line in enumerate(lines) if "╰" in line)
+
+    assert lines[top - 1].strip() == ""
+    assert lines[bottom + 1].strip() == ""
+
+
 def test_shell_markdown_simplifies_report_emoji_icons() -> None:
     output = _render_text(
         PythinkerMarkdown(
@@ -86,6 +124,35 @@ def test_shell_markdown_keeps_rich_fork_table_records() -> None:
     assert "Suggested improvement:" in output
     assert "Priority: High" in output
     assert "Effort: XS" in output
+
+
+def test_shell_markdown_repairs_report_heading_crammed_into_table_header() -> None:
+    output = _render_text(
+        PythinkerMarkdown(
+            "● MEDIUM — address soon| # | File | CWE | Finding | Evidence |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| M1 | approval.py:208–228 | CWE-285 | "
+            "No per-subagent approval isolation. | auto approve broadens scope |\n"
+        ),
+        width=100,
+    )
+
+    assert "● MEDIUM — address soon" in output
+    assert "1. M1" in output
+    assert "File: approval.py:208–228" in output
+    assert "CWE: CWE-285" in output
+    assert "Finding: No per-subagent approval isolation." in output
+    assert "Evidence: auto approve broadens scope" in output
+    assert "| # | File" not in output
+
+
+def test_shell_markdown_does_not_repair_crammed_table_inside_code_fence() -> None:
+    output = _render_text(
+        PythinkerMarkdown("```text\n● MEDIUM — address soon| # | File |\n| --- | --- |\n```\n"),
+        width=100,
+    )
+
+    assert "● MEDIUM — address soon| # | File |" in output
 
 
 def test_markdown_stream_uses_parser_backed_block_boundaries() -> None:

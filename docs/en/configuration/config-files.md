@@ -32,6 +32,7 @@ The configuration file contains the following top-level configuration items:
 | `default_editor` | `string` | Default external editor command (e.g. `"vim"`, `"code --wait"`), auto-detects when empty |
 | `theme` | `string` | Terminal color theme, either `"dark"` or `"light"` (defaults to `"dark"`) |
 | `show_thinking_stream` | `boolean` | Whether to stream the raw reasoning text in the live area as a 6-line scrolling preview and commit the full reasoning markdown to history when the block ends (defaults to `true`; set to `false` to show only the compact `Thinking ...` indicator and a one-line trace summary) |
+| `prevent_idle_sleep` | `boolean` | Whether to prevent the computer from idle-sleeping while an agent turn is running (defaults to `false`; supported on macOS, Linux, and Windows) |
 | `merge_all_available_skills` | `boolean` | Whether to merge skills from all brand directories (defaults to `true`); see [Skills configuration](../customization/skills.md) |
 | `providers` | `table` | API provider configuration |
 | `models` | `table` | Model configuration |
@@ -51,6 +52,7 @@ default_plan_mode = false
 default_editor = ""
 theme = "dark"
 show_thinking_stream = true
+prevent_idle_sleep = false
 merge_all_available_skills = true
 
 [providers.pythinker-for-coding]
@@ -73,7 +75,7 @@ compaction_trigger_ratio = 0.85
 [background]
 max_running_tasks = 4
 keep_alive_on_exit = false
-agent_task_timeout_s = 900
+agent_task_timeout_s = 3600
 
 [services.pythinker_ai_search]
 base_url = "https://api.pythinker.com/coding/v1/search"
@@ -166,7 +168,7 @@ capabilities = ["thinking"]
 | `max_running_tasks` | `integer` | `4` | Maximum number of concurrent background tasks |
 | `keep_alive_on_exit` | `boolean` | `false` | Whether to keep background tasks running when CLI exits; default is to terminate all background tasks on exit |
 | `kill_grace_period_ms` | `integer` | `2000` | Grace period (in milliseconds) to wait after sending SIGTERM during CLI shutdown before reporting any shell workers that have not yet written terminal state. Agent tasks transition to terminal synchronously on kill and do not use this grace period |
-| `agent_task_timeout_s` | `integer` | `900` | Maximum runtime in seconds for a background agent task; timed-out tasks are marked as failed and the main agent is notified |
+| `agent_task_timeout_s` | `integer` | `3600` | Maximum runtime in seconds for a background agent task; timed-out tasks are marked as failed, the main agent is notified, and the saved subagent can be resumed with a narrower prompt |
 | `print_wait_ceiling_s` | `integer` | `3600` | Hard ceiling (in seconds) for how long one-shot `--print` mode waits for background tasks to finish before killing them and exiting. The effective wait is the longest remaining task budget, clipped by this ceiling |
 
 ### `services`

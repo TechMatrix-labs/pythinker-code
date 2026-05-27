@@ -28,10 +28,12 @@ from rich.console import Console, ConsoleOptions, RenderResult
 from rich.panel import Panel
 from rich.style import Style as RichStyle
 from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
 from rich.theme import Theme
 
 from pythinker_code.ui.shell.components.render_utils import sanitize_ansi
-from pythinker_code.ui.shell.spacing import CODE_BLOCK_PADDING
+from pythinker_code.ui.shell.spacing import CODE_BLOCK_PADDING, blank_row
 from pythinker_code.ui.theme import ThemeName, get_markdown_colors
 from pythinker_code.utils.rich.markdown import CodeBlock, Markdown
 from pythinker_code.utils.rich.syntax import PYTHINKER_ANSI_THEME_NAME
@@ -67,6 +69,13 @@ _MARKDOWN_ICON_KEYS: tuple[str, ...] = tuple(
     sorted(_MARKDOWN_ICON_REPLACEMENTS, key=len, reverse=True)
 )
 _FENCE_RE = re.compile(r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})")
+_PRIORITY_MATRIX_ROW_RE = re.compile(
+    r"^\s*(?P<id>[A-Z]{1,3}\d+)\s*(?:[─━—-]|\s){2,}\s*"
+    r"(?P<severity>CRITICAL|HIGH|MEDIUM|LOW|INFO)\s*$",
+    re.IGNORECASE,
+)
+_PRIORITY_MATRIX_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
 __all__ = [
@@ -76,17 +85,142 @@ __all__ = [
 ]
 
 
+def _priority_matrix_rows(code_text: str) -> list[tuple[str, str]] | None:
+    rows: list[tuple[str, str]] = []
+    meaningful_lines = 0
+    for line in code_text.splitlines():
+        stripped = line.strip()
+        if not stripped or set(stripped) <= {"─", "━", "—", "-", " "}:
+            continue
+        meaningful_lines += 1
+        match = _PRIORITY_MATRIX_ROW_RE.match(stripped)
+        if match is None:
+            return None
+        rows.append((match.group("id"), match.group("severity").upper()))
+    if len(rows) < 3 or meaningful_lines != len(rows):
+        return None
+    return rows
+
+
+def _render_priority_matrix(rows: list[tuple[str, str]]) -> Table:
+    grouped: dict[str, list[str]] = {severity: [] for severity in _PRIORITY_MATRIX_SEVERITIES}
+    for item_id, severity in rows:
+        grouped.setdefault(severity, []).append(item_id)
+
+    table = Table.grid(padding=(0, 2))
+    table.add_column(justify="right", no_wrap=True)
+    table.add_column(no_wrap=False)
+    for severity in _PRIORITY_MATRIX_SEVERITIES:
+        items = grouped.get(severity) or []
+        if not items:
+            continue
+        table.add_row(Text(severity.title(), style="bold"), "  ".join(items))
+    return table
+
+
+def _is_table_separator_line(line: str) -> bool:
+    return _TABLE_SEPARATOR_RE.match(line) is not None
+
+
+def _is_table_header_fragment(fragment: str) -> bool:
+    stripped = fragment.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return False
+    if _is_table_separator_line(stripped):
+        return False
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    return len(cells) >= 2 and any(cells)
+
+
+def _find_crammed_table_header_start(line: str) -> int | None:
+    if line.lstrip().startswith("|"):
+        return None
+    for index, char in enumerate(line):
+        if char != "|" or not line[:index].strip():
+            continue
+        if _is_table_header_fragment(line[index:]):
+            return index
+    return None
+
+
+def _repair_crammed_markdown_tables(markup: str) -> str:
+    """Split report headings accidentally glued to a following Markdown table.
+
+    Streaming model output occasionally drops the newline between a section
+    title and a table header, producing text such as ``Medium| # | File |``.
+    Markdown then treats the whole table as a paragraph and renders dense report
+    rows as crammed prose. Repair only this narrow, table-separator-confirmed
+    shape, and never touch fenced code.
+    """
+    if "|" not in markup:
+        return markup
+
+    lines = markup.splitlines(keepends=True)
+    if len(lines) < 2:
+        return markup
+
+    repaired: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+    for index, line in enumerate(lines):
+        body = line.rstrip("\r\n")
+        eol = line[len(body) :]
+        match = _FENCE_RE.match(body)
+        if in_fence:
+            repaired.append(line)
+            if match is not None:
+                fence = match.group("fence")
+                if fence.startswith(fence_char) and len(fence) >= fence_len:
+                    in_fence = False
+                    fence_char = ""
+                    fence_len = 0
+            continue
+        if match is not None:
+            fence = match.group("fence")
+            in_fence = True
+            fence_char = fence[0]
+            fence_len = len(fence)
+            repaired.append(line)
+            continue
+
+        split_at: int | None = None
+        if index + 1 < len(lines):
+            next_body = lines[index + 1].rstrip("\r\n")
+            if _is_table_separator_line(next_body):
+                split_at = _find_crammed_table_header_start(body)
+        if split_at is None:
+            repaired.append(line)
+            continue
+
+        prefix = body[:split_at].rstrip()
+        header = body[split_at:].lstrip()
+        if prefix:
+            repaired.append(f"{prefix}\n")
+        repaired.append(f"{header}{eol}")
+
+    return "".join(repaired)
+
+
 class _BorderedCodeBlock(CodeBlock):
     """Code block with an aligned rounded frame and calm report styling."""
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+        code_text = str(self.text).rstrip("\n")
+        if self.lexer_name.strip().lower() in {"", "text", "plain", "markdown"}:
+            matrix_rows = _priority_matrix_rows(code_text)
+            if matrix_rows is not None:
+                yield blank_row()
+                yield _render_priority_matrix(matrix_rows)
+                yield blank_row()
+                return
+
         colors = get_markdown_colors()
         border_style = RichStyle(color=colors.code_block_border, bold=True)
         panel_style = (
             RichStyle(bgcolor=colors.code_block_bg) if colors.code_block_bg else RichStyle()
         )
 
-        code_text = str(self.text).rstrip("\n")
         syntax = Syntax(
             code_text,
             self.lexer_name,
@@ -99,6 +233,10 @@ class _BorderedCodeBlock(CodeBlock):
         highlighted.rstrip()
         lexer_name = self.lexer_name.strip()
         title = lexer_name if lexer_name and lexer_name != "text" else None
+        # Frame the code block with a blank row above and below so it reads as a
+        # distinct section instead of crowding the surrounding prose. Canonical
+        # ``blank_row()`` (an empty ``Text``) never picks up the panel's tint.
+        yield blank_row()
         yield Panel(
             highlighted,
             title=title,
@@ -109,6 +247,7 @@ class _BorderedCodeBlock(CodeBlock):
             expand=True,
             style=panel_style,
         )
+        yield blank_row()
 
 
 def _markdown_style_overrides(theme: ThemeName | None = None) -> dict[str, RichStyle]:
@@ -218,7 +357,8 @@ class PythinkerMarkdown(Markdown):
 
     def __init__(self, markup: str, *args: Any, **kwargs: Any) -> None:
         safe_markup = sanitize_ansi(markup)
-        super().__init__(_simplify_markdown_report_icons(safe_markup), *args, **kwargs)
+        repaired_markup = _repair_crammed_markdown_tables(safe_markup)
+        super().__init__(_simplify_markdown_report_icons(repaired_markup), *args, **kwargs)
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         overrides = _markdown_style_overrides()

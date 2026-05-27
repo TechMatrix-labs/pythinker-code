@@ -945,8 +945,19 @@ async def title(app: Shell, args: str):
     session.state.custom_title = new_title
     session.state.title_generated = True
     session.title = new_title
+    from pythinker_code.scratchpad import append_scratch_event_sync, rename_session_scratch
     from pythinker_code.ui.theme import get_tui_tokens as _get_tok_title
 
+    rename_session_scratch(session.work_dir, session_id=session.id, session_title=new_title)
+    await asyncio.to_thread(
+        append_scratch_event_sync,
+        session.work_dir,
+        session_id=session.id,
+        session_title=new_title,
+        title="session title set",
+        details=[f"title: {new_title}"],
+        labels=[f"scope:{new_title}"],
+    )
     console.print(f"[{_get_tok_title().success}]Session title set to: {_rich_escape(new_title)}[/]")
 
 

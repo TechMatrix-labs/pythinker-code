@@ -30,6 +30,7 @@ def test_default_config_dump():
             "default_editor": "",
             "theme": "dark",
             "show_thinking_stream": True,
+            "prevent_idle_sleep": False,
             "models": {},
             "providers": {},
             "loop_control": {
@@ -49,7 +50,7 @@ def test_default_config_dump():
                 "worker_stale_after_ms": 15000,
                 "kill_grace_period_ms": 2000,
                 "keep_alive_on_exit": False,
-                "agent_task_timeout_s": 900,
+                "agent_task_timeout_s": 3600,
                 "print_wait_ceiling_s": 3600,
             },
             "notifications": {

@@ -21,6 +21,12 @@ SPINNER_FRAME_INTERVAL_S: Final = 0.08
 SHAPE_FRAME_INTERVAL_S: Final = 0.45
 #: Static stand-in used when motion is disabled.
 REDUCED_MOTION_GLYPH: Final = "●"
+#: Pulsing-star frames for the active task/status marker. Cycling 4→6→8→heavy-8
+#: points and back reads as a smooth spinning twinkle while keeping a constant
+#: one-cell width so the label column never shifts.
+STAR_SPINNER_FRAMES: Final = ("✦", "✶", "✷", "✸", "✷", "✶")
+#: Seconds each star-spinner frame stays on screen.
+STAR_SPINNER_FRAME_INTERVAL_S: Final = 0.12
 
 #: Transcript row marker for assistant/tool-call lines.
 TRANSCRIPT_ASSISTANT_MARKER: Final = "⏺"
@@ -38,6 +44,8 @@ __all__ = [
     "SHAPE_FRAMES",
     "SPINNER_FRAME_INTERVAL_S",
     "SHAPE_FRAME_INTERVAL_S",
+    "STAR_SPINNER_FRAMES",
+    "STAR_SPINNER_FRAME_INTERVAL_S",
     "REDUCED_MOTION_GLYPH",
     "TRANSCRIPT_ASSISTANT_MARKER",
     "TRANSCRIPT_PROMPT_MARKER",

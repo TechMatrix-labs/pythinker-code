@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from pythinker_code.scratchpad import session_scratch_path
 from pythinker_code.soul.agent import Runtime
 from pythinker_code.tools.todo import Params, SetTodoList, Todo
 
@@ -22,7 +23,9 @@ class TestSetTodoListOutputNotEmpty:
     saved. This led to repeated calls (a "storm") especially when Shell was disabled.
     """
 
-    async def test_write_mode_returns_nonempty_output(self, set_todo_list_tool: SetTodoList):
+    async def test_write_mode_returns_nonempty_output(
+        self, set_todo_list_tool: SetTodoList, runtime: Runtime
+    ):
         """When todos are provided, the tool must return a non-empty output
         so the model gets meaningful feedback (not just 'Todo list updated')."""
         params = Params(
@@ -40,6 +43,12 @@ class TestSetTodoListOutputNotEmpty:
             "The model needs to see confirmation of the todo state it just set."
         )
         assert result.message == "Todo list updated"
+        scratch_file = session_scratch_path(runtime.session.work_dir, session_id=runtime.session.id)
+        assert scratch_file.is_file()
+        scratch_text = scratch_file.read_text(encoding="utf-8")
+        assert "— todo update" in scratch_text
+        assert "items: 3; done: 1; in_progress: 1; pending: 1" in scratch_text
+        assert "active: Write tests" in scratch_text
 
     async def test_read_mode_returns_current_todos(self, set_todo_list_tool: SetTodoList):
         """When no todos are provided (None), the tool should return the current

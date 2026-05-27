@@ -99,6 +99,22 @@ export type ToolCallPartEvent = {
   };
 };
 
+export type ToolExecutionStartedEvent = {
+  type: "ToolExecutionStarted";
+  payload: {
+    tool_call_id: string;
+  };
+};
+
+export type ToolOutputPartEvent = {
+  type: "ToolOutputPart";
+  payload: {
+    tool_call_id: string;
+    stream: "stdout" | "stderr" | "output";
+    text: string;
+  };
+};
+
 /**
  * Tool result event from backend
  * @see pythinker_core.tooling.ToolReturnValue for the source type
@@ -272,6 +288,8 @@ export type WireEvent =
   | ContentPartEvent
   | ToolCallEvent
   | ToolCallPartEvent
+  | ToolExecutionStartedEvent
+  | ToolOutputPartEvent
   | ToolResultEvent
   | StatusUpdateEvent
   | SessionNoticeEvent
