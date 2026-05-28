@@ -76,3 +76,29 @@ jobs:
             -H "Authorization: Bearer $DISPATCH_TOKEN" \
             https://api.github.com/repos/mohamed-elkholy95/pythinker-home/dispatches \
             -d "$payload"
+
+  notify-failure:
+    name: Notify on failure
+    runs-on: ubuntu-latest
+    needs: dispatch
+    if: failure()
+    steps:
+      - name: Post Slack alert
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            exit 0
+          fi
+          payload=$(jq -n \
+            --arg run_url "$RUN_URL" \
+            --arg repo "$REPO" \
+            --arg trigger "$TRIGGER" \
+            '{"text":":red_circle: *Dispatch pythinker-home sync failed*","attachments":[{"color":"danger","fields":[{"title":"Repo","value":$repo,"short":true},{"title":"Trigger","value":$trigger,"short":true},{"title":"Run","value":"<\($run_url)|View logs>","short":false}]}]}')
+          curl --fail-with-body -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$SLACK_WEBHOOK_URL"
