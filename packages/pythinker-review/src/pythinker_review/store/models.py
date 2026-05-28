@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     critical = "critical"
     high = "high"
     medium = "medium"
@@ -26,7 +26,7 @@ SEVERITY_ORDER: dict[Severity, int] = {
 }
 
 
-class Category(str, Enum):
+class Category(StrEnum):
     correctness = "correctness"
     security = "security"
     debugging = "debugging"

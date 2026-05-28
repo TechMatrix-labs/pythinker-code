@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 _GIT_TIMEOUT_S = 20.0
 
 
-class DiffMode(str, Enum):
+class DiffMode(StrEnum):
     base = "base"
     staged = "staged"
     working_tree = "working_tree"

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pythinker_review.store.models import SEVERITY_ORDER, Finding, RunMeta, Severity
 
 
-class OutputFormat(str, Enum):
+class OutputFormat(StrEnum):
     pretty = "pretty"
     json = "json"
     sarif = "sarif"
 
 
-class FailOn(str, Enum):
+class FailOn(StrEnum):
     critical = "critical"
     high = "high"
     medium = "medium"

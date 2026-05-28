@@ -11,7 +11,7 @@ import re
 import sys
 import tomllib
 from collections.abc import Callable, Sequence
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -82,22 +82,22 @@ from pythinker_review.store.models import SEVERITY_ORDER, Finding, Pass, RunMeta
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 
-class ReviewMode(str, Enum):
+class ReviewMode(StrEnum):
     default = "default"
     deslopify = "deslopify"
 
 
-class ArtifactFormat(str, Enum):
+class ArtifactFormat(StrEnum):
     pretty = "pretty"
     json = "json"
 
 
-class DiffSide(str, Enum):
+class DiffSide(StrEnum):
     right = "RIGHT"
     left = "LEFT"
 
 
-class SimilarIssuesBackend(str, Enum):
+class SimilarIssuesBackend(StrEnum):
     chroma = "chroma"
     lexical = "lexical"
     auto = "auto"
