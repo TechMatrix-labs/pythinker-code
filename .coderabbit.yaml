@@ -81,7 +81,7 @@ reviews:
   pre_merge_checks:
     title:
       mode: "warning"
-      requirements: "Follow conventional commits: type(scope): description. Valid types: feat, fix, chore, docs, refactor, test, ci, perf."
+      requirements: "Follow conventional commits: type(scope)?: description. Valid types: feat, fix, chore, docs, refactor, test, ci, perf."
     description:
       mode: "warning"
     issue_assessment:

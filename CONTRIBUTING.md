@@ -30,7 +30,7 @@ are installed (`make prepare` or `uv sync`).
 
 This project enforces a **zero-new-bundled-deps** policy: new entries under `[project].dependencies`
 in `pyproject.toml` are not accepted unless explicitly approved by a maintainer. Use the standard
-library, or hand-roll what you need, rather than adding a package.
+library or existing internal modules first; otherwise request an approved exception from a maintainer before adding a package.
 
 If you believe a new runtime dependency is genuinely necessary:
 
