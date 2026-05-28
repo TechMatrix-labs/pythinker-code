@@ -141,10 +141,12 @@ def test_working_indicator_pins_todos_under_spinner(monkeypatch):
     assert "✶ Explore project context — blogs page and image components… (1m 0s)" in rendered
     assert "⎿  ✔ Gather requirements" in rendered
     assert "✔ Inspect UI" in rendered
-    assert "◼ Explore project context" in rendered
+    # Dedup: when the spinner header shows the active todo title, the body hides it.
+    assert "◼ Explore project context" not in rendered
+    assert rendered.count("Explore project context") == 1
     assert "◻ Ask clarifying questions one at a time" in rendered
     assert "◻ Propose 2–3 approaches with trade-offs" in rendered
-    assert "… +3 pending" in rendered
+    assert "… +2 pending" in rendered
     assert "todos(" not in rendered
     assert "Run final checks" not in rendered
     assert "Tip:" not in rendered

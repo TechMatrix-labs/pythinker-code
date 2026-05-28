@@ -8,6 +8,7 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.document import Document
 from rich.text import Text
 
+from pythinker_code.tools.display import TodoDisplayItem
 from pythinker_code.ui.shell.prompt import BgTaskCounts, CustomPromptSession, PromptMode, UserInput
 from pythinker_code.wire.types import ApprovalRequest, StatusUpdate, SteerInput, TextPart
 
@@ -264,6 +265,7 @@ def test_prompt_status_falls_back_to_background_spinner_after_turn_end() -> None
     session = object.__new__(CustomPromptSession)
     session._background_task_count_provider = lambda: BgTaskCounts(agent=1)
     session._status_block_provider = None
+    session._latest_todos = ()
 
     class _EndedDelegate:
         def render_agent_status(self, columns: int):  # noqa: ARG002
@@ -276,6 +278,24 @@ def test_prompt_status_falls_back_to_background_spinner_after_turn_end() -> None
 
     assert "…" in text
     assert "1 background agent" in text
+
+
+def test_prompt_status_keeps_todos_visible_during_background_tasks() -> None:
+    session = object.__new__(CustomPromptSession)
+    session._running_prompt_delegate = None
+    session._background_task_count_provider = lambda: BgTaskCounts(agent=3)
+    session._status_block_provider = None
+    session._latest_todos = (
+        TodoDisplayItem(title="Security vulnerability scan", status="in_progress"),
+        TodoDisplayItem(title="Code quality review", status="pending"),
+    )
+
+    rendered = CustomPromptSession._render_agent_status(session, 100)
+    text = "".join(item[1] for item in rendered)
+
+    assert "3 background agents" in text
+    assert "⎿  ◼ Security vulnerability scan" in text
+    assert "◻ Code quality review" in text
 
 
 def test_background_status_drops_verb_when_working_indicator_pinned() -> None:

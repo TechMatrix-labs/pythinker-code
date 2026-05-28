@@ -96,6 +96,20 @@ def temp_share_dir() -> Generator[Path]:
         yield Path(tmpdir)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_share_dir(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point ``PYTHINKER_SHARE_DIR`` at a unique temp dir for every test.
+
+    ``get_share_dir()`` defaults to ``~/.pythinker`` when the env var is unset, so any
+    test that builds a ``ProjectMemoryStore``/store without explicit isolation would
+    otherwise write into the real user home. This guarantees isolation by default; tests
+    that set ``PYTHINKER_SHARE_DIR`` themselves still override it within their own scope.
+    """
+    monkeypatch.setenv("PYTHINKER_SHARE_DIR", str(tmp_path_factory.mktemp("share")))
+
+
 @pytest.fixture
 def builtin_args(temp_work_dir: HostPath) -> BuiltinSystemPromptArgs:
     """Create builtin arguments with temporary work directory."""

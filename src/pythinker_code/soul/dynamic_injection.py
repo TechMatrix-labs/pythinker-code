@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from pythinker_core.message import Message
@@ -10,6 +10,7 @@ from pythinker_core.message import Message
 from pythinker_code.notifications import is_notification_message
 
 if TYPE_CHECKING:
+    from pythinker_code.soul.agent import Runtime
     from pythinker_code.soul.pythinkersoul import PythinkerSoul
 
 
@@ -19,6 +20,112 @@ class DynamicInjection:
 
     type: str  # identifier, e.g. "plan_mode"
     content: str  # text content (will be wrapped in <system-reminder> tags)
+
+
+@dataclass(frozen=True, slots=True)
+class InjectionCandidate:
+    """Budgetable dynamic prompt content candidate."""
+
+    type: str
+    content: str
+    priority: int = 100
+    token_estimate: int | None = None
+    rearm_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ContextBudget:
+    """Token budget for dynamic injections."""
+
+    max_context_tokens: int
+    reserved_context_tokens: int
+    injection_ceiling_tokens: int = 2048
+
+    @property
+    def injection_budget_tokens(self) -> int:
+        available = max(0, self.max_context_tokens - self.reserved_context_tokens)
+        return max(0, min(self.injection_ceiling_tokens, available))
+
+
+def estimate_injection_tokens(text: str) -> int:
+    """Estimate dynamic-injection tokens using the project-wide len/4 heuristic."""
+    return max(1, len(text) // 4)
+
+
+def injection_budget_from_runtime(runtime: Runtime) -> ContextBudget:
+    """Build a dynamic-injection budget from runtime model/config values."""
+    llm = getattr(runtime, "llm", None)
+    model_config = getattr(llm, "model_config", None)
+    loop_control = getattr(getattr(runtime, "config", None), "loop_control", None)
+    reserved = int(getattr(loop_control, "reserved_context_size", 1000) or 1000)
+    memory_config = getattr(getattr(runtime, "config", None), "memory", None)
+    ceiling = int(getattr(memory_config, "injection_ceiling_tokens", 2048) or 2048)
+    fallback_context = reserved + ceiling
+    model_max_context = getattr(model_config, "max_context_size", fallback_context)
+    max_context = int(model_max_context or fallback_context)
+    return ContextBudget(
+        max_context_tokens=max_context,
+        reserved_context_tokens=reserved,
+        injection_ceiling_tokens=ceiling,
+    )
+
+
+def collect_within_budget(
+    candidates: Sequence[InjectionCandidate], budget_tokens: int
+) -> list[InjectionCandidate]:
+    """Return deterministic priority-ordered candidates without exceeding ``budget_tokens``.
+
+    Oversize candidates are truncated at a line boundary when possible; otherwise they are
+    dropped if no useful prefix fits. The input order is the tie-breaker for equal priorities.
+    """
+    if budget_tokens <= 0:
+        return []
+    ordered = sorted(enumerate(candidates), key=lambda item: (-item[1].priority, item[0]))
+    out: list[InjectionCandidate] = []
+    used = 0
+    for _index, candidate in ordered:
+        estimate = candidate.token_estimate or estimate_injection_tokens(candidate.content)
+        if estimate <= 0:
+            continue
+        if used + estimate <= budget_tokens:
+            out.append(replace(candidate, token_estimate=estimate))
+            used += estimate
+            continue
+        remaining = budget_tokens - used
+        if remaining <= 0:
+            break
+        truncated = _truncate_to_tokens(candidate.content, remaining)
+        if not truncated:
+            continue
+        truncated_estimate = estimate_injection_tokens(truncated)
+        if used + truncated_estimate > budget_tokens:
+            continue
+        out.append(replace(candidate, content=truncated, token_estimate=truncated_estimate))
+        used += truncated_estimate
+        break
+    return out
+
+
+def _truncate_to_tokens(text: str, budget_tokens: int) -> str:
+    max_chars = max(0, budget_tokens * 4)
+    if max_chars <= 1:
+        return ""
+    truncated = text[: max_chars - 1].rstrip()
+    if "\n" in truncated:
+        truncated = truncated.rsplit("\n", 1)[0].rstrip()
+    if not truncated:
+        return ""
+    return f"{truncated}\n…"
+
+
+def dynamic_to_candidate(injection: DynamicInjection, *, priority: int = 100) -> InjectionCandidate:
+    return InjectionCandidate(
+        type=injection.type,
+        content=injection.content,
+        priority=priority,
+        token_estimate=estimate_injection_tokens(injection.content),
+        rearm_key=injection.type,
+    )
 
 
 class DynamicInjectionProvider(ABC):
@@ -53,6 +160,11 @@ class DynamicInjectionProvider(ABC):
         """
         _ = enabled
         return None
+
+    def rearm(self, key: str) -> bool:
+        """Re-arm provider throttling for ``key``. Return True when handled."""
+        _ = key
+        return False
 
 
 def normalize_history(history: Sequence[Message]) -> list[Message]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -209,6 +210,8 @@ class Runtime:
     resumed: bool = False
     hook_engine: Any = None
     """HookEngine instance, set by PythinkerCLI after soul creation."""
+    rearm_injection: Callable[[str], None] | None = None
+    """Callback set by PythinkerSoul so tools can refresh dynamic injections."""
 
     def __post_init__(self) -> None:
         if self.subagent_store is None:

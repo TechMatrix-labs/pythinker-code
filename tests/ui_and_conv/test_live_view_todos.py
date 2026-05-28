@@ -97,25 +97,38 @@ def test_todo_update_pins_current_task_under_activity_line(monkeypatch) -> None:
     rendered = _render(view._working_indicator())
 
     assert "✶ Implement pinned todos… (7m 40s · ↓ 10k tokens)" in rendered
-    assert "⎿  ◼ Implement pinned todos" in rendered
-    assert "✔ Explore UI" in rendered
+    assert rendered.count("Implement pinned todos") == 1
+    assert "⎿  ◼ Implement pinned todos" not in rendered
+    assert "⎿  ✔ Explore UI" in rendered
     assert "✔ Write tests" in rendered
-    assert "… +1 completed" in rendered
+    assert "… +1 completed" not in rendered
     assert "todos(" not in rendered
     assert "Accomplishing" not in rendered
 
 
-def test_active_todo_activity_line_uses_shimmer_palette(monkeypatch) -> None:
-    monkeypatch.delenv("PYTHINKER_REDUCED_MOTION", raising=False)
+def test_active_todo_activity_line_alternates_with_spinner_verb(monkeypatch) -> None:
+    now = 1000.0
+    monkeypatch.setattr(_live_view_module.time, "monotonic", lambda: now)
+    monkeypatch.setenv("PYTHINKER_REDUCED_MOTION", "1")
+    view = _LiveView(StatusUpdate(context_tokens=10_000))
+    view.dispatch_wire_message(TurnBegin(user_input="work"))
+    view.dispatch_wire_message(_todo_call())
+    view.dispatch_wire_message(_todo_result())
+
+    now = 1465.0
+    rendered = _render(view._working_indicator())
+
+    assert f"✶ {_live_view_module.spinner_message(now)} (7m 45s · ↓ 10k tokens)" in rendered
+    assert "⎿  ◼ Implement pinned todos" in rendered
+    assert "✔ Explore UI" in rendered
+
+
+def test_active_todo_activity_line_uses_muted_orange() -> None:
     view = _LiveView(StatusUpdate(context_tokens=10_000))
 
     line = view._todo_activity_line("Implement pinned todos", elapsed_s=0.88, width=100)
 
-    assert _span_colors_for(line, "Implement pinned todos") >= {
-        "#e6b450",
-        "#ebc46e",
-        "#f3d89a",
-    }
+    assert _span_colors_for(line, "Implement pinned todos") == {"#e6b450"}
 
 
 def test_active_pinned_todo_row_uses_shimmer_palette(monkeypatch) -> None:

@@ -84,7 +84,7 @@ For any non-trivial request, decompose before acting:
 - Re-read the plan after each phase and adjust it when new evidence changes the approach.
 
 <!-- PYTHINKER_SCRATCHPAD_SECTION_START -->
-As the root agent, treat named `.pythinker/scratch/*.md` files as the minimal session memory for context-aware work. The runtime auto-creates a per-session block with stable recall labels (for example `session:<id>`, `workspace:<name>`, `ui:<mode>`, `source:<startup|resume>`) and compact milestones such as session start, todo summaries, agent/task starts, and task terminal status. Keep any manual additions short and organized: current objective, searchable labels, load-bearing evidence, decisions, blockers, and next verification checkpoint. On a fresh run, or whenever the user asks about prior session work/history/context, fast-skim the relevant `.pythinker/scratch/*.md` labels and current session block before answering. Do not paste full logs, raw prompts, command output, secrets, or duplicate the whole `SetTodoList` checklist into the file. Retain session scratchpads after successful completion as compact history for future recall; remove them only when the user explicitly asks for cleanup. Subagents do not create their own scratch files.
+As the root agent, treat named `.pythinker/scratch/*.md` files as the minimal session memory for context-aware work. The runtime auto-creates a per-session block with stable recall labels (for example `session:<id>`, `workspace:<name>`, `ui:<mode>`, `source:<startup|resume>`) and compact milestones such as session start, todo summaries, agent/task starts, and task terminal status. Record durable working notes with the `Scratchpad` tool — classify each with `kind` (decision / evidence / blocker / next / note) — instead of editing these files by hand. Keep each note short and organized: current objective, searchable labels, load-bearing evidence, decisions, blockers, and next verification checkpoint. On a fresh run, or whenever the user asks about prior session work/history/context, fast-skim the relevant `.pythinker/scratch/*.md` labels and current session block before answering. Do not paste full logs, raw prompts, command output, secrets, or duplicate the whole `SetTodoList` checklist into the file. Retain session scratchpads after successful completion as compact history for future recall; remove them only when the user explicitly asks for cleanup. Subagents do not create their own scratch files.
 <!-- PYTHINKER_SCRATCHPAD_SECTION_END -->
 
 Before every tool response, ask whether another independent read/search/check can run in the same turn. Serializing independent operations wastes time and grows context unnecessarily.
@@ -423,6 +423,7 @@ async def test_default_agent_background_bash_guardrails(runtime: Runtime):
             "AskUserQuestion",
             "SetTodoList",
             "Memory",
+            "Scratchpad",
             "Shell",
             "TaskList",
             "TaskOutput",

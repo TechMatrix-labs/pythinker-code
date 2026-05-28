@@ -907,7 +907,20 @@ def pythinker(
         # Session scratchpads are retained as compact history for future recall.
         # ``cleanup_scratchpad`` is kept for call-site compatibility but no longer
         # triggers automatic deletion after a successful run.
-        _ = cleanup_scratchpad, exit_code
+        _ = cleanup_scratchpad
+        if exit_code == ExitCode.SUCCESS and getattr(
+            getattr(config, "memory", None), "journal_recaps", False
+        ):
+            with contextlib.suppress(Exception):
+                from pythinker_code.memory.recap import build_session_recap
+                from pythinker_code.project_memory import ProjectMemoryStore
+
+                recap = build_session_recap(
+                    state=last_session.state,
+                    session_id=last_session.id,
+                    request=last_session.title,
+                )
+                await ProjectMemoryStore(last_session.work_dir).append_journal(recap)
         _print_resume_hint(last_session)
         if last_session.is_empty():
             # Always clean up empty sessions regardless of exit code

@@ -112,6 +112,7 @@ _ACTION_SPACER = BLANK_ROW
 # running long enough that a quick turn won't flash it.
 _WORKING_TIP_MIN_ELAPSED_S = 4.0
 _MAX_PINNED_TODO_ROWS = 5
+_TODO_ACTIVITY_LABEL_INTERVAL_S = 5.0
 
 
 def _todo_activity_label(label: str) -> str:
@@ -531,14 +532,26 @@ class _LiveView:
         now = time.monotonic()
         elapsed = 0.0 if self._turn_start_time is None else now - self._turn_start_time
         width = current_console_width()
-        todo_block = self._pinned_todo_block(width=width, elapsed_s=elapsed)
-        if todo_block is not None:
+        active_todo_title = (
+            self._active_todo_title() if getattr(self, "_pinned_todos_visible", True) else None
+        )
+        label = active_todo_title or spinner_message(now)
+        if active_todo_title is not None and int(elapsed / _TODO_ACTIVITY_LABEL_INTERVAL_S) % 2:
+            label = spinner_message(now)
+        todo_block = self._pinned_todo_block(
+            width=width,
+            elapsed_s=elapsed,
+            hide_active=label == active_todo_title,
+        )
+        if active_todo_title is not None or todo_block is not None:
             line = self._todo_activity_line(
-                self._active_todo_title() or spinner_message(now),
+                label,
                 elapsed_s=elapsed,
                 width=width,
             )
-            return Group(line, todo_block)
+            if todo_block is not None:
+                return Group(line, todo_block)
+            return line
 
         line = activity_status_line(
             ActivitySnapshot(
@@ -567,7 +580,7 @@ class _LiveView:
         label_width = max(1, width - cell_width(prefix) - cell_width(suffix))
 
         line = Text(prefix, style=tui_rich_style("accent"))
-        line.append_text(shimmer_text(truncate_to_width(label, label_width), elapsed_s))
+        line.append(truncate_to_width(label, label_width), style=tui_rich_style("warning"))
         line.append(suffix, style=tui_rich_style("muted"))
         return line
 
@@ -578,16 +591,18 @@ class _LiveView:
         return None
 
     def _pinned_todo_block(
-        self, *, width: int, elapsed_s: float | None = None
+        self, *, width: int, elapsed_s: float | None = None, hide_active: bool = True
     ) -> RenderableType | None:
         """Render the single todo source of truth under the pinned activity line."""
         if not getattr(self, "_pinned_todos_visible", True):
             return None
-        todos = tuple(
+        latest_todos = tuple(
             todo
             for todo in getattr(self, "_latest_todos", ())
             if todo.status in ("done", "in_progress", "pending") and todo.title.strip()
         )
+        active_todo = next((todo for todo in latest_todos if todo.status == "in_progress"), None)
+        todos = tuple(todo for todo in latest_todos if not (hide_active and todo is active_todo))
         if not todos:
             return None
 

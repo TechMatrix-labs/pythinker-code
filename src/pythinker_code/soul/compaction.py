@@ -111,8 +111,12 @@ class SimpleCompaction:
         if compact_message is None:
             return CompactionResult(messages=to_preserve, usage=None)
 
-        # Call pythinker_core.step to get the compacted context
-        # TODO: set max completion tokens
+        # Call pythinker_core.step to get the compacted context.
+        # NOTE: the summary length is bounded by the chat provider's construction-time
+        # max output tokens (LLM default_max_tokens, or PYTHINKER_MODEL_MAX_TOKENS). A
+        # tighter *per-call* cap would require a max-tokens parameter on
+        # ``ChatProvider.generate`` (and ``pythinker_core.step``), which neither exposes
+        # today; adding one ripples across every provider backend, so it is out of scope here.
         logger.debug("Compacting context...")
         result = await pythinker_core.step(
             chat_provider=llm.chat_provider,

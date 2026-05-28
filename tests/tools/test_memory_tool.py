@@ -26,7 +26,7 @@ class FakeGit:
 
 def _runtime(tmp_path, role="root"):
     session = SimpleNamespace(id="sess1", title="t", work_dir=_hp(tmp_path / "repo"))
-    return SimpleNamespace(role=role, session=session)
+    return SimpleNamespace(role=role, session=session, rearmed=[], rearm_injection=lambda key: None)
 
 
 def _make_tool(tmp_path, monkeypatch, role="root"):
@@ -44,9 +44,12 @@ async def test_memory_tool_add_and_read_back(tmp_path, monkeypatch):
     from pythinker_code.tools.memory import Params
 
     tool = _make_tool(tmp_path, monkeypatch)
+    calls: list[str] = []
+    tool._runtime.rearm_injection = calls.append
     res = await tool(Params(action="add", target="memory", content="uses pytest"))
     assert res.is_error is False
     assert await tool._store.read_entries("memory") == ["uses pytest"]
+    assert calls == ["project_memory"]
 
 
 async def test_memory_tool_missing_content_errors(tmp_path, monkeypatch):

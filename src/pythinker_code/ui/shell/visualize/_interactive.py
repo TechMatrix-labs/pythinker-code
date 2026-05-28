@@ -17,6 +17,7 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.key_binding import KeyPressEvent
+from pythinker_core.tooling import ToolReturnValue
 from rich.console import Group, RenderableType
 from rich.text import Text
 
@@ -373,6 +374,10 @@ class _PromptLiveView(_LiveView):
         super().dispatch_wire_message(msg)
 
     # -- Running prompt rendering --------------------------------------------
+
+    def _record_todo_display(self, result: ToolReturnValue) -> None:
+        super()._record_todo_display(result)
+        self._prompt_session.update_pinned_todos(getattr(self, "_latest_todos", ()))
 
     def render_agent_status(self, columns: int) -> ANSI:
         """Render agent streaming output — always visible regardless of modal.

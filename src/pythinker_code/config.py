@@ -135,6 +135,38 @@ class NotificationConfig(BaseModel):
     claim_stale_after_ms: int = Field(default=15_000, ge=1000)
 
 
+class MemoryConfig(BaseModel):
+    """Context- and memory-aware agent configuration."""
+
+    lexical_recall: bool = Field(
+        default=True,
+        description="Use relevance-ranked lexical recall instead of verbatim project memory.",
+    )
+    injection_bus: bool = Field(
+        default=True,
+        description="Budget dynamic prompt injections through the injection bus.",
+    )
+    injection_ceiling_tokens: int = Field(
+        default=2048,
+        ge=256,
+        description="Maximum total tokens reserved for dynamic prompt injections.",
+    )
+    harvest_on_compaction: bool = Field(
+        default=False,
+        description=(
+            "Persist safe decisions/blockers/next steps before compaction discards history."
+        ),
+    )
+    journal_recaps: bool = Field(
+        default=False,
+        description="Write stable-schema JOURNAL.md session recap blocks.",
+    )
+    consolidation: bool = Field(
+        default=False,
+        description="Enable approval-gated memory inbox consolidation helpers.",
+    )
+
+
 class PythinkerAISearchConfig(BaseModel):
     """Pythinker AI Search configuration."""
 
@@ -324,6 +356,7 @@ class Config(BaseModel):
         default_factory=NotificationConfig, description="Notification configuration"
     )
     services: Services = Field(default_factory=Services, description="Services configuration")
+    memory: MemoryConfig = Field(default_factory=MemoryConfig, description="Memory configuration")
     feedback: FeedbackConfig = Field(
         default_factory=FeedbackConfig,
         description="User-submitted feedback endpoint configuration",

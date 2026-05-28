@@ -54,4 +54,7 @@ class Memory(CallableTool2[Params]):
 
         if not result.ok:
             return ToolError(message=result.message, brief="memory: rejected")
+        rearm = getattr(self._runtime, "rearm_injection", None)
+        if rearm is not None:
+            rearm("project_memory")
         return ToolOk(output=result.message, message=result.message, brief=params.action)

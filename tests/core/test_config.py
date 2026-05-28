@@ -58,6 +58,14 @@ def test_default_config_dump():
             },
             "services": {"pythinker_ai_search": None, "pythinker_ai_fetch": None},
             "mcp": {"client": {"tool_call_timeout_ms": 60000}},
+            "memory": {
+                "lexical_recall": True,
+                "injection_bus": True,
+                "injection_ceiling_tokens": 2048,
+                "harvest_on_compaction": False,
+                "journal_recaps": False,
+                "consolidation": False,
+            },
             "feedback": {
                 "endpoint_url": "",
                 "api_key": None,

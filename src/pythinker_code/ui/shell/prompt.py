@@ -57,9 +57,10 @@ from pythinker_host.path import HostPath
 from pythinker_code.llm import ModelCapability
 from pythinker_code.share import get_share_dir
 from pythinker_code.soul import StatusSnapshot, format_context_status
+from pythinker_code.tools.display import TodoDisplayItem
 from pythinker_code.ui.shell import placeholders as prompt_placeholders
 from pythinker_code.ui.shell.console import console
-from pythinker_code.ui.shell.glyphs import TRANSCRIPT_PROMPT_MARKER
+from pythinker_code.ui.shell.glyphs import TRANSCRIPT_PROMPT_MARKER, TRANSCRIPT_TOOL_GUTTER
 from pythinker_code.ui.shell.motion import shimmer_prompt_fragments
 from pythinker_code.ui.shell.placeholders import (
     PromptPlaceholderManager,
@@ -1643,6 +1644,7 @@ class CustomPromptSession:
         self._input_activity_event: asyncio.Event = asyncio.Event()
         self._running_prompt_previous_mode: PromptMode | None = None
         self._running_prompt_delegate: RunningPromptDelegate | None = None
+        self._latest_todos: tuple[TodoDisplayItem, ...] = ()
         self._modal_delegates: list[RunningPromptDelegate] = []
         self._shortcut_help_open = False
         self._prompt_buffer_container: ConditionalContainer | None = None
@@ -2522,6 +2524,68 @@ class CustomPromptSession:
         out.append(("", "\n"))
         return out
 
+    def update_pinned_todos(self, items: Sequence[TodoDisplayItem]) -> None:
+        """Remember the latest agent todo list for between-turn background waits."""
+        self._latest_todos = tuple(items)
+        self.invalidate()
+
+    def _render_background_todo_rows(self, columns: int) -> FormattedText:
+        todos = tuple(
+            todo
+            for todo in getattr(self, "_latest_todos", ())
+            if todo.status in ("done", "in_progress", "pending") and todo.title.strip()
+        )
+        if not todos:
+            return FormattedText([])
+
+        tokens = _get_tui_tokens()
+        muted_style = f"fg:{tokens.muted}" if tokens.muted else ""
+        warning_style = f"fg:{tokens.warning}" if tokens.warning else muted_style
+        success_style = f"fg:{tokens.success}" if tokens.success else muted_style
+        text_style = (
+            f"fg:{tokens.text or tokens.activity_label}"
+            if tokens.text or tokens.activity_label
+            else ""
+        )
+        fragments: FormattedText = FormattedText()
+        visible = todos[:5]
+        hidden = todos[5:]
+        for index, todo in enumerate(visible):
+            if fragments:
+                fragments.append(("", "\n"))
+            prefix = f"  {TRANSCRIPT_TOOL_GUTTER}  " if index == 0 else "       "
+            if todo.status == "done":
+                icon = "✔"
+                icon_style = success_style
+                title_style = muted_style
+            elif todo.status == "in_progress":
+                icon = "◼"
+                icon_style = warning_style
+                title_style = warning_style
+            else:
+                icon = "◻"
+                icon_style = muted_style
+                title_style = text_style
+            title_budget = max(1, columns - _display_width(prefix) - _display_width(icon) - 1)
+            fragments.append((muted_style, prefix))
+            fragments.append((icon_style, icon))
+            fragments.append(("", " "))
+            fragments.append((title_style, _truncate_right(todo.title.strip(), title_budget)))
+        if hidden:
+            if fragments:
+                fragments.append(("", "\n"))
+            hidden_pending = sum(1 for todo in hidden if todo.status == "pending")
+            hidden_done = sum(1 for todo in hidden if todo.status == "done")
+            label = (
+                "pending"
+                if hidden_pending == len(hidden)
+                else "completed"
+                if hidden_done == len(hidden)
+                else "more"
+            )
+            fragments.append((muted_style, f"       … +{len(hidden)} {label}"))
+        return fragments
+
     def _render_background_working_status(
         self, columns: int, *, show_verb: bool = True
     ) -> FormattedText:
@@ -2559,18 +2623,28 @@ class CustomPromptSession:
                 else:
                     detail_text = ""
                     verb_text = _truncate_right(verb_text, columns - _display_width(frame_text))
-            return FormattedText(
+            fragments = FormattedText(
                 [
                     (frame_style, frame_text),
                     *shimmer_prompt_fragments(verb_text, now),
                     (muted_style, detail_text),
                 ]
             )
+            todo_rows = self._render_background_todo_rows(columns)
+            if todo_rows:
+                ensure_prompt_newline(fragments)
+                fragments.extend(todo_rows)
+            return fragments
 
         detail_text = detail
         if _display_width(frame_text + detail_text) > columns:
             detail_text = _truncate_right(detail_text, columns - _display_width(frame_text))
-        return FormattedText([(muted_style, frame_text + detail_text)])
+        fragments = FormattedText([(muted_style, frame_text + detail_text)])
+        todo_rows = self._render_background_todo_rows(columns)
+        if todo_rows:
+            ensure_prompt_newline(fragments)
+            fragments.extend(todo_rows)
+        return fragments
 
     def _background_task_counts(self) -> BgTaskCounts:
         provider = getattr(self, "_background_task_count_provider", None)

@@ -255,6 +255,39 @@ class ProjectMemoryStore:
             await self._write_entries(target, entries)
         return MemoryOpResult(True, "Entry removed.")
 
+    async def append_journal(self, recap: str) -> MemoryOpResult:
+        """Prepend one stable session recap to ``JOURNAL.md`` if it is new."""
+        recap = recap.strip()
+        if not recap:
+            return MemoryOpResult(False, "Recap cannot be empty.")
+        blocked = scan_memory_content(recap)
+        if blocked:
+            return MemoryOpResult(False, blocked)
+        root = await self._ensure_dir()
+        path = root / "memory" / "JOURNAL.md"
+        with self._file_lock(path):
+            entries = self._split_entries(path.read_text(encoding="utf-8")) if path.exists() else []
+            if recap in entries:
+                return MemoryOpResult(True, "Journal recap already exists (no duplicate added).")
+            await self._write_journal_entries([recap, *entries])
+        return MemoryOpResult(True, "Journal recap added.")
+
+    async def _write_journal_entries(self, entries: list[str]) -> None:
+        root = await self._ensure_dir()
+        path = root / "memory" / "JOURNAL.md"
+        content = ENTRY_DELIMITER.join(entries) if entries else ""
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".journal_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(content)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
+
     async def _read_journal(self, *, last_n: int = 10) -> list[str]:
         """Read up to ``last_n`` newest session recaps from ``JOURNAL.md``.
 

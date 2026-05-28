@@ -507,6 +507,8 @@ async def ensure_scratch_created(
 _MAX_EVENT_TITLE = 140
 _MAX_EVENT_DETAIL = 220
 _MAX_EVENT_DETAILS = 6
+_MAX_NOTE_BYTES = 2 * 1024
+_NOTE_KINDS = ("decision", "evidence", "blocker", "next", "note")
 
 
 def _clean_event_text(value: object, *, max_len: int) -> str:
@@ -576,6 +578,20 @@ def _cap_scratch_text(text: str) -> str:
     if current is not None:
         blocks.append(current)
     if not blocks:
+        header = []
+        current = None
+        for line in lines:
+            if line.startswith("### "):
+                if current is not None:
+                    blocks.append(current)
+                current = [line]
+            elif current is None:
+                header.append(line)
+            else:
+                current.append(line)
+        if current is not None:
+            blocks.append(current)
+    if not blocks:
         return text
 
     kept: list[list[str]] = []
@@ -590,6 +606,46 @@ def _cap_scratch_text(text: str) -> str:
     if len(capped.encode("utf-8")) <= _MAX_SCRATCH_BYTES:
         return capped
     return text
+
+
+def _format_scratch_note(
+    *,
+    kind: str,
+    content: str,
+    session_id: str | None,
+    labels: Sequence[object] | None,
+) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    short = _session_short_id(session_id) if session_id else "nosession"
+    label_parts = [f"kind:{kind}", f"session:{short}", *(str(item) for item in (labels or ()))]
+    body = content.strip()
+    if len(body.encode("utf-8")) > _MAX_NOTE_BYTES:
+        body = body.encode("utf-8")[:_MAX_NOTE_BYTES].decode("utf-8", "ignore").rstrip() + " …"
+    return f"### {kind} — {timestamp}\nlabels: {' | '.join(label_parts)}\nsource: agent\n\n{body}\n"
+
+
+def _append_scratch_note_to_file(
+    path: Path,
+    *,
+    kind: str,
+    content: str,
+    session_id: str | None,
+    labels: Sequence[object] | None,
+) -> None:
+    block = _format_scratch_note(kind=kind, content=content, session_id=session_id, labels=labels)
+    try:
+        with path.open("r+", encoding="utf-8") as fh, _scratch_file_lock(fh):
+            existing = fh.read()
+            prefix = "" if existing == "" or existing.endswith("\n") else "\n"
+            full_text = f"{existing}{prefix}\n{block}"
+            capped = _cap_scratch_text(full_text)
+            fh.seek(0)
+            fh.write(capped)
+            fh.truncate()
+    except OSError as exc:
+        if is_transient_oserror(exc):
+            raise TransientScratchpadError(str(exc)) from exc
+        raise
 
 
 def _append_scratch_event_to_file(
@@ -707,6 +763,110 @@ def append_scratch_event_sync(
     except Exception:
         logger.debug("scratchpad event append failed")
         return ScratchpadAppendResult(False, "error")
+
+
+def append_scratch_note_sync(
+    work_dir: HostPath,
+    *,
+    kind: str,
+    content: str,
+    session_id: str | None = None,
+    session_title: str | None = None,
+    labels: Sequence[object] | None = None,
+    create: bool = False,
+) -> ScratchpadAppendResult:
+    """Append one multiline Markdown note block. Never raises."""
+    if not _is_local_host():
+        return ScratchpadAppendResult(False, "remote_host")
+    if kind not in _NOTE_KINDS:
+        kind = "note"
+    path = session_scratch_path(work_dir, session_id=session_id, session_title=session_title)
+    try:
+        if path.is_symlink():
+            return ScratchpadAppendResult(False, "not_a_file")
+        if not path.exists():
+            if not create:
+                return ScratchpadAppendResult(False, "missing")
+            parent = path.parent
+            if parent.is_symlink():
+                return ScratchpadAppendResult(False, "unsafe_parent")
+            if parent.exists() and not parent.is_dir():
+                return ScratchpadAppendResult(False, "unsafe_parent")
+            parent.mkdir(parents=True, exist_ok=True)
+            if parent.is_symlink() or not parent.is_dir():
+                return ScratchpadAppendResult(False, "unsafe_parent")
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(_DEFAULT_SCRATCHPAD_FILE)
+        if not path.is_file():
+            return ScratchpadAppendResult(False, "not_a_file")
+        _append_scratch_note_to_file(
+            path,
+            kind=kind,
+            content=content,
+            session_id=session_id,
+            labels=labels,
+        )
+        return ScratchpadAppendResult(True, "appended")
+    except FileExistsError:
+        return append_scratch_note_sync(
+            work_dir,
+            kind=kind,
+            content=content,
+            session_id=session_id,
+            session_title=session_title,
+            labels=labels,
+            create=False,
+        )
+    except TransientScratchpadError:
+        return ScratchpadAppendResult(False, "locked")
+    except Exception:
+        logger.debug("scratchpad note append failed")
+        return ScratchpadAppendResult(False, "error")
+
+
+async def append_scratch_note(
+    work_dir: HostPath,
+    *,
+    kind: str,
+    content: str,
+    session_id: str | None = None,
+    session_title: str | None = None,
+    labels: Sequence[object] | None = None,
+    git_runner: GitRunner | None = None,
+) -> ScratchpadAppendResult:
+    """Ensure the scratchpad exists if safe, then append a multiline note."""
+    if _is_verified(work_dir):
+        return await asyncio.to_thread(
+            append_scratch_note_sync,
+            work_dir,
+            kind=kind,
+            content=content,
+            session_id=session_id,
+            session_title=session_title,
+            labels=labels,
+            create=True,
+        )
+
+    creation = await ensure_scratch_created(
+        work_dir,
+        session_id=session_id,
+        session_title=session_title,
+        git_runner=git_runner,
+    )
+    if not creation.created and creation.reason != "already_exists":
+        return ScratchpadAppendResult(False, creation.reason)
+    _mark_verified(work_dir)
+    return await asyncio.to_thread(
+        append_scratch_note_sync,
+        work_dir,
+        kind=kind,
+        content=content,
+        session_id=session_id,
+        session_title=session_title,
+        labels=labels,
+        create=False,
+    )
 
 
 async def append_scratch_event(
@@ -838,7 +998,9 @@ DEFAULT_SCRATCHPAD_SECTION = (
     "with stable recall labels (for example `session:<id>`, `workspace:<name>`, "
     "`ui:<mode>`, `source:<startup|resume>`) and compact milestones such as "
     "session start, todo summaries, agent/task starts, and task terminal status. "
-    "Keep any manual additions short and organized: current objective, searchable "
+    "Record durable working notes with the `Scratchpad` tool — classify each with "
+    "`kind` (decision / evidence / blocker / next / note) — instead of editing these "
+    "files by hand. Keep each note short and organized: current objective, searchable "
     "labels, load-bearing evidence, decisions, blockers, and next verification "
     "checkpoint. On a fresh run, or whenever the user asks about prior session "
     "work/history/context, fast-skim the relevant `.pythinker/scratch/*.md` "

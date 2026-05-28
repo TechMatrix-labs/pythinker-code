@@ -65,6 +65,9 @@ from pythinker_code.soul.context import Context
 from pythinker_code.soul.dynamic_injection import (
     DynamicInjection,
     DynamicInjectionProvider,
+    collect_within_budget,
+    dynamic_to_candidate,
+    injection_budget_from_runtime,
     normalize_history,
 )
 from pythinker_code.soul.dynamic_injections.auto_mode import AutoModeInjectionProvider
@@ -298,6 +301,8 @@ class PythinkerSoul:
         # Bind plan mode state to tools that support it
         self._bind_plan_mode_tools()
 
+        self._runtime.rearm_injection = self.rearm_injection
+
         self._slash_commands = self._build_slash_commands()
         self._slash_command_map = self._index_slash_commands(self._slash_commands)
 
@@ -358,6 +363,14 @@ class PythinkerSoul:
         """Register an additional dynamic injection provider."""
         self._injection_providers.append(provider)
 
+    def rearm_injection(self, key: str) -> None:
+        """Re-arm matching dynamic injection providers after related state changes."""
+        for provider in self._injection_providers:
+            try:
+                provider.rearm(key)
+            except Exception:
+                logger.debug("injection provider rearm failed")
+
     async def _collect_injections(self) -> list[DynamicInjection]:
         """Collect dynamic injections from all registered providers."""
         injections: list[DynamicInjection] = []
@@ -378,7 +391,16 @@ class PythinkerSoul:
                     type(provider).__name__,
                     exc_info=True,
                 )
-        return injections
+        memory_config = getattr(self._runtime.config, "memory", None)
+        if not getattr(memory_config, "injection_bus", True):
+            return injections
+        candidates = [dynamic_to_candidate(injection) for injection in injections]
+        budget = injection_budget_from_runtime(self._runtime).injection_budget_tokens
+        budgeted = collect_within_budget(candidates, budget)
+        return [
+            DynamicInjection(type=candidate.type, content=candidate.content)
+            for candidate in budgeted
+        ]
 
     async def _notify_injection_providers_compacted(self) -> None:
         """Notify all injection providers that the context has been compacted.
@@ -1519,6 +1541,9 @@ class PythinkerSoul:
             skills_by_name=getattr(self._runtime, "skills", {}),
         )
 
+        if getattr(self._runtime.config.memory, "harvest_on_compaction", False):
+            await self._harvest_before_compaction(history_before_compaction, custom_instruction)
+
         wire_send(CompactionBegin())
         try:
             compaction_result = await _compact_with_retry()
@@ -1609,6 +1634,33 @@ class PythinkerSoul:
             after_tokens=estimated_token_count,
             success=True,
         )
+
+    async def _harvest_before_compaction(
+        self, history: Sequence[Message], custom_instruction: str = ""
+    ) -> None:
+        try:
+            prepared = self._compaction.prepare(history, custom_instruction=custom_instruction)
+            dropped_count = max(0, len(history) - len(prepared.to_preserve))
+            dropped = list(history[:dropped_count])
+            if not dropped:
+                return
+            from pythinker_code.memory.harvest import CompactionHarvester
+            from pythinker_code.scratchpad import append_scratch_note
+
+            notes = CompactionHarvester().harvest(dropped)
+            for note in notes:
+                await append_scratch_note(
+                    self._runtime.session.work_dir,
+                    kind=note.kind,
+                    content=note.content,
+                    session_id=self._runtime.session.id,
+                    session_title=self._runtime.session.title,
+                    labels=["source:compaction"],
+                )
+            if notes:
+                self.rearm_injection("project_memory")
+        except Exception:
+            logger.debug("compaction memory harvest failed")
 
     @staticmethod
     def _is_retryable_error(exception: BaseException) -> bool:

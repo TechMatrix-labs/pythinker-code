@@ -1629,14 +1629,50 @@ def vis(app: Shell, args: str):
 
 @registry.command(name="memory", aliases=["mem"])
 async def show_memory(app: Shell, args: str):
-    """Show the durable project memory injected at session start."""
-    _ = args
+    """Show project memory, or manage the approval-gated memory inbox."""
     soul = ensure_pythinker_soul(app)
     if soul is None:
         return
     from pythinker_code.project_memory import ProjectMemoryStore
 
     store = ProjectMemoryStore(soul.runtime.session.work_dir)
+    parts = args.split()
+    if parts and parts[0] == "inbox":
+        memory_config = getattr(soul.runtime.config, "memory", None)
+        if not getattr(memory_config, "consolidation", False):
+            console.print(
+                "Memory inbox consolidation is disabled. "
+                "Set `memory.consolidation = true` in your config to enable it."
+            )
+            return
+        from pythinker_code.memory.consolidation import (
+            approve_inbox_candidate,
+            generate_inbox_candidates,
+            list_inbox_candidates,
+            reject_inbox_candidate,
+        )
+
+        action = parts[1] if len(parts) > 1 else "list"
+        if action == "scan":
+            created = await generate_inbox_candidates(store, soul.runtime.session.work_dir)
+            console.print(f"Staged {len(created)} memory inbox candidate(s).")
+            return
+        if action == "approve" and len(parts) > 2:
+            console.print(await approve_inbox_candidate(store, parts[2]))
+            if soul.runtime.rearm_injection is not None:
+                soul.runtime.rearm_injection("project_memory")
+            return
+        if action == "reject" and len(parts) > 2:
+            console.print(await reject_inbox_candidate(store, parts[2]))
+            return
+        candidates = await list_inbox_candidates(store)
+        if not candidates:
+            console.print("Memory inbox is empty. Run `/memory inbox scan` to stage candidates.")
+            return
+        for candidate in candidates:
+            console.print(f"- {candidate.id}: {candidate.title} ({candidate.source_path})")
+        return
+
     block = await store.snapshot()
     if not block.strip():
         console.print("No project memory recorded yet. The agent records it with the Memory tool.")

@@ -176,6 +176,10 @@ def test_pyinstaller_datas():
             "pythinker_code/tools/file",
         ),
         ("src/pythinker_code/tools/memory/memory.md", "pythinker_code/tools/memory"),
+        (
+            "src/pythinker_code/tools/scratchpad/scratchpad_tool.md",
+            "pythinker_code/tools/scratchpad",
+        ),
         ("src/pythinker_code/tools/plan/description.md", "pythinker_code/tools/plan"),
         ("src/pythinker_code/tools/plan/enter_description.md", "pythinker_code/tools/plan"),
         ("src/pythinker_code/tools/shell/bash.md", "pythinker_code/tools/shell"),
@@ -244,6 +248,7 @@ def test_pyinstaller_hiddenimports():
             "pythinker_code.tools.plan.enter",
             "pythinker_code.tools.plan.handoff",
             "pythinker_code.tools.plan.heroes",
+            "pythinker_code.tools.scratchpad",
             "pythinker_code.tools.shell",
             "pythinker_code.tools.skill",
             "pythinker_code.tools.test",
