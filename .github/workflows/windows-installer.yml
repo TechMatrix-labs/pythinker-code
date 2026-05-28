@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build (e.g. 0.23.0)"
+        description: "Version to build (e.g. 0.24.0)"
         required: true
         type: string
 
