@@ -17,6 +17,14 @@ GitHub Releases page; `0.8.0` is the new starting line.
 
 ## Unreleased
 
+## 0.21.0 (2026-05-28)
+
+### What changed in this release
+
+- **Non-blocking memory recall.** Recall I/O is now dispatched to a thread-pool executor, preventing the event loop from stalling during memory lookups. Sessions with large memory stores or slow disks will remain responsive throughout recall.
+
+Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.21.0`, or use the native installer for your OS (see the README install table).
+
 ## 0.20.0 (2026-05-28)
 
 ### What changed in this release

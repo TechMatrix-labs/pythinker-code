@@ -7,7 +7,7 @@ resources.
 
 Usage:
     python generate-formula.py \
-        --version 0.20.0 \
+        --version 0.21.0 \
         --template packages/homebrew-tap/pythinker-code.rb.tmpl \
         --output Formula/pythinker-code.rb
 """
