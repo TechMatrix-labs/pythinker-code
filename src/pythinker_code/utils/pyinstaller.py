@@ -43,4 +43,9 @@ datas = (
         includes=["../fastmcp-*.dist-info/*"],
     )
     + collect_data_files("trafilatura")
+    # justext is trafilatura's fallback extractor. It loads its per-language
+    # stoplists by os.listdir()-ing justext/stoplists/, so without the data
+    # files the frozen web Fetch tool crashes on a missing
+    # _MEIxxxx/justext/stoplists directory the first time extraction falls back.
+    + collect_data_files("justext")
 )

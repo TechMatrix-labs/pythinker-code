@@ -28,7 +28,23 @@ def test_pyinstaller_datas():
         for path, dst in datas
     ]
 
-    datas = [(p, d) for p, d in datas if "web/static" not in d and "vis/static" not in d]
+    # justext ships ~100 per-language stoplists under justext/stoplists/. They
+    # are bundled via collect_data_files("justext") so trafilatura's justext
+    # fallback works in frozen builds (otherwise get_stoplists() does an
+    # os.listdir() on a missing _MEIxxxx/justext/stoplists and crashes the first
+    # Fetch). Like web/static, the set is large and version-dependent, so assert
+    # it is collected here rather than pinning every language in expected_datas.
+    justext_stoplists = [p for p, d in datas if d == "justext/stoplists"]
+    assert justext_stoplists, "justext stoplists must be bundled for the native web Fetch tool"
+    assert any(p.endswith("/stoplists/English.txt") for p in justext_stoplists), (
+        "justext English stoplist missing from the PyInstaller datas"
+    )
+
+    datas = [
+        (p, d)
+        for p, d in datas
+        if "web/static" not in d and "vis/static" not in d and d != "justext/stoplists"
+    ]
 
     fastmcp_dist = f"fastmcp-{version('fastmcp')}.dist-info"
     expected_datas = [

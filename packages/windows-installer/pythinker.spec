@@ -17,6 +17,13 @@ for pkg in (
     "aiohttp",
     "anyio",
     "rich",
+    # trafilatura and its justext fallback read bundled data by path at
+    # runtime (settings.cfg, stoplists/). Unlike the macOS/tarball build
+    # (pythinker.spec, which imports the shared datas list), this installer
+    # spec collects data per-package, so these must be listed explicitly or
+    # the native web Fetch tool crashes on the first extraction.
+    "trafilatura",
+    "justext",
 ):
     try:
         hiddenimports.extend(collect_submodules(pkg))
