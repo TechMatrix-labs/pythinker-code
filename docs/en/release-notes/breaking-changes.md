@@ -2,6 +2,10 @@
 
 This page documents breaking changes in Pythinker Code releases and provides migration guidance.
 
+## 0.20.0 (2026-05-28)
+
+No breaking changes. This release is compatible with 0.19.0 user configuration, native installs, and session data.
+
 ## 0.19.0 (2026-05-27)
 
 No breaking changes. This release is compatible with 0.18.0 user configuration, native installs, and session data.
