@@ -44,3 +44,14 @@ repos:
         language: system
         stages: [pre-push]
         pass_filenames: false
+      # CI runs the test suite separately from `check` and that failure mode
+      # has bitten us (a kwarg added to an internal helper broke a test that
+      # asserted exact kwargs, but `check` was green). Run the same tests
+      # locally before push. Set PYTHINKER_SKIP_PRE_PUSH_TESTS=1 to skip when
+      # the change is doc-only or a hot follow-up to an unrelated CI failure.
+      - id: pre-push-tests
+        name: "pre-push: make test-pythinker-code (CI-equivalent tests)"
+        entry: bash -c '[ "${PYTHINKER_SKIP_PRE_PUSH_TESTS:-0}" = "1" ] && { echo "pre-push tests skipped via PYTHINKER_SKIP_PRE_PUSH_TESTS=1"; exit 0; }; make test-pythinker-code'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false

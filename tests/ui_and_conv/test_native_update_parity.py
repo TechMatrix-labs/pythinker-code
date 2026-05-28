@@ -135,7 +135,12 @@ async def test_shell_auto_update_toast_shows_new_version_immediately(monkeypatch
     assert toast_calls == [
         (
             "Update available: 0.19.0 → 0.21.0. Run /update to install.",
-            {"topic": "update", "duration": 30.0, "immediate": True},
+            {
+                "topic": "update",
+                "duration": 30.0,
+                "immediate": True,
+                "style": "fg:ansibrightyellow bold",
+            },
         )
     ]
     assert invalidated == [True]

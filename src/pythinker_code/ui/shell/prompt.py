@@ -1477,6 +1477,8 @@ class _ToastEntry:
     """There can be only one toast of each non-None topic in the queue."""
     message: str
     expires_at: float
+    style: str = ""
+    """Optional prompt_toolkit style for the rendered line; "" uses the default toast style."""
 
 
 class RunningPromptDelegate(Protocol):
@@ -1543,10 +1545,16 @@ def toast(
     topic: str | None = None,
     immediate: bool = False,
     position: Literal["left", "right"] = "left",
+    style: str = "",
 ) -> None:
     queue = _toast_queues[position]
     duration = max(duration, _IDLE_REFRESH_INTERVAL)
-    entry = _ToastEntry(topic=topic, message=message, expires_at=time.monotonic() + duration)
+    entry = _ToastEntry(
+        topic=topic,
+        message=message,
+        expires_at=time.monotonic() + duration,
+        style=style,
+    )
     if topic is not None:
         # Remove existing toasts with the same topic
         for existing in list(queue):
@@ -3088,7 +3096,7 @@ class CustomPromptSession:
                 if _display_width(left_text) > max_left:
                     left_text = _truncate_right(left_text, max_left)
                 left_width = _display_width(left_text)
-                fragments.append((secondary_style, left_text))
+                fragments.append((left_toast.style or secondary_style, left_text))
             else:
                 left_width = 0
         else:
@@ -3211,7 +3219,7 @@ class CustomPromptSession:
             if left_toast is not None:
                 left_text = left_toast.message
                 left_text = _truncate_right(left_text, max_left_width)
-                fragments.append((secondary_style, left_text))
+                fragments.append((left_toast.style or secondary_style, left_text))
                 left_width = _display_width(left_text)
             else:
                 left_width = 0
