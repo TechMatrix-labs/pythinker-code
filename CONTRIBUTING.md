@@ -25,3 +25,26 @@ projects with changed files run their hooks. You can skip them for an intermedia
 
 The hooks execute the relevant `make format-*` and `make check-*` targets, so ensure dependencies
 are installed (`make prepare` or `uv sync`).
+
+## Adding dependencies
+
+This project enforces a **zero-new-bundled-deps** policy: new entries under `[project].dependencies`
+in `pyproject.toml` are not accepted unless explicitly approved by a maintainer. Use the standard
+library, or hand-roll what you need, rather than adding a package.
+
+If you believe a new runtime dependency is genuinely necessary:
+
+1. Open an issue explaining why no stdlib alternative exists, before writing code.
+2. In your PR, add an inline justification comment next to the new `pyproject.toml` entry:
+
+   ```toml
+   # Justification: <why no stdlib/hand-rolled alternative exists>
+   # Security review: <known CVEs or supply-chain notes, or "none found">
+   # Approved by: <link to issue or maintainer sign-off>
+   "new-package>=x.y",
+   ```
+
+3. The `zero-new-bundled-deps` path instruction in `.coderabbit.yaml` will flag the change
+   automatically so reviewers know to look for the justification.
+
+Dev-only dependencies under `[dependency-groups]` are not subject to this policy.
