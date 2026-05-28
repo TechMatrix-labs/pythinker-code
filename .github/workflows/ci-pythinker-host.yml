@@ -16,6 +16,10 @@ on:
       - "pyproject.toml"
       - "uv.lock"
 
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     name: ${{ matrix.target }} python-${{ matrix.python-version }}${{ matrix.experimental && ' (experimental)' || '' }}

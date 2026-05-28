@@ -10,6 +10,10 @@ permissions:
   pages: write
   id-token: write
 
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy:
     # Only run on the original repository, not on forks
