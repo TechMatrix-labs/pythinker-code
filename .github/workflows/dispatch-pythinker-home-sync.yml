@@ -1,86 +1,33 @@
 name: Dispatch pythinker-home sync
 
+# Triggers a pythinker-home website sync when the install scripts or README
+# change on main. Release promotion and the post-release sync live in
+# promote-release.yml: a GITHUB_TOKEN-created release never fires a workflow,
+# so the old `release: published` trigger here was dead code that never ran the
+# wait-for-assets / mark-latest steps.
+
 on:
   workflow_dispatch:
-  release:
-    types:
-      - published
   push:
     branches:
       - main
     paths:
       - README.md
       - scripts/install.ps1
+      - scripts/install-native.sh
       - .github/workflows/dispatch-pythinker-home-sync.yml
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
-      # When triggered by release: published, the linux-installer and
-      # windows-installer workflows are still uploading .deb/.rpm/.exe assets
-      # concurrently. Poll until all expected assets are present before
-      # dispatching so the pythinker-home sync doesn't fail on missing assets.
-      - name: Wait for all release assets
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          required=(
-            "PythinkerSetup-"
-            "_amd64.deb"
-            "_arm64.deb"
-            ".x86_64.rpm"
-            ".aarch64.rpm"
-            "x86_64-unknown-linux-gnu.tar.gz"
-            "aarch64-unknown-linux-gnu.tar.gz"
-            "aarch64-apple-darwin.tar.gz"
-            "x86_64-apple-darwin.tar.gz"
-          )
-          echo "Polling for all release assets on $TAG..."
-          all_present=false
-          for i in $(seq 1 40); do
-            assets=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '[.assets[].name] | join(" ")' 2>/dev/null || echo "")
-            all_present=true
-            for p in "${required[@]}"; do
-              if [[ "$assets" != *"$p"* ]]; then
-                all_present=false
-                break
-              fi
-            done
-            if [[ "$all_present" == "true" ]]; then
-              echo "All assets present (attempt $i)"
-              break
-            fi
-            echo "Attempt $i/40: assets not ready, retrying in 30s..."
-            sleep 30
-          done
-          if [[ "$all_present" != "true" ]]; then
-            echo "::error::Release assets not fully uploaded after 20 minutes"
-            exit 1
-          fi
-
-      - name: Mark release latest after assets are ready
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          release_id=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
-          gh api -X PATCH "repos/$REPO/releases/$release_id" -f make_latest=true
-          echo "Marked $TAG as the latest release after all update assets were present."
-
       - name: Trigger pythinker-home sync
         env:
           DISPATCH_TOKEN: ${{ secrets.PYTHINKER_HOME_REPO_DISPATCH_TOKEN }}
           SOURCE_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || github.sha }}
+          RELEASE_TAG: ${{ github.sha }}
         run: |
           if [ -z "$DISPATCH_TOKEN" ]; then
             echo "::notice::Skipping pythinker-home sync: PYTHINKER_HOME_REPO_DISPATCH_TOKEN is not configured"

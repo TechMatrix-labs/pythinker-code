@@ -34,14 +34,9 @@ content = content.replace(/<!--[\s\S]*?-->\n*/g, "");
 // Remove the "# Changelog" title (we'll add our own header)
 content = content.replace(/^# Changelog\n+/, "");
 
-// Convert title format: ## [0.69] - 2025-12-29 -> ## 0.69 (2025-12-29)
-content = content.replace(
-  /^## \[([^\]]+)\] - (\d{4}-\d{1,2}-\d{1,2})/gm,
-  "## $1 ($2)"
-);
-
-// Remove subsection headers like ### Added, ### Changed, ### Fixed
-content = content.replace(/^### (Added|Changed|Fixed|Improved|Tools|SDK)\n+/gm, "");
+// Release headers (`## X.Y.Z (YYYY-MM-DD)`) and the `### What changed in this
+// release` subsections are copied through verbatim — the root CHANGELOG already
+// uses the format the docs site renders, so no title rewriting is needed.
 
 // The docs changelog is emitted under docs/en/release-notes/, so links that are
 // correct from the repository root need to be adjusted for VitePress dead-link

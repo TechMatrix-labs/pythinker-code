@@ -357,13 +357,13 @@ Never add AI-generated/co-author trailers or tool footers to commits or PR descr
 
 ## Versioning
 
-The project follows a **minor-bump-only** versioning scheme (`MAJOR.MINOR.PATCH`):
+The project follows a `0.MINOR.PATCH` versioning scheme:
 
-- Patch version is always `0`. Never bump it.
-- Minor version is bumped for any change: features, improvements, bug fixes, etc.
-- Major version changes only by explicit manual decision.
+- Major version stays `0`; there is no `1.0.0` milestone planned on this line.
+- Minor version is a running counter, bumped for every release: features, improvements, bug fixes, etc.
+- Patch version is reserved for hotfixes against an already-released minor; it is normally `0`.
 
-Examples: `1.0.0` -> `1.1.0` -> `1.2.0`; never `1.0.1`.
+Examples: `0.24.0` -> `0.25.0` -> `0.26.0`; a hotfix against `0.25.0` would be `0.25.1`.
 
 This applies to release packages in the root project and `packages/*` unless a release task targets
 an independently versioned package. Do not normalize `sdks/*` or `examples/*` versions unless the
@@ -372,13 +372,30 @@ user or release workflow explicitly asks for that package.
 ## Release workflow
 
 1. Ensure `main` is up to date.
-2. Create a release branch, e.g. `bump-1.42` or `bump-pythinker-host-1.43`.
-3. Update `CHANGELOG.md`: rename `[Unreleased]` to `[1.42] - YYYY-MM-DD`.
-4. Update `pyproject.toml` version.
-5. Run `uv sync` to align `uv.lock`.
-6. Commit the branch and open a PR.
-7. Merge the PR, then switch back to `main` and pull latest.
-8. Tag and push:
-   - `git tag 1.42` or `git tag pythinker-host-1.43`
-   - `git push --tags`
-9. GitHub Actions handles publishing after tags are pushed.
+2. Create a release branch, e.g. `release/0.25.0`.
+3. Update `CHANGELOG.md`: move the `## Unreleased` entries into a new
+   `## X.Y.Z (YYYY-MM-DD)` section and leave `## Unreleased` in place (emptied).
+   Then regenerate the docs copy with `npm run sync` from `docs/` — do not edit
+   `docs/en/release-notes/changelog.md` by hand — add a `## X.Y.Z (date)` entry to
+   `docs/en/release-notes/breaking-changes.md`, and update the README "What's New"
+   section plus the version strings across the install scripts and packaging files.
+4. Update `pyproject.toml` version and run `uv sync` to align `uv.lock`.
+5. Commit the branch and open a PR. `main` is protected, so the required checks
+   (and CodeRabbit) must pass before the PR can be squash-merged.
+6. After merge, switch back to `main` and pull latest.
+7. Tag the merged commit and push:
+   - `git tag -a v0.25.0 -m "pythinker-code 0.25.0"`
+   - `git push origin v0.25.0`
+8. GitHub Actions (`release-pythinker-cli.yml`) publishes to PyPI/TestPyPI and the
+   GitHub Release after the tag is pushed.
+
+   **Release asset coordination.** `/releases/latest` is date-based and ignores
+   `make_latest`, so each platform builder (`release-pythinker-cli.yml`,
+   `linux-installer.yml`, `windows-installer.yml`) creates/updates the Release
+   with `prerelease: "true"` to keep it out of `/releases/latest` while the
+   platforms upload concurrently. After the tag is pushed, `promote-release.yml`
+   polls until all 9 platform asset fragments are present, then atomically clears
+   `prerelease` and sets `make_latest=true` — the single point a version becomes
+   resolvable by the install scripts and the in-app updater. If a builder is
+   re-run after promotion it flips the Release back to prerelease; recover by
+   running `promote-release.yml` via `workflow_dispatch` for that tag.

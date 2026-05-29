@@ -92,12 +92,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          # All release workflows run on this tag and may race to create the
-          # Release. Keep make_latest=false: if this job wins the create race,
-          # softprops omits make_latest and GitHub would default a brand-new
-          # release to "latest" with only the Windows asset present, 404ing the
-          # curl installer's .tar.gz. dispatch-pythinker-home-sync.yml flips
-          # make_latest=true only after every platform's assets are attached.
+          # All platform workflows race to create this Release on the same tag.
+          # Mark it prerelease so it stays OUT of /releases/latest (which is
+          # date-based and ignores make_latest) until every platform asset has
+          # uploaded. promote-release.yml clears prerelease and sets make_latest
+          # once all expected assets are attached, so the install scripts and
+          # the in-app updater never resolve a version whose asset is in flight.
+          prerelease: "true"
           fail_on_unmatched_files: false
           make_latest: "false"
           files: |

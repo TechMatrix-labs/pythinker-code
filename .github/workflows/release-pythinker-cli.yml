@@ -544,10 +544,12 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           # Tolerate missing matrix targets so the Release still publishes
-          # when (e.g.) a single Windows runner crashed mid-build). Keep the
-          # release out of /releases/latest until the native installer workflows
-          # have attached their assets; dispatch-pythinker-home-sync.yml marks it
-          # latest only after the expected macOS/Linux/Windows update assets exist.
+          # when (e.g.) a single Windows runner crashed mid-build). Mark it
+          # prerelease so it stays out of /releases/latest (which is date-based
+          # and ignores make_latest) until every platform asset is attached;
+          # promote-release.yml clears prerelease once the expected
+          # macOS/Linux/Windows update assets exist.
+          prerelease: "true"
           fail_on_unmatched_files: false
           make_latest: "false"
           files: |

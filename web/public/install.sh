@@ -210,6 +210,33 @@ tarball="pythinker-${VERSION}-${target}.tar.gz"
 tarball_url="https://github.com/${REPO}/releases/download/v${VERSION}/${tarball}"
 sha_url="${tarball_url}.sha256"
 
+# --- wait for assets to finish publishing -------------------------------
+# The GitHub Release is published before every platform asset finishes
+# uploading, and /releases/latest is date-based, so it can briefly advertise a
+# version whose archive is still in flight. Confirm this version's archive and
+# checksum are attached (via the GitHub API, like the in-app updater) before
+# downloading, so a release caught mid-publish does not 404.
+release_has_assets() {
+  _api="https://api.github.com/repos/${REPO}/releases/tags/v${VERSION}"
+  if command -v curl >/dev/null 2>&1; then
+    _body="$(curl -fsSL "$_api" 2>/dev/null)" || return 1
+  else
+    _body="$(wget -qO- "$_api" 2>/dev/null)" || return 1
+  fi
+  printf '%s' "$_body" | grep -Fq "\"${tarball}\"" \
+    && printf '%s' "$_body" | grep -Fq "\"${tarball}.sha256\""
+}
+attempt=0
+until release_has_assets; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 6 ]; then
+    fail "release assets for v${VERSION} are not available yet: ${tarball_url}
+The latest release may still be publishing. Try again shortly, or pin a known-good version with --version X.Y.Z"
+  fi
+  step "Waiting for v${VERSION} assets to finish publishing (attempt ${attempt}/6)"
+  sleep 10
+done
+
 # --- download + verify --------------------------------------------------
 tmpdir="$(mktemp -d -t pythinker-install.XXXXXX)"
 trap 'rm -rf "$tmpdir"' EXIT

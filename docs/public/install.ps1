@@ -135,18 +135,32 @@ Write-Logo
 
 function Get-LatestVersion {
   Step "Looking up latest Pythinker release"
-  $api = "https://api.github.com/repos/$Repo/releases/latest"
+  # The GitHub Release is published before every platform asset finishes
+  # uploading, and the /releases/latest endpoint is date-based, so it can
+  # briefly advertise a version whose Windows installer is still in flight.
+  # Resolve the newest published (non-draft, non-prerelease) release that
+  # actually carries PythinkerSetup-<ver>.exe AND its .sha256, so a release
+  # caught mid-publish never 404s the download below.
+  $api = "https://api.github.com/repos/$Repo/releases?per_page=20"
   try {
-    $release = Invoke-RestMethod -UseBasicParsing -Uri $api
+    $releases = Invoke-RestMethod -UseBasicParsing -Uri $api
   } catch {
-    Fail "could not fetch latest release from $api"
+    Fail "could not fetch releases from $api"
   }
 
-  $tag = [string]$release.tag_name
-  if (-not $tag) { Fail "latest release response did not include tag_name" }
-  $latest = $tag.TrimStart('v')
-  OK "Latest version is $latest"
-  return $latest
+  foreach ($release in @($releases)) {
+    if ($release.draft -or $release.prerelease) { continue }
+    $tag = [string]$release.tag_name
+    if (-not $tag) { continue }
+    $candidate = $tag.TrimStart('v')
+    $exe = "PythinkerSetup-$candidate.exe"
+    $names = @($release.assets | ForEach-Object { [string]$_.name })
+    if (($names -contains $exe) -and ($names -contains "$exe.sha256")) {
+      OK "Latest version is $candidate"
+      return $candidate
+    }
+  }
+  Fail "no published release has a ready Windows installer asset yet; try again shortly or pin `$env:PYTHINKER_VERSION"
 }
 
 function Read-ExpectedHash($Path) {
