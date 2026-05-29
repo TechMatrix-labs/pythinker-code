@@ -430,6 +430,11 @@ class AgentTool(CallableTool2[Params]):
                     "next_step: Use TaskOutput with this task_id for a non-blocking status/output "
                     "snapshot. Only set block=true when you intentionally want to wait."
                 ),
+                (
+                    "next_step: If you launched several agents, do not block=true on any single "
+                    "one — blocking waits only for that task and freezes the turn until the "
+                    "slowest finishes. Return control and rely on the completion notifications."
+                ),
                 f'resume_hint: Use Agent(resume="{agent_id}", prompt="...") to continue this '
                 "instance later.",
             ]

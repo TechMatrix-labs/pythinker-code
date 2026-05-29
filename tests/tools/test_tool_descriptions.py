@@ -219,6 +219,7 @@ Guidelines:
 - Prefer relying on automatic completion notifications. Use this tool only when you need task output before the automatic notification arrives.
 - By default this tool is non-blocking and returns a current status/output snapshot.
 - Use `block=true` only when you intentionally want to wait for completion or timeout.
+- When several background tasks are running, do not `block=true` on a single one — blocking waits only for that task and freezes the turn until the slowest finishes. Return control and rely on the automatic completion notifications.
 - This tool returns structured task metadata, a fixed-size output preview, and an `output_path` for the full log.
 - When the preview is truncated, use `ReadFile` with the returned `output_path` to inspect the full log in pages.
 - This tool works with the generic background task system and should remain the primary read path for future task types, not just bash.

@@ -94,6 +94,25 @@ _VISIBLE_WORKFLOW_SLASH_PREFIXES = (SKILL_COMMAND_PREFIX, FLOW_COMMAND_PREFIX)
 """Explicit skill/flow prefixes that should remain visible in transcript."""
 
 
+def _background_idle_reminder(active_running: int) -> str:
+    """Build the system-reminder injected when background tasks finish while idle.
+
+    When sibling tasks are still running, steer the model to return control and
+    rely on the automatic re-wake instead of blocking on a single task with
+    ``TaskOutput(block=true)`` — blocking on one freezes the turn until the
+    slowest of them finishes.
+    """
+    body = "Background tasks completed while you were idle."
+    if active_running > 0:
+        noun = "task is" if active_running == 1 else "tasks are"
+        body += (
+            f" {active_running} background {noun} still running. Do not block on a"
+            " single task with TaskOutput(block=true); return control now and you"
+            " will be automatically re-woken as each one finishes."
+        )
+    return f"<system-reminder>{body}</system-reminder>"
+
+
 def _format_local_shell_output(
     *, stdout: str, stderr: str, returncode: int | None
 ) -> RenderableType | None:
@@ -774,12 +793,15 @@ class Shell:
                         deferred_bg_trigger = False
                         logger.info("Background task completed while idle, triggering agent")
                         resume_prompt.set()
-                        ok = await self.run_soul_command(
-                            "<system-reminder>"
-                            "Background tasks completed while you"
-                            " were idle."
-                            "</system-reminder>"
-                        )
+                        active_running = 0
+                        if isinstance(self.soul, PythinkerSoul):
+                            with contextlib.suppress(Exception):
+                                active_running = len(
+                                    list_task_views(
+                                        self.soul.runtime.background_tasks, active_only=True
+                                    )
+                                )
+                        ok = await self.run_soul_command(_background_idle_reminder(active_running))
                         console.print()
                         if not ok:
                             bg_auto_failures += 1
