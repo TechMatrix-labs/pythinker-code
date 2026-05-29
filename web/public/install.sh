@@ -223,8 +223,8 @@ release_has_assets() {
   else
     _body="$(wget -qO- "$_api" 2>/dev/null)" || return 1
   fi
-  printf '%s' "$_body" | grep -q "\"name\": *\"${tarball}\"" \
-    && printf '%s' "$_body" | grep -q "\"name\": *\"${tarball}.sha256\""
+  printf '%s' "$_body" | grep -Fq "\"${tarball}\"" \
+    && printf '%s' "$_body" | grep -Fq "\"${tarball}.sha256\""
 }
 attempt=0
 until release_has_assets; do

@@ -388,3 +388,14 @@ user or release workflow explicitly asks for that package.
    - `git push origin v0.25.0`
 8. GitHub Actions (`release-pythinker-cli.yml`) publishes to PyPI/TestPyPI and the
    GitHub Release after the tag is pushed.
+
+   **Release asset coordination.** `/releases/latest` is date-based and ignores
+   `make_latest`, so each platform builder (`release-pythinker-cli.yml`,
+   `linux-installer.yml`, `windows-installer.yml`) creates/updates the Release
+   with `prerelease: "true"` to keep it out of `/releases/latest` while the
+   platforms upload concurrently. After the tag is pushed, `promote-release.yml`
+   polls until all 9 platform asset fragments are present, then atomically clears
+   `prerelease` and sets `make_latest=true` — the single point a version becomes
+   resolvable by the install scripts and the in-app updater. If a builder is
+   re-run after promotion it flips the Release back to prerelease; recover by
+   running `promote-release.yml` via `workflow_dispatch` for that tag.
