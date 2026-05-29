@@ -15,6 +15,20 @@ GitHub Releases page; `0.8.0` is the new starting line.
 
 ## Unreleased
 
+## 0.25.0 (2026-05-29)
+
+### What changed in this release
+
+- **`Fetch` now re-checks every redirect hop against the SSRF guard.** Redirects were followed without re-validating the destination, so a public URL could redirect to a link-local address (e.g. a cloud metadata endpoint) and slip past the guard that only inspected the original URL. Redirects are now followed manually and every hop is re-validated, closing the public→link-local bypass.
+- **Web domain allowlist for `Fetch` and `Search`.** A new `web.allowed_domains` config option restricts which hosts the web tools may reach. When set, `Fetch` (including every redirect hop) and `Search` reject any host outside the list; leave it unset to keep web access unrestricted.
+- **Crash-consistent background tasks.** Task and agent-task state is now serialised under a cross-process per-task lock, so a worker heartbeat landing mid-update is no longer lost. Every terminal agent-task update routes through a single finalizer that writes the authoritative runtime first, and recovery reconciles records left divergent by a crash or kill without ever clobbering a live agent. Bash task output is capped (default 50 MiB) so a chatty task cannot exhaust disk, terminated processes get a SIGTERM→SIGKILL fallback, and aged terminal task directories are pruned (default 7 days).
+- **Calmer, more reliable TUI.** The todo list no longer renders twice during an in-flight turn, OAuth and feedback links open through a detached browser launcher so browser output cannot corrupt the terminal or steal key presses, and the terminal is restored to a sane state on `SIGTERM`/`SIGQUIT` and at exit.
+- **Live tool-execution feedback.** Tool calls now show a calm "preparing" row during approval and hooks, switch to a live status once execution starts, and stream shell `stdout`/`stderr` as a running tail before the final result lands. The composing assistant block renders a live Markdown preview as the model writes, code blocks gain clearer framing, and the active spinner uses smoother braille dots.
+- **Steadier agent loop.** The model is nudged once when a turn ends on a bare statement of intent with no tool call, steered away from blocking on a single background task while siblings are still running, and a `SetTodoList` call whose todos arrive as a JSON-encoded string is now parsed transparently instead of failing validation.
+- **Unified report rendering.** Code review, verify, and security-review output now share one standardized, muted report renderer — including `report` blocks emitted by skills and agents; a malformed block falls back to ordinary markdown rather than being swallowed.
+
+Upgrade with `pythinker update`, `pip install --upgrade pythinker-code==0.25.0`, or use the native installer for your OS (see the README install table).
+
 ## 0.24.0 (2026-05-28)
 
 ### What changed in this release
