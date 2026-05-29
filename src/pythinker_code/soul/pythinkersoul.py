@@ -225,6 +225,45 @@ def _malformed_empty_tool_call_summary(
     return "; ".join(missing_by_tool)
 
 
+_UNFINISHED_INTENT_LEAD_RE = re.compile(
+    r"^(let me|let's|let us|now let me|now i'?ll|i'?ll|i will|i'?m going to|"
+    r"i am going to|first,?\s+i'?ll|next,?\s+i'?ll)\b",
+    re.IGNORECASE,
+)
+_UNFINISHED_INTENT_ACTION_RE = re.compile(
+    r"\b(synthesi|summari|writ|creat|compil|prepar|draft|put together|generat|"
+    r"produc|present|report|provid|run|check|cross-check|verif|read|search|"
+    r"analy|review|implement|fix|updat|build|gather|look|examin|continu|"
+    r"proceed|start|begin|assembl|consolidat|finaliz|outlin|map out|"
+    r"investigat|explor|dig into|pull together)\w*",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_unfinished_intent(text: str) -> bool:
+    """Return True when *text* is essentially a statement of intent to act, with
+    no actual result delivered.
+
+    Models sometimes end a message with a transitional preamble such as
+    "Let me synthesize the findings into a unified report." but attach no tool
+    call and produce no result. The agent loop treats any tool-call-free message
+    as the final answer, so the turn ends before the promised work is done. This
+    detects that shape (conservatively) so the loop can nudge one more step.
+    """
+    text = text.strip()
+    if not text or len(text) > 400 or text.endswith("?"):
+        return False
+    sentences = [s.strip() for s in re.split(r"[.!\n]+", text) if s.strip()]
+    if not sentences:
+        return False
+    last = sentences[-1]
+    if "let me know" in last.lower():
+        return False
+    return bool(
+        _UNFINISHED_INTENT_LEAD_RE.match(last) and _UNFINISHED_INTENT_ACTION_RE.search(last)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class StepOutcome:
     stop_reason: StepStopReason
@@ -1087,6 +1126,9 @@ class PythinkerSoul:
 
         step_no = 0
         self._current_step_no = 0
+        # One-shot per turn: nudge at most once when a step ends on a bare
+        # statement of intent (see `_looks_like_unfinished_intent`).
+        self._intent_nudge_used = False
         while True:
             step_no += 1
             if step_no > self._loop_control.max_steps_per_turn:
@@ -1436,6 +1478,31 @@ class PythinkerSoul:
 
         if result.tool_calls:
             return None
+
+        # A tool-call-free message normally ends the turn. If it is only a
+        # restatement of intent ("Let me synthesize the findings…") with no
+        # result, nudge the model to actually deliver — but at most once per
+        # turn so a stubborn model can still finish.
+        if not getattr(self, "_intent_nudge_used", False) and _looks_like_unfinished_intent(
+            result.message.extract_text(" ")
+        ):
+            self._intent_nudge_used = True
+            await self._context.append_message(
+                Message(
+                    role="user",
+                    content=[
+                        system_reminder(
+                            "Your previous message stated an intention to act (for example "
+                            "to produce a report or run a tool) but included no tool call and "
+                            "no actual result, which would normally end your turn. Either "
+                            "produce the promised result now, in full, or make the necessary "
+                            "tool call. Do not reply with only a restatement of intent."
+                        )
+                    ],
+                )
+            )
+            return None
+
         return StepOutcome(stop_reason="no_tool_calls", assistant_message=result.message)
 
     async def _grow_context(self, result: StepResult, tool_results: list[ToolResult]):
