@@ -14,6 +14,7 @@ import tarfile
 import tempfile
 import time
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import override
 
@@ -476,11 +477,14 @@ def _matches_python_type_filter(rel_path: str, file_type: str | None) -> bool:
     return any(fnmatch.fnmatch(rel_path, glob_pattern) for glob_pattern in globs)
 
 
-def _iter_python_search_files(params: Params) -> list[Path]:
+def _iter_python_search_files(params: Params) -> Iterator[Path]:
+    # Lazy by design: ``rglob`` is itself an iterator, so yielding candidates one
+    # at a time lets the consumer's per-file deadline check fire *during*
+    # discovery. Materializing the full list here would let a large tree blow the
+    # RG_TIMEOUT budget before the first timeout check could run.
     search_path = Path(os.path.expanduser(params.path))
     search_base = search_path if search_path.is_dir() else search_path.parent
     candidates = [search_path] if search_path.is_file() else search_path.rglob("*")
-    files: list[Path] = []
     excluded_vcs = {".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
     ignore_patterns = [] if params.include_ignored else _load_basic_ignore_patterns(search_base)
     for candidate in candidates:
@@ -495,8 +499,7 @@ def _iter_python_search_files(params: Params) -> list[Path]:
             continue
         if not _matches_python_type_filter(rel_path, params.type):
             continue
-        files.append(candidate)
-    return files
+        yield candidate
 
 
 def _apply_python_pagination(lines: list[str], params: Params) -> tuple[list[str], str]:

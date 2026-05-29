@@ -593,6 +593,7 @@ class BackgroundTaskManager:
             # and the status write.
             with self._store._runtime_lock(view.spec.id):  # pyright: ignore[reportPrivateUsage]
                 fresh_runtime = self._store.read_runtime(view.spec.id)
+                fresh_control = self._store.read_control(view.spec.id)
                 if is_terminal_status(fresh_runtime.status):
                     continue
                 fresh_progress = (
@@ -607,10 +608,10 @@ class BackgroundTaskManager:
                 runtime = fresh_runtime.model_copy()
                 runtime.finished_at = now
                 runtime.updated_at = now
-                if view.control.kill_requested_at is not None:
+                if fresh_control.kill_requested_at is not None:
                     runtime.status = "killed"
                     runtime.interrupted = True
-                    runtime.failure_reason = view.control.kill_reason or "Killed during recovery"
+                    runtime.failure_reason = fresh_control.kill_reason or "Killed during recovery"
                 else:
                     runtime.status = "lost"
                     runtime.failure_reason = (
@@ -799,10 +800,15 @@ class BackgroundTaskManager:
             and self._runtime is not None
             and self._runtime.subagent_store is not None
         ):
-            subagent_status: SubagentStatus = (
-                "idle" if outcome == "completed" else "killed" if outcome == "killed" else "failed"
-            )
-            self._runtime.subagent_store.update_instance(agent_id, status=subagent_status)
+            # _mark_task_*() returns early when the task is already terminal, so a
+            # kill/timeout race can leave the authoritative TaskRuntime at a
+            # different terminal status than this call's `outcome`. Derive the
+            # subagent status from the runtime that actually won (matching
+            # recover()'s reconciliation) so the two records never diverge.
+            final_status = self._store.read_runtime(task_id).status
+            subagent_status = _subagent_status_for_task_status(final_status)
+            if subagent_status is not None:
+                self._runtime.subagent_store.update_instance(agent_id, status=subagent_status)
 
     def _mark_task_running(self, task_id: str) -> None:
         with self._store._runtime_lock(task_id):  # pyright: ignore[reportPrivateUsage]

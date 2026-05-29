@@ -1057,7 +1057,12 @@ def pythinker(
         _signal.signal(signum, _signal.SIG_DFL)
         os.kill(os.getpid(), signum)
 
-    for _sig in (_signal.SIGTERM, _signal.SIGQUIT):
+    # SIGQUIT is POSIX-only; the signal module does not expose it on Windows.
+    _signals_to_trap = [_signal.SIGTERM]
+    if hasattr(_signal, "SIGQUIT"):
+        _signals_to_trap.append(_signal.SIGQUIT)
+
+    for _sig in _signals_to_trap:
         with contextlib.suppress(OSError, ValueError):
             _signal.signal(_sig, _restore_term_and_exit)
 

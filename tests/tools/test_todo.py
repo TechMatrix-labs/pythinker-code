@@ -38,6 +38,13 @@ class TestParamsJsonStringCoercion:
         params = Params(todos=None)
         assert params.todos is None
 
+    def test_invalid_json_string_fails_validation(self):
+        """Invalid JSON strings must fail validation (fail-closed)."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Params(todos="not valid json")  # type: ignore[arg-type]
+
 
 class TestSetTodoListOutputNotEmpty:
     """Regression test for issue #1710: SetTodoList storm.

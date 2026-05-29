@@ -96,7 +96,7 @@ async def _get_revalidating_redirects(
         response = await session.get(current, headers=headers, allow_redirects=False)
         location = response.headers.get(aiohttp.hdrs.LOCATION)
         if response.status in _REDIRECT_STATUSES and location:
-            await response.release()
+            response.release()
             current = urljoin(str(response.url), location)
             continue
         return response

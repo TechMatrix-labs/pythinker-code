@@ -612,7 +612,7 @@ async def report_error(app: Shell, args: str):
 
     ISSUE_URL = "https://github.com/TechMatrix-labs/pythinker-code/issues"
 
-    def _fallback_to_issues():
+    def _fallback_to_issues() -> None:
         if not open_url_in_browser(ISSUE_URL):
             console.print(f"Please file the report at [underline]{ISSUE_URL}[/underline].")
 
