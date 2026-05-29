@@ -576,201 +576,22 @@ def _feedback_destination(soul: PythinkerSoul) -> tuple[str, dict[str, str]] | N
     return f"{pythinker_platform.base_url.rstrip('/')}/feedback", headers
 
 
-def _feedback_github_config(soul: PythinkerSoul) -> tuple[str, str] | None:
-    """Return GitHub OAuth client_id and repo when direct user-owned issues are enabled."""
-    import os
-
-    feedback_config = soul.runtime.config.feedback
-    client_id = os.getenv("PYTHINKER_FEEDBACK_GITHUB_CLIENT_ID", "").strip()
-    if not client_id:
-        client_id = feedback_config.github_client_id.strip()
-    repo = os.getenv("PYTHINKER_FEEDBACK_GITHUB_REPO", "").strip()
-    if not repo:
-        repo = feedback_config.github_repo.strip()
-    if not client_id or not repo:
-        return None
-    return client_id, repo
-
-
-def _feedback_issue_title(payload: dict[str, str | None]) -> str:
-    version = f" {payload['version']}" if payload.get("version") else ""
-    session = payload.get("session_id") or ""
-    suffix = f" ({session[:8]})" if session else ""
-    return f"[Pythinker CLI] Feedback{version}{suffix}"
-
-
-def _feedback_issue_body(payload: dict[str, str | None]) -> str:
-    return "\n".join(
-        [
-            "## User submission",
-            "",
-            payload.get("content") or "_(no comment)_",
-            "",
-            "## Context",
-            "",
-            "- Type: feedback",
-            f"- Session: {payload.get('session_id') or 'unknown'}",
-            f"- Version: {payload.get('version') or 'unknown'}",
-            f"- OS: {payload.get('os') or 'unknown'}",
-            f"- Model: {payload.get('model') or 'unknown'}",
-        ]
-    )
-
-
 @registry.command
 @shell_mode_registry.command
-async def feedback(app: Shell, args: str):
-    """Submit feedback to make Pythinker CLI better"""
-    import platform
+def feedback(app: Shell, args: str):
+    """Open a GitHub issue to submit feedback or report a bug"""
     import webbrowser
 
-    import aiohttp
-
-    from pythinker_code.constant import VERSION
-    from pythinker_code.ui.shell.oauth import current_model_key
     from pythinker_code.ui.theme import get_tui_tokens as _get_tok_fb
-    from pythinker_code.utils.aiohttp import new_client_session
 
     _t_fb = _get_tok_fb()
 
-    ISSUE_URL = "https://github.com/TechMatrix-labs/pythinker-code/issues"
+    ISSUE_URL = "https://github.com/TechMatrix-labs/pythinker-code/issues/new/choose"
 
-    def _fallback_to_issues():
-        if not webbrowser.open(ISSUE_URL):
-            console.print(f"Please submit feedback at [underline]{ISSUE_URL}[/underline].")
-
-    soul = ensure_pythinker_soul(app)
-    if soul is None:
-        _fallback_to_issues()
-        return
-
-    github_config = _feedback_github_config(soul)
-    destination = None if github_config is not None else _feedback_destination(soul)
-    if github_config is None and destination is None:
-        _fallback_to_issues()
-        return
-
-    from prompt_toolkit import PromptSession
-
-    prompt_session: PromptSession[str] = PromptSession()
-    try:
-        content = await prompt_session.prompt_async("Enter your feedback: ")
-    except (EOFError, KeyboardInterrupt):
-        console.print(f"[{_t_fb.muted}]Feedback cancelled.[/]")
-        return
-
-    content = content.strip()
-    if not content:
-        console.print(f"[{_t_fb.warning}]Feedback cannot be empty.[/]")
-        return
-
-    payload = {
-        "session_id": soul.runtime.session.id,
-        "content": content,
-        "version": VERSION,
-        "os": f"{platform.system()} {platform.release()}",
-        "model": current_model_key(soul),
-    }
-
-    if github_config is not None:
-        client_id, repo = github_config
-        from pythinker_code.auth.github_feedback import (
-            GitHubFeedbackError,
-            create_github_issue,
-            load_github_feedback_token,
-            login_github_feedback,
-            star_github_repo,
-        )
-
-        try:
-            token = load_github_feedback_token()
-            if token is None:
-                console.print(f"[{_t_fb.info}]GitHub login required to create the issue as you.[/]")
-                async for event in login_github_feedback(client_id):
-                    if event.type == "waiting":
-                        console.print(event.message, markup=False)
-                    elif event.type in {"verification_url", "success", "error"}:
-                        from rich.style import Style as _RichStyleFb
-
-                        _style_fb = None
-                        if event.type == "success":
-                            _style_fb = _RichStyleFb(color=_t_fb.success)
-                        elif event.type == "error":
-                            _style_fb = _RichStyleFb(color=_t_fb.error)
-                        console.print(event.message, markup=False, style=_style_fb)
-                token = load_github_feedback_token()
-            if token is None:
-                console.print(f"[{_t_fb.error}]GitHub login did not produce a usable token.[/]")
-                return
-            with console.status(f"[{_t_fb.info}]Creating GitHub issue...[/]"):
-                issue = await create_github_issue(
-                    repo,
-                    token,
-                    title=_feedback_issue_title(payload),
-                    body=_feedback_issue_body(payload),
-                )
-            from pythinker_code.telemetry import track
-
-            track("feedback_submitted", destination="github")
-            if issue.html_url:
-                issue_url = _rich_escape(issue.html_url)
-                console.print(f"[{_t_fb.success}]GitHub issue created:[/] {issue_url}")
-            else:
-                console.print(f"[{_t_fb.success}]GitHub issue created.[/]")
-
-            try:
-                star_answer = await prompt_session.prompt_async(
-                    "Do you like Pythinker CLI? Star the GitHub repo? [y/N]: "
-                )
-            except (EOFError, KeyboardInterrupt):
-                star_answer = ""
-            if star_answer.strip().lower() in {"y", "yes"}:
-                try:
-                    with console.status(f"[{_t_fb.info}]Starring GitHub repo...[/]"):
-                        await star_github_repo(repo, token)
-                    track("github_repo_starred")
-                    console.print(f"[{_t_fb.success}]Thanks for starring the repo![/]")
-                except (GitHubFeedbackError, TimeoutError, aiohttp.ClientError) as e:
-                    console.print(f"[{_t_fb.warning}]Could not star the repo: {_rich_escape(e)}[/]")
-        except (GitHubFeedbackError, TimeoutError, aiohttp.ClientError) as e:
-            console.print(f"[{_t_fb.error}]Failed to create GitHub issue: {_rich_escape(e)}[/]")
-            _fallback_to_issues()
-        return
-
-    assert destination is not None
-    feedback_url, headers = destination
-
-    with console.status(f"[{_t_fb.info}]Submitting feedback...[/]"):
-        try:
-            async with (
-                new_client_session() as session,
-                session.post(
-                    feedback_url,
-                    json=payload,
-                    headers=headers,
-                    raise_for_status=True,
-                ),
-            ):
-                pass
-            session_id = soul.runtime.session.id
-            from pythinker_code.telemetry import track
-
-            track("feedback_submitted")
-            console.print(
-                f"[{_t_fb.success}]Feedback submitted, thank you! "
-                f"Your session ID is: {session_id}[/]"
-            )
-        except TimeoutError:
-            console.print(f"[{_t_fb.error}]Feedback submission timed out.[/]")
-            _fallback_to_issues()
-        except aiohttp.ClientError as e:
-            status = getattr(e, "status", None)
-            if status:
-                msg = f"Failed to submit feedback (HTTP {status})."
-            else:
-                msg = "Network error, failed to submit feedback."
-            console.print(f"[{_t_fb.error}]{msg}[/]")
-            _fallback_to_issues()
+    if webbrowser.open(ISSUE_URL):
+        console.print(f"[{_t_fb.success}]Opening GitHub issues in your browser...[/]")
+    else:
+        console.print(f"Please open: [underline]{ISSUE_URL}[/underline]")
 
 
 @registry.command(aliases=["report-error", "report"])

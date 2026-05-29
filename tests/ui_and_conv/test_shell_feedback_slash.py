@@ -3,87 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from contextlib import nullcontext
-from pathlib import Path
-from types import SimpleNamespace
-from typing import cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
-import aiohttp
-import pytest
-from pydantic import SecretStr
-from pythinker_core.tooling.empty import EmptyToolset
-
-from pythinker_code.auth.github_feedback import GitHubIssue
-from pythinker_code.config import FeedbackConfig, LLMProvider, OAuthRef
-from pythinker_code.soul.agent import Agent, Runtime
-from pythinker_code.soul.context import Context
-from pythinker_code.soul.pythinkersoul import PythinkerSoul
-from pythinker_code.ui.shell import Shell
 from pythinker_code.ui.shell import slash as shell_slash
 from pythinker_code.ui.shell.slash import registry as shell_slash_registry
 from pythinker_code.ui.shell.slash import shell_mode_registry
-
-
-def _make_shell_app(runtime: Runtime, tmp_path: Path) -> SimpleNamespace:
-    agent = Agent(
-        name="Test Agent",
-        system_prompt="Test system prompt.",
-        toolset=EmptyToolset(),
-        runtime=runtime,
-    )
-    soul = PythinkerSoul(agent, context=Context(file_backend=tmp_path / "history.jsonl"))
-    return SimpleNamespace(soul=soul)
-
-
-def _setup_feedback_provider(runtime: Runtime) -> None:
-    """Add a managed:pythinker-code provider with OAuth to the runtime config."""
-    runtime.config.providers["managed:pythinker-code"] = LLMProvider(
-        type="pythinker",
-        base_url="https://api.pythinker.com/coding/v1",
-        api_key=SecretStr("test-api-key"),
-        oauth=OAuthRef(storage="file", key="oauth/pythinker-code"),
-        custom_headers={"x-canary-kfc": "always"},
-    )
-
-
-def _mock_client_session(*, response_status=204, side_effect=None):
-    """Create a mock for new_client_session that simulates aiohttp behavior."""
-    mock_response = AsyncMock()
-    mock_response.status = response_status
-    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_response.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = AsyncMock()
-    if side_effect:
-        mock_session.post = Mock(side_effect=side_effect)
-    else:
-        mock_session.post = Mock(return_value=mock_response)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-
-    return Mock(return_value=mock_session)
-
-
-def _setup_submission_mocks(monkeypatch, *, feedback_text="Great tool!", session_factory=None):
-    """Common mock setup for tests that reach the HTTP submission phase."""
-    print_mock = Mock()
-    open_mock = Mock(return_value=True)
-    monkeypatch.setattr(shell_slash.console, "print", print_mock)
-    monkeypatch.setattr(shell_slash.console, "status", lambda *_a, **_kw: nullcontext())
-    monkeypatch.setattr("webbrowser.open", open_mock)
-    monkeypatch.setattr(
-        "prompt_toolkit.PromptSession.prompt_async",
-        AsyncMock(return_value=feedback_text),
-    )
-    if session_factory is not None:
-        monkeypatch.setattr("pythinker_code.utils.aiohttp.new_client_session", session_factory)
-    return print_mock, open_mock
-
-
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
 
 
 class TestFeedbackRegistration:
@@ -97,311 +21,41 @@ class TestFeedbackRegistration:
         assert cmd is not None
 
 
-# ---------------------------------------------------------------------------
-# Guards → fallback to GitHub issues
-# ---------------------------------------------------------------------------
+class TestFeedbackOpensIssue:
+    def _run(self, fn, *args):
+        ret = fn(*args)
+        return ret  # sync now; no Awaitable
 
-
-class TestFeedbackGuards:
-    async def test_fallback_when_no_pythinker_soul(self, monkeypatch) -> None:
-        """When soul is not PythinkerSoul, should fallback to GitHub issues."""
-        shell = Mock()
-        shell.soul = Mock()  # not spec=PythinkerSoul
-
+    def test_opens_new_issue_url(self, monkeypatch) -> None:
         open_mock = Mock(return_value=True)
         monkeypatch.setattr("webbrowser.open", open_mock)
+        monkeypatch.setattr(shell_slash.console, "print", Mock())
 
-        ret = shell_slash.feedback(cast(Shell, shell), "")
-        if isinstance(ret, Awaitable):
-            await ret
+        shell = Mock()
+        ret = shell_slash.feedback(shell, "")
+        assert not isinstance(ret, Awaitable)
 
         open_mock.assert_called_once()
-        assert "issues" in open_mock.call_args.args[0]
+        url = open_mock.call_args.args[0]
+        assert "TechMatrix-labs/pythinker-code" in url
+        assert "new" in url
 
-    async def test_default_endpoint_without_provider(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Feedback no longer requires managed:pythinker-code OAuth."""
-        app = _make_shell_app(runtime, tmp_path)
-
-        mock_session_factory = _mock_client_session(response_status=204)
-        _, open_mock = _setup_submission_mocks(
-            monkeypatch, feedback_text="No auth feedback", session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        mock_session = await mock_session_factory.return_value.__aenter__()
-        post_call = mock_session.post.call_args
-        assert post_call.args[0] == "https://api.pythinker.com/coding/v1/feedback"
-        assert post_call.kwargs["headers"] == {}
-        open_mock.assert_not_called()
-
-    async def test_provider_without_oauth_uses_api_key(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        """A managed provider can authenticate feedback with only its configured API key."""
-        runtime.config.providers["managed:pythinker-code"] = LLMProvider(
-            type="pythinker",
-            base_url="https://api.pythinker.com/coding/v1",
-            api_key=SecretStr("test-api-key"),
-            oauth=None,
-            custom_headers={"x-canary-kfc": "always"},
-        )
-        app = _make_shell_app(runtime, tmp_path)
-
-        mock_session_factory = _mock_client_session(response_status=204)
-        _, open_mock = _setup_submission_mocks(
-            monkeypatch, feedback_text="API key feedback", session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        mock_session = await mock_session_factory.return_value.__aenter__()
-        headers = mock_session.post.call_args.kwargs["headers"]
-        assert headers["Authorization"] == "Bearer test-api-key"
-        assert headers["x-canary-kfc"] == "always"
-        open_mock.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# User input
-# ---------------------------------------------------------------------------
-
-
-class TestFeedbackUserInput:
-    @pytest.mark.parametrize("exc_type", [KeyboardInterrupt, EOFError])
-    async def test_cancelled_on_interrupt(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch, exc_type: type
-    ) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
+    def test_prints_success_when_browser_opens(self, monkeypatch) -> None:
+        monkeypatch.setattr("webbrowser.open", Mock(return_value=True))
         print_mock = Mock()
         monkeypatch.setattr(shell_slash.console, "print", print_mock)
-        monkeypatch.setattr(
-            "prompt_toolkit.PromptSession.prompt_async",
-            AsyncMock(side_effect=exc_type),
-        )
 
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
+        shell_slash.feedback(Mock(), "")
 
-        assert any("cancelled" in str(call) for call in print_mock.call_args_list)
+        output = " ".join(str(c) for c in print_mock.call_args_list)
+        assert "Opening" in output or "browser" in output.lower()
 
-    async def test_empty_feedback_rejected(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
+    def test_prints_url_when_browser_fails(self, monkeypatch) -> None:
+        monkeypatch.setattr("webbrowser.open", Mock(return_value=False))
         print_mock = Mock()
         monkeypatch.setattr(shell_slash.console, "print", print_mock)
-        monkeypatch.setattr(
-            "prompt_toolkit.PromptSession.prompt_async",
-            AsyncMock(return_value="   "),
-        )
 
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
+        shell_slash.feedback(Mock(), "")
 
-        assert any("empty" in str(call) for call in print_mock.call_args_list)
-
-
-# ---------------------------------------------------------------------------
-# Submission: success & failure
-# ---------------------------------------------------------------------------
-
-
-class TestFeedbackSubmission:
-    async def test_successful_submission(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
-        mock_session_factory = _mock_client_session(response_status=204)
-        print_mock, _ = _setup_submission_mocks(
-            monkeypatch, feedback_text="Great tool!", session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        # Verify success message
-        assert any("submitted" in str(call) for call in print_mock.call_args_list)
-
-        # Verify request URL
-        mock_session = await mock_session_factory.return_value.__aenter__()
-        post_call = mock_session.post.call_args
-        assert post_call.args[0] == "https://api.pythinker.com/coding/v1/feedback"
-
-        # Verify custom_headers are included
-        headers = post_call.kwargs["headers"]
-        assert headers["x-canary-kfc"] == "always"
-        assert "Authorization" in headers
-
-        # Verify payload fields
-        payload = post_call.kwargs["json"]
-        assert payload["content"] == "Great tool!"
-        assert payload["session_id"] == runtime.session.id
-        assert "version" in payload
-        assert "os" in payload
-        assert "model" in payload
-
-    async def test_configured_endpoint_overrides_platform(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        runtime.config.feedback = FeedbackConfig(
-            endpoint_url="https://feedback.pythinker.com/submit",
-            api_key=SecretStr("feedback-secret"),
-            custom_headers={"x-feedback-source": "cli"},
-        )
-        app = _make_shell_app(runtime, tmp_path)
-
-        mock_session_factory = _mock_client_session(response_status=204)
-        _setup_submission_mocks(
-            monkeypatch, feedback_text="Configured feedback", session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        mock_session = await mock_session_factory.return_value.__aenter__()
-        post_call = mock_session.post.call_args
-        assert post_call.args[0] == "https://feedback.pythinker.com/submit"
-        headers = post_call.kwargs["headers"]
-        assert headers["Authorization"] == "Bearer feedback-secret"
-        assert headers["x-feedback-source"] == "cli"
-
-    async def test_github_oauth_submission_creates_issue_as_user(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        runtime.config.feedback = FeedbackConfig(
-            github_client_id="github-client-id",
-            github_repo="owner/repo",
-        )
-        app = _make_shell_app(runtime, tmp_path)
-
-        print_mock, open_mock = _setup_submission_mocks(
-            monkeypatch,
-            feedback_text="GitHub feedback",
-        )
-        load_token = Mock(return_value="github-user-token")
-        create_issue = AsyncMock(return_value=GitHubIssue(number=37, html_url="https://issue/37"))
-        login = Mock()
-        monkeypatch.setattr(
-            "pythinker_code.auth.github_feedback.load_github_feedback_token",
-            load_token,
-        )
-        monkeypatch.setattr("pythinker_code.auth.github_feedback.create_github_issue", create_issue)
-        monkeypatch.setattr("pythinker_code.auth.github_feedback.login_github_feedback", login)
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        create_issue.assert_awaited_once()
-        await_args = create_issue.await_args
-        assert await_args is not None
-        assert await_args.kwargs["title"].startswith("[Pythinker CLI] Feedback")
-        assert "GitHub feedback" in await_args.kwargs["body"]
-        assert await_args.args == ("owner/repo", "github-user-token")
-        login.assert_not_called()
-        open_mock.assert_not_called()
-        assert any("GitHub issue created" in str(call) for call in print_mock.call_args_list)
-
-    async def test_github_oauth_submission_can_star_repo_with_consent(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        runtime.config.feedback = FeedbackConfig(
-            github_client_id="github-client-id",
-            github_repo="owner/repo",
-        )
-        app = _make_shell_app(runtime, tmp_path)
-
-        _setup_submission_mocks(monkeypatch)
-        monkeypatch.setattr(
-            "prompt_toolkit.PromptSession.prompt_async",
-            AsyncMock(side_effect=["GitHub feedback", "y"]),
-        )
-        monkeypatch.setattr(
-            "pythinker_code.auth.github_feedback.load_github_feedback_token",
-            Mock(return_value="github-user-token"),
-        )
-        monkeypatch.setattr(
-            "pythinker_code.auth.github_feedback.create_github_issue",
-            AsyncMock(return_value=GitHubIssue(number=37, html_url="https://issue/37")),
-        )
-        star_repo = AsyncMock()
-        monkeypatch.setattr("pythinker_code.auth.github_feedback.star_github_repo", star_repo)
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        star_repo.assert_awaited_once_with("owner/repo", "github-user-token")
-
-    async def test_timeout_fallback(self, runtime: Runtime, tmp_path: Path, monkeypatch) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
-        mock_session_factory = _mock_client_session(side_effect=TimeoutError("timed out"))
-        print_mock, open_mock = _setup_submission_mocks(
-            monkeypatch, session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        assert any("timed out" in str(call) for call in print_mock.call_args_list)
-        open_mock.assert_called_once()
-
-    async def test_client_error_with_status_fallback(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
-        error = aiohttp.ClientResponseError(
-            request_info=Mock(), history=(), status=500, message="Internal Server Error"
-        )
-        mock_session_factory = _mock_client_session(side_effect=error)
-        print_mock, open_mock = _setup_submission_mocks(
-            monkeypatch, session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        assert any("HTTP 500" in str(call) for call in print_mock.call_args_list)
-        open_mock.assert_called_once()
-
-    async def test_network_error_fallback(
-        self, runtime: Runtime, tmp_path: Path, monkeypatch
-    ) -> None:
-        _setup_feedback_provider(runtime)
-        app = _make_shell_app(runtime, tmp_path)
-
-        error = aiohttp.ClientConnectionError("connection refused")
-        mock_session_factory = _mock_client_session(side_effect=error)
-        print_mock, open_mock = _setup_submission_mocks(
-            monkeypatch, session_factory=mock_session_factory
-        )
-
-        ret = shell_slash.feedback(cast(Shell, app), "")
-        if isinstance(ret, Awaitable):
-            await ret
-
-        assert any("Network error" in str(call) for call in print_mock.call_args_list)
-        open_mock.assert_called_once()
+        output = " ".join(str(c) for c in print_mock.call_args_list)
+        assert "TechMatrix-labs/pythinker-code" in output
