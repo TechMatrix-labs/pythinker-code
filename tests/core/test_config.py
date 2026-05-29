@@ -42,6 +42,7 @@ def test_default_config_dump():
             },
             "background": {
                 "max_running_tasks": 4,
+                "task_retention_days": 7,
                 "read_max_bytes": 30000,
                 "notification_tail_lines": 20,
                 "notification_tail_chars": 3000,
@@ -49,6 +50,7 @@ def test_default_config_dump():
                 "worker_heartbeat_interval_ms": 5000,
                 "worker_stale_after_ms": 15000,
                 "kill_grace_period_ms": 2000,
+                "max_output_bytes": 52428800,
                 "keep_alive_on_exit": False,
                 "agent_task_timeout_s": 3600,
                 "print_wait_ceiling_s": 3600,
