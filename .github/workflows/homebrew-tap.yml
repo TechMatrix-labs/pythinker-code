@@ -70,14 +70,29 @@ jobs:
           echo "--- generated formula head ---"
           head -40 out/Formula/pythinker-code.rb
 
+      # Mint a short-lived installation token for an org-owned GitHub App that
+      # has Contents: Read and write on the tap repo. This replaces a personal
+      # PAT: the App is owned by the org (survives member/org changes), its token
+      # expires in ~1h (minted fresh each run), and it is scoped to only the tap
+      # repo. owner/repositories are required because the App must reach a repo
+      # other than the one this workflow runs in.
+      - name: Mint GitHub App token for the tap repo
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: ${{ env.TAP_OWNER }}
+          repositories: ${{ env.TAP_REPO }}
+
       - name: Sync formula into tap repo (handles empty repo on first run)
         env:
           PKG_VERSION: ${{ steps.ver.outputs.version }}
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euxo pipefail
           if [ -z "${TAP_TOKEN:-}" ]; then
-            echo "::error::HOMEBREW_TAP_TOKEN secret is empty or unset — cannot push to ${TAP_OWNER}/${TAP_REPO}. Add a fine-grained PAT (Contents: Read and write on the tap repo) as the HOMEBREW_TAP_TOKEN secret, then re-run this workflow." >&2
+            echo "::error::No tap token available — the GitHub App token mint produced an empty value. Confirm the HOMEBREW_TAP_APP_ID and HOMEBREW_TAP_APP_PRIVATE_KEY secrets are set and the App is installed on ${TAP_OWNER}/${TAP_REPO} with Contents: Read and write, then re-run this workflow." >&2
             exit 1
           fi
           # We do NOT use actions/checkout for the tap repo because on the
