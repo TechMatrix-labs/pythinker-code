@@ -34,7 +34,7 @@ dependencies = [
     "pyyaml==6.0.3",
     "rich==15.0.0",
     "certifi>=2025.10.5",
-    "click==8.3.0",
+    "click==8.4.1",
     "pyperclip==1.11.0",
     "streamingjson==0.0.5",
     "trafilatura==2.0.0",
