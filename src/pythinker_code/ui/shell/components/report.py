@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
-from typing import Any, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args
+
+if TYPE_CHECKING:
+    from markdown_it import MarkdownIt
 
 from rich.console import Group, RenderableType
 from rich.padding import Padding
@@ -60,6 +62,42 @@ _SEVERITY_TOKEN: dict[Severity, tuple[str, bool]] = {
 }
 
 _DOT = "●"
+
+
+# A markdown-it parser is reused so report-fence extraction is fence-aware: a
+# ```report block nested inside an outer fence is part of that outer fence's
+# content and is therefore NOT a top-level fence token (Principle #5: parse,
+# don't pattern-match).
+_md_parser: MarkdownIt | None = None
+
+
+def _get_report_parser() -> MarkdownIt:
+    global _md_parser
+    if _md_parser is None:
+        from markdown_it import MarkdownIt
+
+        _md_parser = MarkdownIt()
+    return _md_parser
+
+
+def _iter_report_payloads(text: str) -> list[tuple[int, int, str]]:
+    """Yield (start_line, end_line, payload) for each TOP-LEVEL ```report fence.
+
+    Line indices are 0-based half-open ([start, end)) into ``text``'s lines,
+    matching markdown-it ``token.map``. Nested fences never appear as top-level
+    ``fence`` tokens, so they are structurally excluded.
+    """
+    md = _get_report_parser()
+    blocks: list[tuple[int, int, str]] = []
+    for token in md.parse(text):
+        if (
+            token.type == "fence"
+            and token.level == 0
+            and token.map is not None
+            and token.info.strip() == "report"
+        ):
+            blocks.append((token.map[0], token.map[1], token.content))
+    return blocks
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,50 +258,48 @@ def parse_report_block(payload: str) -> Report | None:
     return Report(title=title, scope=scope, findings=tuple(findings), note=note)
 
 
-# A fenced block whose info string is exactly ``report`` (optionally followed by
-# whitespace). Captures the JSON payload between the fences.
-_REPORT_FENCE_RE = re.compile(
-    r"^[ \t]*```[ \t]*report[ \t]*\n(?P<payload>.*?)\n[ \t]*```[ \t]*$",
-    re.DOTALL | re.MULTILINE,
-)
-
-
 def has_report_block(text: str) -> bool:
-    """Whether *text* contains at least one well-formed ` ```report ` block.
+    """Whether *text* contains at least one well-formed top-level ` ```report ` block.
 
     Used by output surfaces (e.g. the headless final-text printer) to decide
     whether to route through :func:`render_agent_body` instead of emitting the
     raw text. Only matches blocks that actually parse, so a malformed fence
-    leaves output unchanged.
+    leaves output unchanged. A ` ```report ` example nested inside an outer
+    documentation fence is not a top-level fence token, so it is not matched.
     """
     return any(
-        parse_report_block(m.group("payload")) is not None for m in _REPORT_FENCE_RE.finditer(text)
+        parse_report_block(payload) is not None for _, _, payload in _iter_report_payloads(text)
     )
 
 
 def render_agent_body(text: str, *, theme: ThemeName | None = None) -> RenderableType:
-    """Render assistant text, promoting ```` ```report ```` blocks to reports.
+    """Render assistant text, promoting top-level ` ```report ` blocks to reports.
 
-    Non-report text renders via :func:`pythinker_markdown`; a valid report
-    block renders via :func:`render_report`; an invalid block is left in place
-    so the surrounding markdown shows it as an ordinary code block.
+    Non-report text renders via :func:`pythinker_markdown`; a valid top-level
+    report block renders via :func:`render_report`; an invalid or nested block is
+    left in place so the surrounding markdown shows it as an ordinary code block.
     """
+    # Split on "\n" only (NOT str.splitlines, which also breaks on \f, \v, \x85,
+    #  ,  ): markdown-it's token.map counts only "\n", so any other
+    # split character would shift our line indices out of sync with the parser
+    # and leak fence delimiters into the surrounding prose.
+    lines = text.split("\n")
     segments: list[RenderableType] = []
-    cursor = 0
-    for match in _REPORT_FENCE_RE.finditer(text):
-        report = parse_report_block(match.group("payload"))
+    cursor = 0  # line index
+    for start, end, payload in _iter_report_payloads(text):
+        report = parse_report_block(payload)
         if report is None:
             continue  # malformed — leave it for the markdown renderer
-        before = text[cursor : match.start()].strip("\n")
+        before = "\n".join(lines[cursor:start]).strip("\n")
         if before:
             segments.append(pythinker_markdown(before))
         segments.append(render_report(report, theme=theme))
-        cursor = match.end()
+        cursor = end
 
     if not segments:
         return pythinker_markdown(text)
 
-    rest = text[cursor:].strip("\n")
+    rest = "\n".join(lines[cursor:]).strip("\n")
     if rest:
         segments.append(pythinker_markdown(rest))
 
