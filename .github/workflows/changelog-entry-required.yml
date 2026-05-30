@@ -1,0 +1,120 @@
+name: changelog-entry-required
+
+# Fail a PR that changes shipped code but adds no entry under `## Unreleased`
+# in CHANGELOG.md, so the changelog never silently drifts out of sync with
+# `main` and the release author isn't forced to back-fill notes from `git log`
+# under time pressure (see issue #26, surfaced during the 0.26.0 release).
+#
+# DESIGN NOTE — do NOT add a `paths:` filter to this trigger.
+# This is intended to be a *required* status check on `main`. A path-filtered
+# required check never reports on PRs outside its filter, leaving them BLOCKED
+# under branch protection with no clean override — the exact bug fixed in
+# 0.26.0. So the workflow runs on every PR and does the shipped-path matching
+# inside the job, passing cleanly when no shipped paths are touched.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    name: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Read-only job (git show/diff on already-fetched history, no push);
+          # do not leave the token in .git/config on the runner.
+          persist-credentials: false
+
+      - name: Require a CHANGELOG entry for shipped-code changes
+        env:
+          # All values below are PR-author-controlled. They are passed through
+          # the environment and only ever used as quoted shell variables or
+          # parsed by jq — never interpolated into the script body (injection).
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          # GitHub-validated commit SHAs (hex).
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # --- Skip: release-prep PRs consume `## Unreleased` into a dated
+          # block and reset it to empty, which would otherwise read as a net
+          # removal and fail. Guard on both the title and the head branch.
+          case "$PR_TITLE" in
+            "chore(release)"*) echo "Release-prep PR (title) — skip."; exit 0 ;;
+          esac
+          case "$HEAD_REF" in
+            release/*) echo "Release branch ($HEAD_REF) — skip."; exit 0 ;;
+          esac
+
+          # --- Skip: explicit escape hatches.
+          if jq -e 'index("no-changelog")' <<< "$LABELS" > /dev/null; then
+            echo "PR has the 'no-changelog' label — skip."
+            exit 0
+          fi
+          if printf '%s' "$PR_BODY" | grep -qiF '[skip changelog]'; then
+            echo "PR body contains '[skip changelog]' — skip."
+            exit 0
+          fi
+
+          # --- Does this PR touch shipped code? (runtime + installers)
+          # Capture into a variable first so a git failure aborts the job
+          # rather than yielding an empty list that would pass open.
+          if ! changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA"); then
+            echo "::error::Failed to diff $BASE_SHA...$HEAD_SHA — cannot determine changed paths."
+            exit 1
+          fi
+          touched=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              src/*|packages/*) touched=1; break ;;
+              scripts/install*.sh|scripts/install*.ps1) touched=1; break ;;
+              pythinker.spec) touched=1; break ;;
+              .github/workflows/linux-installer.yml \
+              |.github/workflows/windows-installer.yml \
+              |.github/workflows/homebrew-tap.yml \
+              |.github/workflows/release-*.yml \
+              |.github/workflows/promote-release.yml) touched=1; break ;;
+            esac
+          done <<< "$changed"
+
+          if [ "$touched" -eq 0 ]; then
+            echo "No shipped-code paths changed — no CHANGELOG entry required."
+            exit 0
+          fi
+
+          # --- Extract the body of the `## Unreleased` block (lines between the
+          # heading and the next `## ` heading) from base and head.
+          extract() {
+            awk '
+              /^## Unreleased[[:space:]]*$/ { inblk = 1; next }
+              inblk && /^## / { inblk = 0 }
+              inblk { print }
+            '
+          }
+          git show "$BASE_SHA:CHANGELOG.md" 2>/dev/null | extract > /tmp/base_unrel || true
+          git show "$HEAD_SHA:CHANGELOG.md" 2>/dev/null | extract > /tmp/head_unrel || true
+
+          # --- Require at least one added non-blank line in the Unreleased block.
+          added=$(diff /tmp/base_unrel /tmp/head_unrel | sed -n 's/^> //p' | grep -c '[^[:space:]]') || true
+
+          if [ "${added:-0}" -ge 1 ]; then
+            echo "Found $added new line(s) under '## Unreleased' — pass."
+            exit 0
+          fi
+
+          echo "::error::This PR changes shipped code but adds no entry under '## Unreleased' in CHANGELOG.md."
+          echo "::error::Add a '- ...' bullet under the '## Unreleased' heading describing the user-facing change."
+          echo "::error::If this PR genuinely needs no changelog entry, add the 'no-changelog' label or put '[skip changelog]' in the PR body."
+          exit 1
