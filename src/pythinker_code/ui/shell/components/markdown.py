@@ -349,6 +349,28 @@ def _simplify_markdown_report_icons(markup: str) -> str:
     return "".join(lines)
 
 
+# Inline code spans: a run of N backticks, lazily-matched body, a closing run of
+# exactly N backticks (GFM balanced-backtick rule, single-line scope — table rows).
+_CODE_SPAN_RE = re.compile(r"(?P<ticks>`+)(?P<body>.*?)(?P=ticks)")
+
+
+def _escape_code_span_pipes(text: str) -> str:
+    r"""Escape raw ``|`` inside inline code spans as ``\|`` so GFM keeps the table
+    cell intact (LLMs frequently emit unescaped pipes inside code spans). Only the
+    code-span interior is touched; table-delimiter pipes outside spans are left
+    alone, and an already-escaped ``\|`` is not double-escaped. Call only on
+    table-row text (see :func:`_normalize_table_block`); applying it to prose
+    inline-code would leave a literal backslash in the rendered span.
+    """
+
+    def _repl(match: re.Match[str]) -> str:
+        ticks = match.group("ticks")
+        body = re.sub(r"(?<!\\)\|", r"\\|", match.group("body"))
+        return f"{ticks}{body}{ticks}"
+
+    return _CODE_SPAN_RE.sub(_repl, text)
+
+
 def _split_pipe_cells(segment: str) -> list[str]:
     """Split a ``| a | b |`` run into stripped inner cells (drops the frame)."""
     parts = re.split(r"(?<!\\)\|", segment)
@@ -417,7 +439,11 @@ def _normalize_table_block(text: str) -> str:
         while head_lines and head_lines[-1] == "":
             head_lines.pop()
         header_match = _HEADER_RE.match(head_lines[-1]) if head_lines else None
-        header_cells = _split_pipe_cells(header_match.group("cells")) if header_match else []
+        header_cells = (
+            _split_pipe_cells(_escape_code_span_pipes(header_match.group("cells")))
+            if header_match
+            else []
+        )
         if header_match is None or len(header_cells) != n_cols:
             out += text[: match.end()]
             text = tail
@@ -437,7 +463,7 @@ def _normalize_table_block(text: str) -> str:
         data_rows: list[list[str]] = []
         bail = False
         for segment in data_segments:
-            cells = _split_pipe_cells(segment)
+            cells = _split_pipe_cells(_escape_code_span_pipes(segment))
             if not cells:
                 continue
             if len(cells) % n_cols != 0:
